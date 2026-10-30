@@ -62,9 +62,17 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release delete neueste-version -y --cleanup-tag || true
-          gh release create neueste-version Schulplaner-${{ github.run_number }}.apk \
-            --title "Schulplaner – neueste Version (Build ${{ github.run_number }})" \
-            --notes "Automatisch gebaut aus ${{ github.ref_name }} @ ${{ github.sha }}. Auf dem Handy die APK herunterladen und installieren." \
-            --prerelease \
-            --target ${{ github.sha }}
+          # GitHub antwortet manchmal mit Serverfehlern – dann bis zu 4-mal neu versuchen.
+          for i in 1 2 3 4; do
+            gh release delete neueste-version -y --cleanup-tag || true
+            if gh release create neueste-version Schulplaner-${{ github.run_number }}.apk \
+              --title "Schulplaner – neueste Version (Build ${{ github.run_number }})" \
+              --notes "Automatisch gebaut aus ${{ github.ref_name }} @ ${{ github.sha }}. Auf dem Handy die APK herunterladen und installieren." \
+              --prerelease \
+              --target ${{ github.sha }}; then
+              exit 0
+            fi
+            echo "Versuch $i fehlgeschlagen, warte kurz …"
+            sleep $((i * 10))
+          done
+          exit 1
