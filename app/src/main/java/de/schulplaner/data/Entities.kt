@@ -2,6 +2,8 @@ package de.schulplaner.data
 
 import androidx.room.Entity
 import androidx.room.PrimaryKey
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.Transient
 import java.util.UUID
 
 /*
@@ -15,6 +17,7 @@ import java.util.UUID
 fun newId(): String = UUID.randomUUID().toString()
 
 @Entity(tableName = "subjects")
+@Serializable
 data class Subject(
     @PrimaryKey val id: String = newId(),
     val name: String = "",
@@ -29,11 +32,12 @@ data class Subject(
     val notesLink: String = "",
     val updatedAt: Long = 0,
     val deleted: Boolean = false,
-    val dirty: Boolean = true,
+    @Transient val dirty: Boolean = true,
 )
 
 /** Halbjahr, z. B. "Q1". Datumswerte sind LocalDate.toEpochDay(). */
 @Entity(tableName = "terms")
+@Serializable
 data class Term(
     @PrimaryKey val id: String = newId(),
     val name: String = "",
@@ -42,7 +46,7 @@ data class Term(
     val sortOrder: Int = 0,
     val updatedAt: Long = 0,
     val deleted: Boolean = false,
-    val dirty: Boolean = true,
+    @Transient val dirty: Boolean = true,
 )
 
 object CategoryKind {
@@ -53,6 +57,7 @@ object CategoryKind {
 
 /** Bewertungskategorie eines Fachs in einem Halbjahr, z. B. "Schriftlich 50 %". */
 @Entity(tableName = "grade_categories")
+@Serializable
 data class GradeCategory(
     @PrimaryKey val id: String = newId(),
     val subjectId: String = "",
@@ -63,10 +68,11 @@ data class GradeCategory(
     val sortOrder: Int = 0,
     val updatedAt: Long = 0,
     val deleted: Boolean = false,
-    val dirty: Boolean = true,
+    @Transient val dirty: Boolean = true,
 )
 
 @Entity(tableName = "grades")
+@Serializable
 data class Grade(
     @PrimaryKey val id: String = newId(),
     val subjectId: String = "",
@@ -79,11 +85,12 @@ data class Grade(
     val weight: Double = 1.0,
     val updatedAt: Long = 0,
     val deleted: Boolean = false,
-    val dirty: Boolean = true,
+    @Transient val dirty: Boolean = true,
 )
 
 /** Pro Fach und Halbjahr: optional die echte Zeugnisnote, die den berechneten Wert ersetzt. */
 @Entity(tableName = "subject_terms")
+@Serializable
 data class SubjectTerm(
     @PrimaryKey val id: String,
     val subjectId: String,
@@ -91,7 +98,7 @@ data class SubjectTerm(
     val overridePoints: Int? = null,
     val updatedAt: Long = 0,
     val deleted: Boolean = false,
-    val dirty: Boolean = true,
+    @Transient val dirty: Boolean = true,
 ) {
     companion object {
         fun idFor(subjectId: String, termId: String) = "${subjectId}_$termId"
@@ -106,6 +113,7 @@ object WeekType {
 
 /** Eine Stunde im Wochenplan. length = Anzahl 45-Minuten-Blöcke (Doppelstunde = 2). */
 @Entity(tableName = "lesson_slots")
+@Serializable
 data class LessonSlot(
     @PrimaryKey val id: String = newId(),
     val dayOfWeek: Int = 1,
@@ -116,11 +124,12 @@ data class LessonSlot(
     val weekType: String = WeekType.ALL,
     val updatedAt: Long = 0,
     val deleted: Boolean = false,
-    val dirty: Boolean = true,
+    @Transient val dirty: Boolean = true,
 )
 
 /** Uhrzeiten einer Stunde, Minuten seit Mitternacht. id = "p<nummer>". */
 @Entity(tableName = "period_times")
+@Serializable
 data class PeriodTime(
     @PrimaryKey val id: String,
     val number: Int,
@@ -128,7 +137,7 @@ data class PeriodTime(
     val endMinute: Int,
     val updatedAt: Long = 0,
     val deleted: Boolean = false,
-    val dirty: Boolean = true,
+    @Transient val dirty: Boolean = true,
 ) {
     companion object {
         fun idFor(number: Int) = "p$number"
@@ -137,6 +146,7 @@ data class PeriodTime(
 
 /** Änderung für genau einen Termin einer Stunde (Entfall, Raum, Vertretung). */
 @Entity(tableName = "lesson_overrides")
+@Serializable
 data class LessonOverride(
     @PrimaryKey val id: String,
     val slotId: String,
@@ -146,7 +156,7 @@ data class LessonOverride(
     val note: String = "",
     val updatedAt: Long = 0,
     val deleted: Boolean = false,
-    val dirty: Boolean = true,
+    @Transient val dirty: Boolean = true,
 ) {
     companion object {
         fun idFor(slotId: String, date: Long) = "${slotId}_$date"
@@ -166,6 +176,7 @@ object TaskType {
 }
 
 @Entity(tableName = "tasks")
+@Serializable
 data class Task(
     @PrimaryKey val id: String = newId(),
     val title: String = "",
@@ -178,7 +189,7 @@ data class Task(
     val createdAt: Long = 0,
     val updatedAt: Long = 0,
     val deleted: Boolean = false,
-    val dirty: Boolean = true,
+    @Transient val dirty: Boolean = true,
 )
 
 object ExamType {
@@ -186,6 +197,7 @@ object ExamType {
 }
 
 @Entity(tableName = "exams")
+@Serializable
 data class Exam(
     @PrimaryKey val id: String = newId(),
     val subjectId: String = "",
@@ -197,10 +209,11 @@ data class Exam(
     val gradeId: String? = null,
     val updatedAt: Long = 0,
     val deleted: Boolean = false,
-    val dirty: Boolean = true,
+    @Transient val dirty: Boolean = true,
 )
 
 @Entity(tableName = "exam_topics")
+@Serializable
 data class ExamTopic(
     @PrimaryKey val id: String = newId(),
     val examId: String = "",
@@ -209,7 +222,7 @@ data class ExamTopic(
     val sortOrder: Int = 0,
     val updatedAt: Long = 0,
     val deleted: Boolean = false,
-    val dirty: Boolean = true,
+    @Transient val dirty: Boolean = true,
 )
 
 object HolidayKind {
@@ -219,6 +232,7 @@ object HolidayKind {
 }
 
 @Entity(tableName = "holidays")
+@Serializable
 data class Holiday(
     @PrimaryKey val id: String = newId(),
     val name: String = "",
@@ -227,17 +241,18 @@ data class Holiday(
     val kind: String = HolidayKind.FREI,
     val updatedAt: Long = 0,
     val deleted: Boolean = false,
-    val dirty: Boolean = true,
+    @Transient val dirty: Boolean = true,
 )
 
 @Entity(tableName = "subject_notes")
+@Serializable
 data class SubjectNote(
     @PrimaryKey val id: String = newId(),
     val subjectId: String = "",
     val text: String = "",
     val updatedAt: Long = 0,
     val deleted: Boolean = false,
-    val dirty: Boolean = true,
+    @Transient val dirty: Boolean = true,
 )
 
 object OwnerType {
@@ -248,6 +263,7 @@ object OwnerType {
 
 /** Datei (Foto, PDF …), liegt unter filesDir/attachments/<id>.<ext>. */
 @Entity(tableName = "attachments")
+@Serializable
 data class Attachment(
     @PrimaryKey val id: String = newId(),
     val ownerType: String = "",
@@ -258,17 +274,18 @@ data class Attachment(
     val createdAt: Long = 0,
     val updatedAt: Long = 0,
     val deleted: Boolean = false,
-    val dirty: Boolean = true,
+    @Transient val dirty: Boolean = true,
 )
 
 /** Einstellungen, die zwischen den Geräten synchronisiert werden (A/B-Woche usw.). */
 @Entity(tableName = "settings")
+@Serializable
 data class Setting(
     @PrimaryKey val id: String,
     val value: String,
     val updatedAt: Long = 0,
     val deleted: Boolean = false,
-    val dirty: Boolean = true,
+    @Transient val dirty: Boolean = true,
 )
 
 object SettingKeys {

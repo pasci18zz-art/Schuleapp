@@ -129,4 +129,186 @@ interface SchulDao {
 
     @Upsert
     suspend fun upsertSetting(item: Setting)
+
+    // ---------- Sync ----------
+
+    @Query("SELECT * FROM subjects WHERE dirty = 1")
+    suspend fun syncDirtySubject(): List<Subject>
+
+    @Query("SELECT * FROM subjects WHERE id = :id")
+    suspend fun syncGetSubject(id: String): Subject?
+
+    @Query("UPDATE subjects SET dirty = 0 WHERE id = :id AND updatedAt = :updatedAt")
+    suspend fun syncCleanSubject(id: String, updatedAt: Long)
+
+    @Query("SELECT * FROM subjects WHERE deleted = 0")
+    suspend fun syncAllSubject(): List<Subject>
+
+    @Query("SELECT * FROM terms WHERE dirty = 1")
+    suspend fun syncDirtyTerm(): List<Term>
+
+    @Query("SELECT * FROM terms WHERE id = :id")
+    suspend fun syncGetTerm(id: String): Term?
+
+    @Query("UPDATE terms SET dirty = 0 WHERE id = :id AND updatedAt = :updatedAt")
+    suspend fun syncCleanTerm(id: String, updatedAt: Long)
+
+    @Query("SELECT * FROM terms WHERE deleted = 0")
+    suspend fun syncAllTerm(): List<Term>
+
+    @Query("SELECT * FROM grade_categories WHERE dirty = 1")
+    suspend fun syncDirtyGradeCategory(): List<GradeCategory>
+
+    @Query("SELECT * FROM grade_categories WHERE id = :id")
+    suspend fun syncGetGradeCategory(id: String): GradeCategory?
+
+    @Query("UPDATE grade_categories SET dirty = 0 WHERE id = :id AND updatedAt = :updatedAt")
+    suspend fun syncCleanGradeCategory(id: String, updatedAt: Long)
+
+    @Query("SELECT * FROM grade_categories WHERE deleted = 0")
+    suspend fun syncAllGradeCategory(): List<GradeCategory>
+
+    @Query("SELECT * FROM grades WHERE dirty = 1")
+    suspend fun syncDirtyGrade(): List<Grade>
+
+    @Query("SELECT * FROM grades WHERE id = :id")
+    suspend fun syncGetGrade(id: String): Grade?
+
+    @Query("UPDATE grades SET dirty = 0 WHERE id = :id AND updatedAt = :updatedAt")
+    suspend fun syncCleanGrade(id: String, updatedAt: Long)
+
+    @Query("SELECT * FROM grades WHERE deleted = 0")
+    suspend fun syncAllGrade(): List<Grade>
+
+    @Query("SELECT * FROM subject_terms WHERE dirty = 1")
+    suspend fun syncDirtySubjectTerm(): List<SubjectTerm>
+
+    @Query("SELECT * FROM subject_terms WHERE id = :id")
+    suspend fun syncGetSubjectTerm(id: String): SubjectTerm?
+
+    @Query("UPDATE subject_terms SET dirty = 0 WHERE id = :id AND updatedAt = :updatedAt")
+    suspend fun syncCleanSubjectTerm(id: String, updatedAt: Long)
+
+    @Query("SELECT * FROM subject_terms WHERE deleted = 0")
+    suspend fun syncAllSubjectTerm(): List<SubjectTerm>
+
+    @Query("SELECT * FROM lesson_slots WHERE dirty = 1")
+    suspend fun syncDirtyLessonSlot(): List<LessonSlot>
+
+    @Query("SELECT * FROM lesson_slots WHERE id = :id")
+    suspend fun syncGetLessonSlot(id: String): LessonSlot?
+
+    @Query("UPDATE lesson_slots SET dirty = 0 WHERE id = :id AND updatedAt = :updatedAt")
+    suspend fun syncCleanLessonSlot(id: String, updatedAt: Long)
+
+    @Query("SELECT * FROM lesson_slots WHERE deleted = 0")
+    suspend fun syncAllLessonSlot(): List<LessonSlot>
+
+    @Query("SELECT * FROM period_times WHERE dirty = 1")
+    suspend fun syncDirtyPeriodTime(): List<PeriodTime>
+
+    @Query("SELECT * FROM period_times WHERE id = :id")
+    suspend fun syncGetPeriodTime(id: String): PeriodTime?
+
+    @Query("UPDATE period_times SET dirty = 0 WHERE id = :id AND updatedAt = :updatedAt")
+    suspend fun syncCleanPeriodTime(id: String, updatedAt: Long)
+
+    @Query("SELECT * FROM period_times WHERE deleted = 0")
+    suspend fun syncAllPeriodTime(): List<PeriodTime>
+
+    @Query("SELECT * FROM lesson_overrides WHERE dirty = 1")
+    suspend fun syncDirtyLessonOverride(): List<LessonOverride>
+
+    @Query("SELECT * FROM lesson_overrides WHERE id = :id")
+    suspend fun syncGetLessonOverride(id: String): LessonOverride?
+
+    @Query("UPDATE lesson_overrides SET dirty = 0 WHERE id = :id AND updatedAt = :updatedAt")
+    suspend fun syncCleanLessonOverride(id: String, updatedAt: Long)
+
+    @Query("SELECT * FROM lesson_overrides WHERE deleted = 0")
+    suspend fun syncAllLessonOverride(): List<LessonOverride>
+
+    @Query("SELECT * FROM holidays WHERE dirty = 1")
+    suspend fun syncDirtyHoliday(): List<Holiday>
+
+    @Query("SELECT * FROM holidays WHERE id = :id")
+    suspend fun syncGetHoliday(id: String): Holiday?
+
+    @Query("UPDATE holidays SET dirty = 0 WHERE id = :id AND updatedAt = :updatedAt")
+    suspend fun syncCleanHoliday(id: String, updatedAt: Long)
+
+    @Query("SELECT * FROM holidays WHERE deleted = 0")
+    suspend fun syncAllHoliday(): List<Holiday>
+
+    @Query("SELECT * FROM tasks WHERE dirty = 1")
+    suspend fun syncDirtyTask(): List<Task>
+
+    @Query("SELECT * FROM tasks WHERE id = :id")
+    suspend fun syncGetTask(id: String): Task?
+
+    @Query("UPDATE tasks SET dirty = 0 WHERE id = :id AND updatedAt = :updatedAt")
+    suspend fun syncCleanTask(id: String, updatedAt: Long)
+
+    @Query("SELECT * FROM tasks WHERE deleted = 0")
+    suspend fun syncAllTask(): List<Task>
+
+    @Query("SELECT * FROM exams WHERE dirty = 1")
+    suspend fun syncDirtyExam(): List<Exam>
+
+    @Query("SELECT * FROM exams WHERE id = :id")
+    suspend fun syncGetExam(id: String): Exam?
+
+    @Query("UPDATE exams SET dirty = 0 WHERE id = :id AND updatedAt = :updatedAt")
+    suspend fun syncCleanExam(id: String, updatedAt: Long)
+
+    @Query("SELECT * FROM exams WHERE deleted = 0")
+    suspend fun syncAllExam(): List<Exam>
+
+    @Query("SELECT * FROM exam_topics WHERE dirty = 1")
+    suspend fun syncDirtyExamTopic(): List<ExamTopic>
+
+    @Query("SELECT * FROM exam_topics WHERE id = :id")
+    suspend fun syncGetExamTopic(id: String): ExamTopic?
+
+    @Query("UPDATE exam_topics SET dirty = 0 WHERE id = :id AND updatedAt = :updatedAt")
+    suspend fun syncCleanExamTopic(id: String, updatedAt: Long)
+
+    @Query("SELECT * FROM exam_topics WHERE deleted = 0")
+    suspend fun syncAllExamTopic(): List<ExamTopic>
+
+    @Query("SELECT * FROM subject_notes WHERE dirty = 1")
+    suspend fun syncDirtySubjectNote(): List<SubjectNote>
+
+    @Query("SELECT * FROM subject_notes WHERE id = :id")
+    suspend fun syncGetSubjectNote(id: String): SubjectNote?
+
+    @Query("UPDATE subject_notes SET dirty = 0 WHERE id = :id AND updatedAt = :updatedAt")
+    suspend fun syncCleanSubjectNote(id: String, updatedAt: Long)
+
+    @Query("SELECT * FROM subject_notes WHERE deleted = 0")
+    suspend fun syncAllSubjectNote(): List<SubjectNote>
+
+    @Query("SELECT * FROM attachments WHERE dirty = 1")
+    suspend fun syncDirtyAttachment(): List<Attachment>
+
+    @Query("SELECT * FROM attachments WHERE id = :id")
+    suspend fun syncGetAttachment(id: String): Attachment?
+
+    @Query("UPDATE attachments SET dirty = 0 WHERE id = :id AND updatedAt = :updatedAt")
+    suspend fun syncCleanAttachment(id: String, updatedAt: Long)
+
+    @Query("SELECT * FROM attachments WHERE deleted = 0")
+    suspend fun syncAllAttachment(): List<Attachment>
+
+    @Query("SELECT * FROM settings WHERE dirty = 1")
+    suspend fun syncDirtySetting(): List<Setting>
+
+    @Query("SELECT * FROM settings WHERE id = :id")
+    suspend fun syncGetSetting(id: String): Setting?
+
+    @Query("UPDATE settings SET dirty = 0 WHERE id = :id AND updatedAt = :updatedAt")
+    suspend fun syncCleanSetting(id: String, updatedAt: Long)
+
+    @Query("SELECT * FROM settings WHERE deleted = 0")
+    suspend fun syncAllSetting(): List<Setting>
 }

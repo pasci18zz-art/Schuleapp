@@ -242,14 +242,7 @@ fun SettingsScreen() {
             }
         }
 
-        GlassCard(padding = PaddingValues(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Icon(Ic.Cloud, null, tint = c.sub, modifier = Modifier.size(22.dp))
-                Text("Synchronisation", style = T.section, color = c.text, modifier = Modifier.weight(1f))
-                Pill("bald", c.line, c.sub)
-            }
-            Text("Abgleich zwischen Handy und Tablet über Supabase folgt im nächsten Schritt.", style = T.small, color = c.sub, modifier = Modifier.padding(top = 8.dp))
-        }
+        SyncCard()
     }
     if (pickTime) {
         TimeDialog(reminderMinute, onDismiss = { pickTime = false }) { m ->
@@ -577,6 +570,131 @@ private fun HolidayEditSheet(initial: Holiday, isNew: Boolean, onDismiss: () -> 
                 h.copy(startDate = d.toEpochDay(), endDate = maxOf(h.endDate, d.toEpochDay()))
             } else {
                 h.copy(endDate = d.toEpochDay())
+            }
+        }
+    }
+}
+
+
+/** Konto & Sync: anmelden, Status, jetzt abgleichen, abmelden. */
+@Composable
+private fun SyncCard() {
+    val c = colors
+    val ctx = LocalContext.current
+    val sync = ctx.app.sync
+    val scope = rememberCoroutineScope()
+    val account by sync.account.collectAsStateWithLifecycle()
+    val status by sync.status.collectAsStateWithLifecycle()
+    var email by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    GlassCard(padding = PaddingValues(16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Icon(Ic.Cloud, null, tint = c.accent, modifier = Modifier.size(22.dp))
+            Text("Konto & Sync", style = T.section, color = c.text, modifier = Modifier.weight(1f))
+            when {
+                !sync.configured -> Pill("nicht eingerichtet", c.warnSoft, c.warn)
+                account == null -> Pill("abgemeldet", c.line, c.sub)
+                status.running -> Pill("gleicht ab …")
+                status.error != null -> Pill("Fehler", c.warnSoft, c.warn)
+                else -> Pill("verbunden", Color(0x2234C759), c.good)
+            }
+        }
+        when {
+            !sync.configured -> {
+                Text(
+                    "In GitHub fehlen die Secrets SUPABASE_URL und SUPABASE_KEY (oder sie sind leer). Danach eine neue Version bauen lassen.",
+                    style = T.small,
+                    color = c.sub,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+            }
+            account == null -> {
+                Text(
+                    "Auf beiden Geräten mit demselben Konto anmelden – dann wird alles automatisch abgeglichen.",
+                    style = T.small,
+                    color = c.sub,
+                    modifier = Modifier.padding(top = 8.dp, bottom = 10.dp),
+                )
+                FormGroup {
+                    FormTextRow("E-Mail", email, { email = it }, placeholder = "name@beispiel.de", keyboardType = androidx.compose.ui.text.input.KeyboardType.Email, capitalization = KeyboardCapitalization.None)
+                    FormRow("Passwort", divider = false) {
+                        androidx.compose.foundation.text.BasicTextField(
+                            value = password,
+                            onValueChange = { password = it },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f),
+                            textStyle = T.body.copy(color = c.text),
+                            cursorBrush = androidx.compose.ui.graphics.SolidColor(c.accent),
+                            visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Password),
+                            decorationBox = { inner ->
+                                Box {
+                                    if (password.isEmpty()) Text("mind. 6 Zeichen", style = T.bodyRegular, color = c.sub.copy(alpha = 0.7f))
+                                    inner()
+                                }
+                            },
+                        )
+                    }
+                }
+                error?.let { Text(it, style = T.small, color = c.warn, modifier = Modifier.padding(top = 8.dp)) }
+                Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    fun go(create: Boolean) {
+                        if (busy) return
+                        busy = true
+                        error = null
+                        scope.launch {
+                            try {
+                                sync.signIn(email, password, create)
+                                password = ""
+                            } catch (e: Exception) {
+                                error = e.message ?: "Anmeldung fehlgeschlagen"
+                            } finally {
+                                busy = false
+                            }
+                        }
+                    }
+                    de.schulplaner.ui.components.PrimaryButton(if (busy) "…" else "Anmelden", { go(false) }, Modifier.weight(1f), enabled = email.isNotBlank() && password.length >= 6)
+                    de.schulplaner.ui.components.PrimaryButton("Konto erstellen", { go(true) }, Modifier.weight(1f), enabled = email.isNotBlank() && password.length >= 6)
+                }
+                Text(
+                    "Auf dem ersten Gerät „Konto erstellen“, auf dem zweiten mit denselben Daten „Anmelden“.",
+                    style = T.small,
+                    color = c.sub,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+            }
+            else -> {
+                Text(account ?: "", style = T.body, color = c.text, modifier = Modifier.padding(top = 10.dp))
+                val last = status.lastSync
+                Text(
+                    if (last > 0) {
+                        val t = java.time.Instant.ofEpochMilli(last).atZone(java.time.ZoneId.systemDefault()).toLocalDateTime()
+                        "Zuletzt abgeglichen: ${Fmt.dayDate(t.toLocalDate())} ${Fmt.time(t.toLocalTime())}"
+                    } else {
+                        "Noch nicht abgeglichen"
+                    },
+                    style = T.small,
+                    color = c.sub,
+                )
+                status.error?.let { Text(it, style = T.small, color = c.warn, modifier = Modifier.padding(top = 6.dp)) }
+                Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    de.schulplaner.ui.components.PrimaryButton(
+                        if (status.running) "Gleicht ab …" else "Jetzt abgleichen",
+                        { scope.launch { sync.syncNow() } },
+                        Modifier.weight(1f),
+                        icon = Ic.Swap,
+                        enabled = !status.running,
+                    )
+                    Text(
+                        "Abmelden",
+                        style = T.label,
+                        color = c.warn,
+                        modifier = Modifier.clip(RoundedCornerShape(21.dp)).clickable { sync.signOut() }.padding(horizontal = 16.dp, vertical = 12.dp),
+                    )
+                }
             }
         }
     }

@@ -64,8 +64,14 @@ class Repository(
     }.stateIn(scope, SharingStarted.Eagerly, ScheduleData())
 
     private fun now() = System.currentTimeMillis()
+    /** Wird nach jeder lokalen Änderung aufgerufen (startet den Sync). */
+    var onLocalChange: (() -> Unit)? = null
+
     private fun io(block: suspend () -> Unit) {
-        scope.launch(Dispatchers.IO) { block() }
+        scope.launch(Dispatchers.IO) {
+            block()
+            onLocalChange?.invoke()
+        }
     }
 
     // ---------- Fächer ----------
@@ -251,7 +257,8 @@ class Repository(
     /** Legt beim ersten Start Stundenzeiten, Halbjahre und A/B-Woche an. */
     suspend fun seedIfNeeded() {
         if (dao.setting(SettingKeys.SEEDED) != null) return
-        val t = now()
+        // Sehr alte Zeit: echte Änderungen (auch vom anderen Gerät) gewinnen immer gegen die Vorgaben.
+        val t = 1L
         // Typische 45-Minuten-Raster, in den Einstellungen änderbar.
         val times = listOf(
             7 * 60 + 45 to 8 * 60 + 30,
@@ -276,7 +283,7 @@ class Repository(
             val year = eStartYear + i / 2
             val start = if (i % 2 == 0) LocalDate.of(year, 8, 1) else LocalDate.of(year + 1, 2, 1)
             val end = if (i % 2 == 0) LocalDate.of(year + 1, 1, 31) else LocalDate.of(year + 1, 7, 31)
-            dao.upsertTerm(Term(name = name, startDate = start.toEpochDay(), endDate = end.toEpochDay(), sortOrder = i, updatedAt = t))
+            dao.upsertTerm(Term(id = "term_$name", name = name, startDate = start.toEpochDay(), endDate = end.toEpochDay(), sortOrder = i, updatedAt = t))
         }
         val monday = de.schulplaner.domain.Schedule.mondayOf(today).toEpochDay()
         dao.upsertSetting(Setting(SettingKeys.AB_ENABLED, "true", updatedAt = t))
@@ -287,7 +294,7 @@ class Repository(
     /** Trägt die Hessen-Ferien und Feiertage einmalig ein (bzw. erneut, wenn [force]). */
     suspend fun seedHessenHolidays(force: Boolean = false) {
         if (!force && dao.setting(SettingKeys.HESSEN_HOLIDAYS) != null) return
-        val t = now()
+        val t = if (force) now() else 1L
         HessenHolidays.all(t).forEach { dao.upsertHoliday(it) }
         dao.upsertSetting(Setting(SettingKeys.HESSEN_HOLIDAYS, "true", updatedAt = t))
     }

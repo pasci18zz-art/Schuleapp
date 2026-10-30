@@ -17,6 +17,10 @@ android {
         // Wird in der CI hochgezählt, damit jede APK als Update installiert werden kann.
         versionCode = (System.getenv("BUILD_NUMBER") ?: "1").toInt()
         versionName = "0.1." + (System.getenv("BUILD_NUMBER") ?: "0")
+
+        // Supabase-Zugang für den Sync (aus GitHub-Secrets; der öffentliche Schlüssel darf in der App stehen).
+        buildConfigField("String", "SUPABASE_URL", "\"" + (System.getenv("SUPABASE_URL") ?: "").trim() + "\"")
+        buildConfigField("String", "SUPABASE_KEY", "\"" + (System.getenv("SUPABASE_KEY") ?: "").trim() + "\"")
     }
 
     // Signierschlüssel kommt aus GitHub-Secrets (siehe .github/workflows/build.yml).
@@ -52,6 +56,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
     lint {
         checkReleaseBuilds = false

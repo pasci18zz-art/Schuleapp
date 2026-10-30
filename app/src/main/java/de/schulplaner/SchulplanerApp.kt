@@ -7,6 +7,10 @@ import de.schulplaner.data.AttachmentStore
 import de.schulplaner.data.Prefs
 import de.schulplaner.data.Repository
 import de.schulplaner.reminders.Reminders
+import de.schulplaner.sync.SyncEngine
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.ProcessLifecycleOwner
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -18,11 +22,26 @@ class SchulplanerApp : Application() {
         private set
     lateinit var prefs: Prefs
         private set
+    lateinit var sync: SyncEngine
+        private set
 
     override fun onCreate() {
         super.onCreate()
-        repo = Repository(AppDatabase.create(this), appScope, AttachmentStore(this))
+        val db = AppDatabase.create(this)
+        repo = Repository(db, appScope, AttachmentStore(this))
         prefs = Prefs(this)
+        sync = SyncEngine(this, db.dao(), repo.files, appScope)
+        repo.onLocalChange = { sync.requestSoon() }
+        sync.schedulePeriodic()
+        ProcessLifecycleOwner.get().lifecycle.addObserver(
+            LifecycleEventObserver { _, event ->
+                when (event) {
+                    Lifecycle.Event.ON_START -> sync.onForeground()
+                    Lifecycle.Event.ON_STOP -> sync.onBackground()
+                    else -> Unit
+                }
+            },
+        )
         appScope.launch(Dispatchers.IO) {
             repo.seedIfNeeded()
             repo.seedHessenHolidays()

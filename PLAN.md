@@ -25,7 +25,7 @@ Design-Entwürfe (klickbar): https://claude.ai/artifact/YaVbw4kmq8qm3xJXT1iN3n
 | Lebendigkeit | treibende Farbflächen und schwebende Punkte im Hintergrund, farbige „Jetzt“-Kachel mit Glanz, Konfetti beim Abhaken, Sonne/Mond oben, Kacheln gleiten herein |
 | Erinnerung | am Vorabend (Standard 18:00) an offene HA und Klausuren für morgen |
 | Nicht gewünscht | Unterkurs-Anzeige, wiederkehrende Aufgaben, Vibration, Abi-Countdown, Notizbuch-Knopf pro Fach |
-| Sync | Supabase (kostenlos), offline zuerst, „neueste Änderung gewinnt“ |
+| Sync | Supabase (kostenlos), offline zuerst, „neueste Änderung gewinnt“; eine Tabelle `records` (Typ, ID, JSON) mit Zeilen-Sicherheit; Fotos im Speicher-Bucket `anhaenge`; beim ersten Abgleich eines Geräts gewinnt das Konto; doppelte Halbjahre/Fächer/Kategorien werden zusammengeführt; URL + öffentlicher Schlüssel als GitHub-Secrets `SUPABASE_URL`/`SUPABASE_KEY` |
 | APK | wird bei jedem Push von GitHub Actions gebaut, immer mit demselben Schlüssel signiert |
 
 ## Aufbau
@@ -58,7 +58,7 @@ wandert das Datum mit.
 ## Phasen
 
 1. ✅ Grundgerüst, Datenmodell, alle Tabs, Einstellungen, Schnell-HA-Kachel, APK-Build
-2. ⏳ Sync mit Supabase (Login, Abgleich, Fotos)
+2. ✅ Sync mit Supabase (Login, Abgleich, Fotos)
 3. ⏳ Widgets: Heute, Aufgaben (abhakbar), Klausur-Countdown, nächste Stunde
 4. ✅ Erinnerung am Vorabend; ✅ Kalender, Ferien, Rückgängig, App-Verknüpfungen, neues Design
 5. ⏳ Abi-Übersicht (Hessen-Regeln), Backup als Datei, Notenstatistik
