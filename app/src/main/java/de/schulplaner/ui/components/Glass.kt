@@ -381,34 +381,33 @@ fun <K> SlidingSegments(
 ) {
     val c = colors
     val index = options.indexOfFirst { it.first == selected }.coerceAtLeast(0)
-    val pos by animateFloatAsState(index.toFloat(), spring(dampingRatio = 0.66f, stiffness = 380f), label = "seg-pos")
+    val posState = animateFloatAsState(index.toFloat(), spring(dampingRatio = 0.66f, stiffness = 380f), label = "seg-pos")
+    val pos by posState
     val shape = RoundedCornerShape(radius)
     val shine = if (c.isDark) 0.16f else 0.45f
     val shadowColor = if (indicator.luminance() > 0.7f) Color(0x55101828) else indicator
-    BoxWithConstraints(modifier) {
-        val n = options.size.coerceAtLeast(1)
-        val itemW = (maxWidth - gap * (n - 1)) / n
-        val travel = kotlin.math.abs(pos - index).coerceAtMost(1f)
-        Box(
-            Modifier
-                .offset(x = (itemW + gap) * pos)
-                .size(itemW, itemHeight)
-                .graphicsLayer {
-                    scaleX = 1f + 0.2f * travel
-                    scaleY = 1f - 0.08f * travel
-                }
-                .then(if (indicatorShadow && !c.isDark) Modifier.shadow(5.dp, shape, ambientColor = shadowColor, spotColor = shadowColor) else Modifier)
-                .clip(shape)
-                .background(indicator.copy(alpha = indicator.alpha * 0.9f))
-                .background(Brush.verticalGradient(listOf(Color.White.copy(alpha = shine), Color.Transparent, Color.White.copy(alpha = shine * 0.25f))))
-                .border(1.dp, Brush.verticalGradient(listOf(Color.White.copy(alpha = shine * 1.4f), Color.White.copy(alpha = 0.05f))), shape),
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
+    val travel = kotlin.math.abs(pos - index).coerceAtMost(1f)
+    // Eigenes Layout statt BoxWithConstraints: so funktioniert der Umschalter auch in Zeilen,
+    // die ihre Höhe nach dem Inhalt richten (IntrinsicSize), z. B. auf dem Tablet.
+    androidx.compose.ui.layout.Layout(
+        modifier = modifier,
+        content = {
+            Box(
+                Modifier
+                    .graphicsLayer {
+                        scaleX = 1f + 0.2f * travel
+                        scaleY = 1f - 0.08f * travel
+                    }
+                    .then(if (indicatorShadow && !c.isDark) Modifier.shadow(5.dp, shape, ambientColor = shadowColor, spotColor = shadowColor) else Modifier)
+                    .clip(shape)
+                    .background(indicator.copy(alpha = indicator.alpha * 0.9f))
+                    .background(Brush.verticalGradient(listOf(Color.White.copy(alpha = shine), Color.Transparent, Color.White.copy(alpha = shine * 0.25f))))
+                    .border(1.dp, Brush.verticalGradient(listOf(Color.White.copy(alpha = shine * 1.4f), Color.White.copy(alpha = 0.05f))), shape),
+            )
             options.forEachIndexed { i, (key, label) ->
                 val f = (1f - kotlin.math.abs(pos - i)).coerceIn(0f, 1f)
                 Box(
                     Modifier
-                        .size(itemW, itemHeight)
                         .clip(shape)
                         .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { onSelect(key) },
                     contentAlignment = Alignment.Center,
@@ -422,6 +421,19 @@ fun <K> SlidingSegments(
                     }
                 }
             }
+        },
+    ) { measurables, constraints ->
+        val n = options.size.coerceAtLeast(1)
+        val gapPx = gap.roundToPx()
+        val heightPx = itemHeight.roundToPx()
+        val width = if (constraints.hasBoundedWidth) constraints.maxWidth else (n * 72.dp.roundToPx() + gapPx * (n - 1))
+        val itemW = ((width - gapPx * (n - 1)) / n).coerceAtLeast(0)
+        val fixed = androidx.compose.ui.unit.Constraints.fixed(itemW, heightPx)
+        val placeables = measurables.map { it.measure(fixed) }
+        layout(width, heightPx) {
+            // Die Markierung liest die Animation erst beim Platzieren – das spart Neuaufbau.
+            placeables.first().place(((itemW + gapPx) * posState.value).toInt(), 0)
+            placeables.drop(1).forEachIndexed { i, p -> p.place(i * (itemW + gapPx), 0) }
         }
     }
 }
