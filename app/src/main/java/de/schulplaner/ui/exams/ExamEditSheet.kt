@@ -16,7 +16,13 @@ import de.schulplaner.domain.Schedule
 import de.schulplaner.ui.components.AppSheet
 import de.schulplaner.ui.components.ConfirmDialog
 import de.schulplaner.ui.components.DateDialog
-import de.schulplaner.ui.components.Field
+import de.schulplaner.ui.components.FormGroup
+import de.schulplaner.ui.components.FormRow
+import de.schulplaner.ui.components.FormTextRow
+import de.schulplaner.ui.components.FormValueRow
+import de.schulplaner.ui.components.MiniSegmented
+import de.schulplaner.ui.components.Stepper
+import androidx.compose.ui.Modifier
 import de.schulplaner.ui.components.FormLabel
 import de.schulplaner.ui.components.Ic
 import de.schulplaner.ui.components.PickerRow
@@ -65,7 +71,6 @@ fun ExamEditSheet(initial: Exam, isNew: Boolean, onDismiss: () -> Unit, onSaved:
             Text("Lege zuerst Fächer in den Einstellungen an.", style = T.body, color = c.sub)
             return@AppSheet
         }
-        FormLabel("Fach")
         SubjectPicker(subjects, exam.subjectId, { id ->
             if (id != null) {
                 var e = exam.copy(subjectId = id)
@@ -76,17 +81,23 @@ fun ExamEditSheet(initial: Exam, isNew: Boolean, onDismiss: () -> Unit, onSaved:
             }
         }, allowNone = false)
 
-        FormLabel("Art")
-        Segmented(ExamType.all.map { it to (if (it == "Sonstiges") "Sonst." else it) }, exam.type, { exam = exam.copy(type = it) })
-
-        Field(exam.title, { exam = exam.copy(title = it) }, "Thema (z. B. Genetik)")
-
         val date = LocalDate.ofEpochDay(exam.date)
-        PickerRow(Ic.CalendarPlain, "Datum", Fmt.dayDate(date), { showDate = true })
-        PickerRow(Ic.Clock, "Stunde", exam.period?.let { "$it. Std" } ?: "–", {
-            exam = exam.copy(period = ((exam.period ?: 0) % 10) + 1)
-        })
-        Text("Die Stunde wird aus dem Stundenplan übernommen; antippen zum Ändern.", style = T.small, color = c.sub)
+        FormGroup {
+            FormRow("Art") {
+                MiniSegmented(ExamType.all.map { it to (if (it == "Sonstiges") "Sonst." else it) }, exam.type, { exam = exam.copy(type = it) }, Modifier.weight(1f))
+            }
+            FormTextRow("Thema", exam.title, { exam = exam.copy(title = it) }, placeholder = "z. B. Genetik")
+            FormValueRow("Datum", Fmt.dayDate(date), { showDate = true })
+            FormRow("Stunde", divider = false) {
+                Text(exam.period?.let { "$it. Std" } ?: "–", style = T.body, color = c.text, modifier = Modifier.weight(1f))
+                Stepper(
+                    exam.period?.let { "$it." } ?: "–",
+                    onMinus = { exam = exam.copy(period = ((exam.period ?: 2) - 1).coerceAtLeast(1)) },
+                    onPlus = { exam = exam.copy(period = ((exam.period ?: 0) + 1).coerceAtMost(12)) },
+                )
+            }
+        }
+        Text("Die Stunde wird aus dem Stundenplan übernommen.", style = T.small, color = c.sub)
     }
 
     if (showDate) {

@@ -29,7 +29,13 @@ import de.schulplaner.ui.components.AttachmentStrip
 import de.schulplaner.ui.components.ChoiceChip
 import de.schulplaner.ui.components.ConfirmDialog
 import de.schulplaner.ui.components.DateDialog
-import de.schulplaner.ui.components.Field
+import de.schulplaner.ui.components.FormGroup
+import de.schulplaner.ui.components.FormRow
+import de.schulplaner.ui.components.FormTextRow
+import de.schulplaner.ui.components.FormValueRow
+import de.schulplaner.ui.components.LocalUndo
+import de.schulplaner.ui.components.MiniSegmented
+import androidx.compose.foundation.layout.Box
 import de.schulplaner.ui.components.FormLabel
 import de.schulplaner.ui.components.Ic
 import de.schulplaner.ui.components.PickerRow
@@ -55,6 +61,7 @@ fun GradeEditSheet(initial: Grade, isNew: Boolean, subjectSelectable: Boolean, o
     var showDate by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
     val saved = remember { booleanArrayOf(false) }
+    val undo = LocalUndo.current
 
     LaunchedEffect(grade.subjectId, grade.termId) {
         if (grade.subjectId.isNotBlank() && grade.termId.isNotBlank()) {
@@ -88,34 +95,31 @@ fun GradeEditSheet(initial: Grade, isNew: Boolean, subjectSelectable: Boolean, o
             },
         )
         if (subjectSelectable) {
-            FormLabel("Fach")
             SubjectPicker(subjects, grade.subjectId.ifBlank { null }, { id -> if (id != null) grade = grade.copy(subjectId = id, categoryId = "") }, allowNone = false)
         }
-        if (categories.isNotEmpty()) {
-            FormLabel("Kategorie")
-            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                categories.forEach { cat ->
-                    ChoiceChip("${cat.name} · ${cat.weight.toInt()} %", grade.categoryId == cat.id, { grade = grade.copy(categoryId = cat.id) })
+        PointsPicker(grade.points) { grade = grade.copy(points = it) }
+        FormGroup {
+            if (categories.isNotEmpty()) {
+                FormRow("Kategorie") {
+                    Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        categories.forEach { cat ->
+                            ChoiceChip("${cat.name} · ${cat.weight.toInt()} %", grade.categoryId == cat.id, { grade = grade.copy(categoryId = cat.id) })
+                        }
+                    }
                 }
             }
-        }
-        FormLabel("Punkte")
-        PointsPicker(grade.points) { grade = grade.copy(points = it) }
-        Field(grade.title, { grade = grade.copy(title = it) }, "Titel (z. B. 1. Klausur, Mitarbeit Okt.)")
-        Field(grade.reason, { grade = grade.copy(reason = it) }, "Begründung", singleLine = false, minLines = 2)
-        PickerRow(Ic.CalendarPlain, "Datum", Fmt.dayDate(LocalDate.ofEpochDay(grade.date)), { showDate = true })
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                FormLabel("Zählt")
-                Text("innerhalb der Kategorie", style = T.small, color = c.sub, modifier = Modifier)
+            FormTextRow("Titel", grade.title, { grade = grade.copy(title = it) }, placeholder = "z. B. 1. Klausur")
+            FormTextRow("Begründung", grade.reason, { grade = grade.copy(reason = it) }, placeholder = "optional", singleLine = false)
+            FormValueRow("Datum", Fmt.dayDate(LocalDate.ofEpochDay(grade.date)), { showDate = true })
+            FormRow("Zählt", divider = false) {
+                Text("innerhalb der Kategorie", style = T.small, color = c.sub, modifier = Modifier.weight(1f))
+                Stepper(
+                    formatFactor(grade.weight),
+                    onMinus = { grade = grade.copy(weight = (grade.weight - 0.5).coerceAtLeast(0.5)) },
+                    onPlus = { grade = grade.copy(weight = (grade.weight + 0.5).coerceAtMost(5.0)) },
+                )
             }
-            Stepper(
-                formatFactor(grade.weight),
-                onMinus = { grade = grade.copy(weight = (grade.weight - 0.5).coerceAtLeast(0.5)) },
-                onPlus = { grade = grade.copy(weight = (grade.weight + 0.5).coerceAtMost(5.0)) },
-            )
         }
-        FormLabel("Anhänge")
         AttachmentStrip(OwnerType.GRADE, grade.id, attachments.filter { it.ownerId == grade.id })
     }
 
@@ -127,7 +131,9 @@ fun GradeEditSheet(initial: Grade, isNew: Boolean, subjectSelectable: Boolean, o
     if (confirmDelete) {
         ConfirmDialog("Note löschen?", "Die Note und ihre Anhänge werden entfernt.", onDismiss = { confirmDelete = false }) {
             saved[0] = true
-            repo.deleteGrade(grade)
+            val original = grade
+            repo.deleteGrade(original)
+            undo.show("Note gelöscht") { repo.restoreGrade(original) }
             onDismiss()
         }
     }
@@ -160,20 +166,24 @@ fun CategoryEditSheet(initial: GradeCategory, isNew: Boolean, onDismiss: () -> U
                 null
             },
         )
-        Field(cat.name, { cat = cat.copy(name = it) }, "Name (z. B. Facharbeit)")
-        FormLabel("Art")
-        Segmented(
-            listOf(CategoryKind.WRITTEN to "Schriftlich", CategoryKind.ORAL to "Mündlich", CategoryKind.OTHER to "Sonstiges"),
-            cat.kind,
-            { cat = cat.copy(kind = it) },
-        )
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) { FormLabel("Gewichtung") }
-            Stepper(
-                "${cat.weight.toInt()} %",
-                onMinus = { cat = cat.copy(weight = (cat.weight - 5).coerceAtLeast(0.0)) },
-                onPlus = { cat = cat.copy(weight = (cat.weight + 5).coerceAtMost(100.0)) },
-            )
+        FormGroup {
+            FormTextRow("Name", cat.name, { cat = cat.copy(name = it) }, placeholder = "z. B. Facharbeit")
+            FormRow("Art") {
+                MiniSegmented(
+                    listOf(CategoryKind.WRITTEN to "Schriftl.", CategoryKind.ORAL to "Mündl.", CategoryKind.OTHER to "Sonst."),
+                    cat.kind,
+                    { cat = cat.copy(kind = it) },
+                    Modifier.weight(1f),
+                )
+            }
+            FormRow("Gewichtung", divider = false) {
+                Box(Modifier.weight(1f))
+                Stepper(
+                    "${cat.weight.toInt()} %",
+                    onMinus = { cat = cat.copy(weight = (cat.weight - 5).coerceAtLeast(0.0)) },
+                    onPlus = { cat = cat.copy(weight = (cat.weight + 5).coerceAtMost(100.0)) },
+                )
+            }
         }
     }
     if (confirmDelete) {

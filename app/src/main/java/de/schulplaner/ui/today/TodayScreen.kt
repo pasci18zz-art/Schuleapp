@@ -35,7 +35,6 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.navigation.NavController
 import de.schulplaner.app
 import de.schulplaner.data.Exam
 import de.schulplaner.data.ExamTopic
@@ -47,7 +46,13 @@ import de.schulplaner.domain.Lesson
 import de.schulplaner.domain.Schedule
 import de.schulplaner.domain.TermStats
 import de.schulplaner.domain.label
+import de.schulplaner.ui.LocalNavigator
 import de.schulplaner.ui.Routes
+import de.schulplaner.ui.Tabs
+import de.schulplaner.data.Holiday
+import de.schulplaner.data.HolidayKind
+import de.schulplaner.ui.components.LocalUndo
+import de.schulplaner.ui.components.NotesButton
 import de.schulplaner.ui.components.CheckCircle
 import de.schulplaner.ui.components.EmptyHint
 import de.schulplaner.ui.components.GlassCard
@@ -79,6 +84,7 @@ private class TodayState(
     val weekLabel: String?,
     val holidayName: String?,
     val openTasks: List<Task>,
+    val doneVisible: List<Task>,
     val tasks: List<Task>,
     val exams: List<Exam>,
     val topics: List<ExamTopic>,
@@ -86,7 +92,8 @@ private class TodayState(
 )
 
 @Composable
-fun TodayScreen(nav: NavController) {
+fun TodayScreen() {
+    val nav = LocalNavigator.current
     val repo = LocalContext.current.app.repo
     val schedule by repo.scheduleData.collectAsStateWithLifecycle()
     val tasks by repo.tasks.collectAsStateWithLifecycle()
@@ -104,6 +111,9 @@ fun TodayScreen(nav: NavController) {
     val openTasks = tasks
         .filter { !it.done }
         .sortedWith(compareBy<Task> { it.dueDate ?: Long.MAX_VALUE }.thenBy { it.createdAt })
+    // Erledigte bleiben ausgegraut sichtbar, bis ihr Fälligkeitstag vorbei ist.
+    val doneVisible = tasks.filter { it.done && (it.dueDate ?: todayEpoch) >= todayEpoch }
+        .sortedBy { it.dueDate ?: Long.MAX_VALUE }
     val upcomingExams = exams.filter { it.date >= todayEpoch }.sortedBy { it.date }
     val wt = Schedule.weekTypeOf(day, schedule)
 
@@ -111,7 +121,7 @@ fun TodayScreen(nav: NavController) {
         now = now, day = day, lessons = lessons, current = current, next = next,
         weekLabel = wt?.let { "$it-Woche" },
         holidayName = Schedule.holidayOn(today, schedule)?.name,
-        openTasks = openTasks, tasks = tasks, exams = upcomingExams, topics = topics,
+        openTasks = openTasks, doneVisible = doneVisible, tasks = tasks, exams = upcomingExams, topics = topics,
         subjects = schedule.subjects,
     )
 
@@ -133,9 +143,9 @@ fun TodayScreen(nav: NavController) {
                 title = "Heute",
                 overline = Fmt.full(today),
                 chip = state.weekLabel,
-            ) {
-                GlassIconButton(Ic.Settings, "Einstellungen", { nav.navigate(Routes.SETTINGS) })
-            }
+            )
+
+            FerienTile(schedule.holidays, today)
 
             if (schedule.slots.isEmpty()) {
                 GlassCard {
@@ -143,7 +153,7 @@ fun TodayScreen(nav: NavController) {
                         Ic.Calendar,
                         "Trag zuerst deine Fächer und deinen Stundenplan ein.",
                         action = "Loslegen",
-                        onAction = { nav.navigate(if (schedule.subjects.isEmpty()) Routes.SET_SUBJECTS else Routes.TIMETABLE) },
+                        onAction = { if (schedule.subjects.isEmpty()) nav.open(Routes.SET_SUBJECTS) else nav.tab(Tabs.TIMETABLE) },
                     )
                 }
             }
@@ -155,11 +165,11 @@ fun TodayScreen(nav: NavController) {
                         LessonsTile(state, onLessonClick)
                     }
                     Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                        TasksTile(state, max = 8, onOpen = { nav.navigate(Routes.TASKS) }, onEdit = { editTask = it to false })
+                        TasksTile(state, max = 8, onOpen = { nav.tab(Tabs.TASKS) }, onEdit = { editTask = it to false })
                     }
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                        ExamsListTile(state, onOpen = { nav.navigate(Routes.exam(it.id)) })
-                        GradesTile(onOpen = { nav.navigate(Routes.GRADES) })
+                        ExamsListTile(state, onOpen = { nav.open(Routes.exam(it.id)) })
+                        GradesTile(onOpen = { nav.tab(Tabs.GRADES) })
                     }
                 }
             } else {
@@ -167,13 +177,13 @@ fun TodayScreen(nav: NavController) {
                 LessonsTile(state, onLessonClick)
                 Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Box(Modifier.weight(1f).fillMaxHeight()) {
-                        TasksTile(state, max = 2, compact = true, onOpen = { nav.navigate(Routes.TASKS) }, onEdit = { editTask = it to false })
+                        TasksTile(state, max = 2, compact = true, onOpen = { nav.tab(Tabs.TASKS) }, onEdit = { editTask = it to false })
                     }
                     Box(Modifier.weight(1f).fillMaxHeight()) {
-                        ExamTile(state, onOpen = { nav.navigate(Routes.exam(it.id)) }, onEmpty = { nav.navigate(Routes.EXAMS) })
+                        ExamTile(state, onOpen = { nav.open(Routes.exam(it.id)) }, onEmpty = { nav.tab(Tabs.EXAMS) })
                     }
                 }
-                GradesTile(onOpen = { nav.navigate(Routes.GRADES) })
+                GradesTile(onOpen = { nav.tab(Tabs.GRADES) })
             }
         }
     }
@@ -302,9 +312,12 @@ private fun LessonsTile(s: TodayState, onLessonClick: (Lesson) -> Unit) {
 private fun TasksTile(s: TodayState, max: Int, compact: Boolean = false, onOpen: () -> Unit, onEdit: (Task) -> Unit) {
     val c = colors
     val repo = LocalContext.current.app.repo
+    val undo = LocalUndo.current
     val today = s.now.toLocalDate()
     val relevant = s.openTasks.filter { it.dueDate == null || it.dueDate <= s.day.toEpochDay() + 1 }
-    val shown = (if (compact) relevant else s.openTasks).take(max)
+    val open = (if (compact) relevant else s.openTasks).take(max)
+    val done = s.doneVisible.filter { !compact || it.dueDate == null || it.dueDate <= s.day.toEpochDay() + 1 }
+        .take((max - open.size).coerceAtLeast(0))
     GlassCard(Modifier.fillMaxSize(), padding = androidx.compose.foundation.layout.PaddingValues(14.dp)) {
         Row(Modifier.fillMaxWidth().clickable(onClick = onOpen), verticalAlignment = Alignment.CenterVertically) {
             Icon(Ic.Tasks, "Aufgaben", tint = c.accent, modifier = Modifier.size(22.dp))
@@ -312,23 +325,67 @@ private fun TasksTile(s: TodayState, max: Int, compact: Boolean = false, onOpen:
             Box(Modifier.weight(1f))
             Text("${s.openTasks.size}", style = T.title.copy(fontSize = T.section.fontSize * 1.6f), color = c.text)
         }
-        if (shown.isEmpty()) {
+        if (open.isEmpty() && done.isEmpty()) {
             Text("Alles erledigt", style = T.small, color = c.sub, modifier = Modifier.padding(top = 10.dp, start = 2.dp))
         }
-        shown.forEach { t ->
+        (open + done).forEach { t ->
             val due = t.dueDate?.let { LocalDate.ofEpochDay(it) }
-            val overdue = due != null && due.isBefore(today)
+            val overdue = !t.done && due != null && due.isBefore(today)
             val subject = t.subjectId?.let { s.subjects[it] }
             Row(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).clickable { onEdit(t) },
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).clickable { onEdit(t) }.alpha(if (t.done) 0.5f else 1f),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                CheckCircle(false, { repo.setTaskDone(t, true) }, ringColor = if (overdue) c.warn else c.sub, size = 20.dp)
+                CheckCircle(t.done, {
+                    repo.setTaskDone(t, !t.done)
+                    if (!t.done) undo.show("„${t.title}“ erledigt") { repo.setTaskDone(t, false) }
+                }, ringColor = if (overdue) c.warn else c.sub, size = 20.dp)
                 Column(Modifier.weight(1f)) {
-                    Text(t.title, style = T.label.copy(fontSize = T.label.fontSize), color = c.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(
+                        t.title,
+                        style = T.label.copy(textDecoration = if (t.done) TextDecoration.LineThrough else null),
+                        color = c.text,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                     val sub = listOfNotNull(subject?.label, due?.let { Fmt.due(today, it) }).joinToString(" · ")
                     Text(sub, style = T.small.copy(fontSize = T.small.fontSize * 0.92f), color = if (overdue) c.warn else c.sub, maxLines = 1)
                 }
+                if (!compact && !t.done) NotesButton(subject?.notesLink)
+            }
+        }
+    }
+}
+
+/** Countdown bis zu den nächsten Ferien (bzw. "noch X Tage Ferien"). */
+@Composable
+private fun FerienTile(holidays: List<Holiday>, today: LocalDate) {
+    val c = colors
+    val t = today.toEpochDay()
+    val ferien = holidays.filter { it.kind == HolidayKind.FERIEN || it.name.contains("ferien", ignoreCase = true) }
+    val current = ferien.firstOrNull { t in it.startDate..it.endDate }
+    val next = ferien.filter { it.startDate > t }.minByOrNull { it.startDate }
+    val h = current ?: next ?: return
+    val days = if (current != null) h.endDate - t + 1 else h.startDate - t
+    GlassCard(padding = androidx.compose.foundation.layout.PaddingValues(horizontal = 14.dp, vertical = 12.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Box(
+                Modifier.size(38.dp).clip(RoundedCornerShape(12.dp)).background(if (c.isDark) Color(0xFF33291A) else Color(0xFFFFF4E5)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(Ic.Palm, null, tint = Color(0xFFC77700), modifier = Modifier.size(20.dp))
+            }
+            Column(Modifier.weight(1f)) {
+                Text(h.name, style = T.body, color = c.text)
+                Text(
+                    if (current != null) "bis ${Fmt.dayMonth(LocalDate.ofEpochDay(h.endDate))}" else "ab ${Fmt.dayMonth(LocalDate.ofEpochDay(h.startDate))}",
+                    style = T.small,
+                    color = c.sub,
+                )
+            }
+            Column(horizontalAlignment = Alignment.End) {
+                Text("$days", style = T.title.copy(fontSize = T.section.fontSize * 1.4f), color = c.text)
+                Text(if (current != null) "Tage frei" else if (days == 1L) "Tag" else "Tage", style = T.small, color = c.sub)
             }
         }
     }
@@ -426,8 +483,7 @@ private fun GradesTile(onOpen: () -> Unit) {
             Text(GradeCalc.format(avg), style = T.bigNumber, color = c.text)
             Text("P Ø", style = T.body, color = c.sub, modifier = Modifier.padding(bottom = 8.dp))
         }
-        val under = results.count { (it.value ?: 99.0) < 5.0 }
-        Text("${results.count { it.value != null }} Fächer · $under Unterkurse", style = T.small, color = c.sub)
+        Text("${results.count { it.value != null }} Fächer", style = T.small, color = c.sub)
         if (best.isNotEmpty()) {
             Text("BESTE FÄCHER", style = T.overline, color = c.accent, modifier = Modifier.padding(top = 14.dp, bottom = 6.dp))
             best.forEachIndexed { i, r ->

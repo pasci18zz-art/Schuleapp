@@ -33,7 +33,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.navigation.NavController
+import de.schulplaner.ui.LocalNavigator
 import de.schulplaner.app
 import de.schulplaner.data.ExamTopic
 import de.schulplaner.data.OwnerType
@@ -61,7 +61,8 @@ import de.schulplaner.ui.theme.T
 import java.time.LocalDate
 
 @Composable
-fun ExamDetailScreen(id: String, nav: NavController) {
+fun ExamDetailScreen(id: String) {
+    val nav = LocalNavigator.current
     val c = colors
     val repo = LocalContext.current.app.repo
     val exams by repo.exams.collectAsStateWithLifecycle()
@@ -83,7 +84,7 @@ fun ExamDetailScreen(id: String, nav: NavController) {
         if (exam != null && notes.isBlank()) notes = exam.topicsText
     }
     if (exam == null) {
-        if (deleted) LaunchedEffect(Unit) { nav.popBackStack() }
+        if (deleted) LaunchedEffect(Unit) { nav.back() }
         return
     }
 
@@ -104,7 +105,7 @@ fun ExamDetailScreen(id: String, nav: NavController) {
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Row(Modifier.fillMaxWidth().padding(top = 20.dp), verticalAlignment = Alignment.CenterVertically) {
-            GlassIconButton(Ic.ChevronLeft, "Zurück", { nav.popBackStack() })
+            GlassIconButton(Ic.ChevronLeft, "Zurück", { nav.back() })
             Box(Modifier.weight(1f))
             GlassIconButton(Ic.Pencil, "Bearbeiten", { editing = true })
         }

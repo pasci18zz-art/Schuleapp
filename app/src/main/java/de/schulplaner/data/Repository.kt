@@ -220,10 +220,27 @@ class Repository(
     fun discardAttachments(ownerId: String) = io { deleteAttachmentsOf(ownerId) }
 
     private suspend fun deleteAttachmentsOf(ownerId: String) {
+        // Dateien bleiben liegen, damit "Rückgängig" sie wiederherstellen kann.
         attachments.value.filter { it.ownerId == ownerId }.forEach {
             dao.upsertAttachment(it.copy(deleted = true, updatedAt = now(), dirty = true))
-            files.fileFor(it).delete()
         }
+    }
+
+    private suspend fun restoreAttachmentsOf(ownerId: String) {
+        dao.attachmentsIncludingDeleted(ownerId).filter { it.deleted }.forEach {
+            dao.upsertAttachment(it.copy(deleted = false, updatedAt = now(), dirty = true))
+        }
+    }
+
+    /** Rückgängig für gelöschte Aufgabe/Note. */
+    fun restoreTask(t: Task) = io {
+        dao.upsertTask(t.copy(deleted = false, updatedAt = now(), dirty = true))
+        restoreAttachmentsOf(t.id)
+    }
+
+    fun restoreGrade(g: Grade) = io {
+        dao.upsertGrade(g.copy(deleted = false, updatedAt = now(), dirty = true))
+        restoreAttachmentsOf(g.id)
     }
 
     // ---------- Einstellungen ----------
@@ -266,6 +283,16 @@ class Repository(
         dao.upsertSetting(Setting(SettingKeys.AB_REFERENCE, monday.toString(), updatedAt = t))
         dao.upsertSetting(Setting(SettingKeys.SEEDED, "true", updatedAt = t))
     }
+
+    /** Trägt die Hessen-Ferien und Feiertage einmalig ein (bzw. erneut, wenn [force]). */
+    suspend fun seedHessenHolidays(force: Boolean = false) {
+        if (!force && dao.setting(SettingKeys.HESSEN_HOLIDAYS) != null) return
+        val t = now()
+        HessenHolidays.all(t).forEach { dao.upsertHoliday(it) }
+        dao.upsertSetting(Setting(SettingKeys.HESSEN_HOLIDAYS, "true", updatedAt = t))
+    }
+
+    fun reloadHessenHolidays() = io { seedHessenHolidays(force = true) }
 
     /** Wartet, bis die Daten einmal aus der Datenbank geladen wurden. */
     suspend fun awaitLoaded() {

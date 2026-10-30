@@ -322,7 +322,7 @@ fun ConfirmDialog(title: String, text: String, confirm: String = "Löschen", onD
  * Langes Drücken auf ein Element löscht es.
  */
 @Composable
-fun AttachmentStrip(ownerType: String, ownerId: String, attachments: List<Attachment>, allowFiles: Boolean = true) {
+fun AttachmentStrip(ownerType: String, ownerId: String, attachments: List<Attachment>, allowFiles: Boolean = true, editable: Boolean = true) {
     val c = colors
     val ctx = LocalContext.current
     val repo = ctx.app.repo
@@ -358,7 +358,7 @@ fun AttachmentStrip(ownerType: String, ownerId: String, attachments: List<Attach
             Box(
                 Modifier
                     .size(76.dp)
-                    .pressable(onClick = { repo.files.open(ctx, a) }, onLongClick = { toDelete = a })
+                    .pressable(onClick = { repo.files.open(ctx, a) }, onLongClick = if (editable) ({ toDelete = a }) else null)
                     .clip(RoundedCornerShape(18.dp))
                     .background(c.accentSoft),
                 contentAlignment = Alignment.Center,
@@ -373,19 +373,19 @@ fun AttachmentStrip(ownerType: String, ownerId: String, attachments: List<Attach
                 }
             }
         }
-        item {
+        if (editable) item {
             AddTile(Ic.Camera, "Foto aufnehmen") {
                 val (file, uri) = repo.files.newCameraTarget()
                 pendingCamera = file.absolutePath
                 camera.launch(uri)
             }
         }
-        item {
+        if (editable) item {
             AddTile(Ic.ImagePlus, "Aus Galerie wählen") {
                 gallery.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
             }
         }
-        if (allowFiles) {
+        if (allowFiles && editable) {
             item { AddTile(Ic.Clip, "Datei anhängen") { document.launch(arrayOf("*/*")) } }
         }
     }

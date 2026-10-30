@@ -21,9 +21,6 @@ import de.schulplaner.R
 data class SchulColors(
     val isDark: Boolean,
     val bg: Color,
-    val orbA: Color,
-    val orbB: Color,
-    val orbC: Color,
     val card: Color,
     val cardBorder: Color,
     val shadow: Color,
@@ -35,57 +32,57 @@ data class SchulColors(
     val accentSoft: Color,
     val warn: Color,
     val warnSoft: Color,
+    val exam: Color,
     val good: Color,
     val nav: Color,
     val sheet: Color,
+    val snackbar: Color,
     /** Deckkraft für Fächerfarben als Hintergrund (Kacheln im Stundenplan). */
     val tint: Float,
 )
 
 val LightSchulColors = SchulColors(
     isDark = false,
-    bg = Color(0xFFEDF0F6),
-    orbA = Color(0x737A96FF),
-    orbB = Color(0x66BEA0FF),
-    orbC = Color(0x6BFFBE96),
-    card = Color(0x94FFFFFF),
-    cardBorder = Color(0xCCFFFFFF),
-    shadow = Color(0x141E2850),
-    text = Color(0xFF12151C),
-    sub = Color(0xFF555C6B),
-    line = Color(0x1412151C),
-    accent = Color(0xFF4353C9),
+    bg = Color(0xFFF5F6F8),
+    card = Color.White,
+    cardBorder = Color(0xFFEBEDF1),
+    shadow = Color(0x14101828),
+    text = Color(0xFF111418),
+    sub = Color(0xFF5B6270),
+    line = Color(0xFFEEF0F3),
+    accent = Color(0xFF4F5BD5),
     accentInk = Color.White,
-    accentSoft = Color(0x1F4353C9),
-    warn = Color(0xFFB4410E),
-    warnSoft = Color(0x1AB4410E),
+    accentSoft = Color(0xFFEEF0FC),
+    warn = Color(0xFFC2410C),
+    warnSoft = Color(0xFFFDEFE7),
+    exam = Color(0xFFD94A4A),
     good = Color(0xFF4E9A3E),
-    nav = Color(0xDBFFFFFF),
-    sheet = Color(0xFFF7F8FC),
-    tint = 0.18f,
+    nav = Color.White,
+    sheet = Color.White,
+    snackbar = Color(0xFF1C1F26),
+    tint = 0.16f,
 )
 
 val DarkSchulColors = SchulColors(
     isDark = true,
-    bg = Color(0xFF0D1016),
-    orbA = Color(0x61465FDC),
-    orbB = Color(0x4D8250DC),
-    orbC = Color(0x33DC7850),
-    card = Color(0x12FFFFFF),
-    cardBorder = Color(0x1AFFFFFF),
-    shadow = Color(0x59000000),
-    text = Color(0xFFEEF0F5),
-    sub = Color(0xFFA3A9B8),
-    line = Color(0x1AFFFFFF),
-    accent = Color(0xFF8C9BFF),
-    accentInk = Color(0xFF0D1016),
-    accentSoft = Color(0x298C9BFF),
+    bg = Color(0xFF0F1115),
+    card = Color(0xFF181B21),
+    cardBorder = Color(0xFF23262E),
+    shadow = Color(0x00000000),
+    text = Color(0xFFEEF0F4),
+    sub = Color(0xFF9AA1AF),
+    line = Color(0xFF22252C),
+    accent = Color(0xFF8E99FF),
+    accentInk = Color(0xFF0F1115),
+    accentSoft = Color(0xFF22264A),
     warn = Color(0xFFFDA56B),
-    warnSoft = Color(0x24FDA56B),
+    warnSoft = Color(0xFF3A261C),
+    exam = Color(0xFFF26D6D),
     good = Color(0xFF8BD17A),
-    nav = Color(0xE61C202A),
-    sheet = Color(0xFF181C24),
-    tint = 0.26f,
+    nav = Color(0xFF1C1F26),
+    sheet = Color(0xFF181B21),
+    snackbar = Color(0xFF2A2E37),
+    tint = 0.24f,
 )
 
 val LocalSchulColors = staticCompositionLocalOf { LightSchulColors }
@@ -122,7 +119,7 @@ private fun typography(): Typography {
 
 /** Feste Textstile der App, angelehnt an die Entwürfe. */
 object T {
-    val hero = TextStyle(fontFamily = Jakarta, fontWeight = FontWeight.ExtraBold, fontSize = 38.sp, letterSpacing = (-0.6).sp)
+    val hero = TextStyle(fontFamily = Jakarta, fontWeight = FontWeight.ExtraBold, fontSize = 34.sp, letterSpacing = (-0.6).sp)
     val title = TextStyle(fontFamily = Jakarta, fontWeight = FontWeight.ExtraBold, fontSize = 30.sp, letterSpacing = (-0.5).sp)
     val section = TextStyle(fontFamily = Jakarta, fontWeight = FontWeight.Bold, fontSize = 16.sp)
     val bigNumber = TextStyle(fontFamily = Jakarta, fontWeight = FontWeight.ExtraBold, fontSize = 50.sp, letterSpacing = (-1.2).sp)
@@ -146,16 +143,16 @@ fun SchulTheme(mode: String = "system", content: @Composable () -> Unit) {
         darkColorScheme(
             primary = c.accent, onPrimary = c.accentInk, primaryContainer = c.accentSoft, onPrimaryContainer = c.accent,
             background = c.bg, onBackground = c.text, surface = c.sheet, onSurface = c.text,
-            surfaceVariant = Color(0xFF232836), onSurfaceVariant = c.sub, outline = Color(0xFF3A4050),
-            surfaceContainerHigh = c.sheet, surfaceContainerHighest = Color(0xFF232836), surfaceContainerLow = c.sheet,
+            surfaceVariant = Color(0xFF22252C), onSurfaceVariant = c.sub, outline = Color(0xFF353943),
+            surfaceContainerHigh = c.sheet, surfaceContainerHighest = Color(0xFF22252C), surfaceContainerLow = c.sheet,
             surfaceContainer = c.sheet, error = c.warn,
         )
     } else {
         lightColorScheme(
             primary = c.accent, onPrimary = c.accentInk, primaryContainer = c.accentSoft, onPrimaryContainer = c.accent,
             background = c.bg, onBackground = c.text, surface = c.sheet, onSurface = c.text,
-            surfaceVariant = Color(0xFFE6E9F2), onSurfaceVariant = c.sub, outline = Color(0xFFC5CAD6),
-            surfaceContainerHigh = c.sheet, surfaceContainerHighest = Color(0xFFE6E9F2), surfaceContainerLow = c.sheet,
+            surfaceVariant = Color(0xFFEEF0F3), onSurfaceVariant = c.sub, outline = Color(0xFFD5D9E0),
+            surfaceContainerHigh = c.sheet, surfaceContainerHighest = Color(0xFFEEF0F3), surfaceContainerLow = c.sheet,
             surfaceContainer = c.sheet, error = c.warn,
         )
     }
@@ -168,4 +165,5 @@ fun SchulTheme(mode: String = "system", content: @Composable () -> Unit) {
 val SubjectPalette: List<Long> = listOf(
     0xFF5B7FDB, 0xFFE07A5F, 0xFF3FA7A0, 0xFF6BAF5B, 0xFFD9A441, 0xFF8E6BD9,
     0xFFD96B9E, 0xFF4BA3D9, 0xFF7C8A9E, 0xFFB08968, 0xFFC25B7A, 0xFF5E9E7E,
+    0xFFE5484D, 0xFFF08C2E, 0xFFC9B12E, 0xFF2F9E6E, 0xFF2B8CBF, 0xFF6F5BD5,
 )

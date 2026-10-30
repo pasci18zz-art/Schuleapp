@@ -16,8 +16,14 @@ Design-Entwürfe (klickbar): https://claude.ai/artifact/YaVbw4kmq8qm3xJXT1iN3n
 | Noten | Notenpunkte 0–15, Schnitte als Kommazahl (ohne Rundung) |
 | Gewichtung | pro Fach **und** Halbjahr, Standard „Schriftlich 50 % / Mündlich 50 %“, frei änderbar, weitere Kategorien möglich; wird ins nächste Halbjahr übernommen |
 | Gesamtschnitt | alle Fächer zählen gleich (LK doppelt erst in der Abi-Übersicht) |
-| Design | hell/dunkel nach System, schlicht, Milchglas-Kacheln, stark abgerundet, Samsung-ähnlich, nur Symbole in der Navigation |
-| Navigation | schmale Pille unten in der Mitte – auch auf dem Tablet |
+| Design | hell/dunkel nach System, clean: ruhiger Hintergrund, weiße Kacheln mit feinem Rand, abgerundet, nur Symbole in der Navigation |
+| Navigation | schmale Pille unten mit 6 Symbolen (inkl. Einstellungen), auch auf dem Tablet; Tabs per Wischen wechselbar, Wischen über die Leiste wählt den Tab unter dem Finger; Tab antippen führt immer zur Startseite des Tabs |
+| Erledigte Aufgaben | bleiben ausgegraut/durchgestrichen stehen, bis ihr Fälligkeitstag vorbei ist, dann unter „Erledigt“; „Rückgängig“-Leiste |
+| Kalender | im Stundenplan als Umschalter Woche/Monat; Tablet: große Monatsansicht mit Tagesleiste |
+| Ferien | offizielle Hessen-Ferien + Feiertage vorinstalliert, Ferien-Countdown auf „Heute“ |
+| Notizbuch | kleiner Knopf pro Fach: öffnet Samsung Notes, eine Verknüpfung oder einen Link (Samsung bietet keine Schnittstelle für einzelne Notizbücher) |
+| Erinnerung | am Vorabend (Standard 18:00) an offene HA und Klausuren für morgen |
+| Nicht gewünscht | Unterkurs-Anzeige, wiederkehrende Aufgaben, Vibration, Abi-Countdown |
 | Sync | Supabase (kostenlos), offline zuerst, „neueste Änderung gewinnt“ |
 | APK | wird bei jedem Push von GitHub Actions gebaut, immer mit demselben Schlüssel signiert |
 
@@ -53,7 +59,7 @@ wandert das Datum mit.
 1. ✅ Grundgerüst, Datenmodell, alle Tabs, Einstellungen, Schnell-HA-Kachel, APK-Build
 2. ⏳ Sync mit Supabase (Login, Abgleich, Fotos)
 3. ⏳ Widgets: Heute, Aufgaben (abhakbar), Klausur-Countdown, nächste Stunde
-4. ⏳ Erinnerungen: HA am Vorabend, Klausuren 7/3/1 Tage vorher
+4. ✅ Erinnerung am Vorabend; ✅ Kalender, Ferien, Rückgängig, Notizbuch-Knopf, neues Design
 5. ⏳ Abi-Übersicht (Hessen-Regeln), Backup als Datei, Notenstatistik
 6. ⏳ Feinschliff Design/Animationen
 

@@ -38,6 +38,8 @@ import de.schulplaner.ui.components.EmptyHint
 import de.schulplaner.ui.components.GlassCard
 import de.schulplaner.ui.components.Ic
 import de.schulplaner.ui.components.Pill
+import de.schulplaner.ui.components.LocalUndo
+import de.schulplaner.ui.components.NotesButton
 import de.schulplaner.ui.components.ScreenHeader
 import de.schulplaner.ui.components.SectionTitle
 import de.schulplaner.ui.components.Segmented
@@ -58,6 +60,7 @@ private enum class Status { OPEN, ALL, DONE }
 fun TasksScreen() {
     val c = colors
     val repo = LocalContext.current.app.repo
+    val undo = LocalUndo.current
     val tasks by repo.tasks.collectAsStateWithLifecycle()
     val subjects by repo.subjects.collectAsStateWithLifecycle()
     val schedule by repo.scheduleData.collectAsStateWithLifecycle()
@@ -69,11 +72,14 @@ fun TasksScreen() {
     var edit by remember { mutableStateOf<Pair<Task, Boolean>?>(null) }
 
     val subjectMap = subjects.associateBy { it.id }
+    val todayEpoch = today.toEpochDay()
+    // Erledigte bleiben ausgegraut in "Offen", bis ihr Fälligkeitstag vorbei ist.
+    fun stillVisible(t: Task) = t.done && (t.dueDate ?: (t.doneAt?.let { LocalDate.ofEpochDay(it / 86_400_000L).toEpochDay() } ?: 0L)) >= todayEpoch
     val visible = tasks.filter { t ->
         (type == null || t.type == type) &&
             (subjectFilter == null || t.subjectId == subjectFilter) &&
             when (status) {
-                Status.OPEN -> !t.done
+                Status.OPEN -> !t.done || stillVisible(t)
                 Status.DONE -> t.done
                 Status.ALL -> true
             }
@@ -131,9 +137,17 @@ fun TasksScreen() {
                                 dotColor = subject?.let { subjectColor(it.color) },
                                 done = t.done,
                                 overdue = overdue,
-                                onToggle = { repo.setTaskDone(t, !t.done) },
+                                onToggle = {
+                                    repo.setTaskDone(t, !t.done)
+                                    if (!t.done) undo.show("„${t.title}“ erledigt") { repo.setTaskDone(t, false) }
+                                },
                                 onClick = { edit = t to false },
-                                trailing = { Pill(TaskType.label(t.type), c.line, c.sub) },
+                                trailing = {
+                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        if (!t.done) NotesButton(subject?.notesLink)
+                                        Pill(TaskType.label(t.type), c.line, c.sub)
+                                    }
+                                },
                             )
                         }
                     }
@@ -166,20 +180,22 @@ fun TasksScreen() {
 private fun groupTasks(tasks: List<Task>, today: LocalDate, status: Status): List<Pair<String, List<Task>>> {
     val t = today.toEpochDay()
     val endOfWeek = today.plusDays((7 - today.dayOfWeek.value).toLong()).toEpochDay()
-    val sorted = tasks.sortedWith(compareBy<Task> { it.dueDate ?: Long.MAX_VALUE }.thenBy { it.createdAt })
     if (status == Status.DONE) {
         return listOf("Erledigt" to tasks.sortedByDescending { it.doneAt ?: 0 }).filter { it.second.isNotEmpty() }
     }
+    // Offene zuerst, erledigte ans Ende der jeweiligen Gruppe.
+    val sorted = tasks.sortedWith(compareBy<Task> { it.done }.thenBy { it.dueDate ?: Long.MAX_VALUE }.thenBy { it.createdAt })
     val buckets = linkedMapOf<String, MutableList<Task>>(
         "Überfällig" to mutableListOf(), "Heute" to mutableListOf(), "Morgen" to mutableListOf(),
-        "Diese Woche" to mutableListOf(), "Später" to mutableListOf(), "Ohne Datum" to mutableListOf(),
+        "Diese Woche" to mutableListOf(), "Später" to mutableListOf(), "Ohne Datum" to mutableListOf(), "Erledigt" to mutableListOf(),
     )
     sorted.forEach { task ->
         val d = task.dueDate
         val key = when {
+            task.done && d != null && d < t -> "Erledigt"
             d == null -> "Ohne Datum"
-            d < t && !task.done -> "Überfällig"
-            d <= t -> "Heute"
+            d < t -> "Überfällig"
+            d == t -> "Heute"
             d == t + 1 -> "Morgen"
             d <= endOfWeek -> "Diese Woche"
             else -> "Später"

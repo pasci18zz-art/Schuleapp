@@ -25,6 +25,8 @@ data class Subject(
     val isLk: Boolean = false,
     val sortOrder: Int = 0,
     val archived: Boolean = false,
+    /** Notizbuch-Knopf: "" = keiner, "app" = Samsung Notes öffnen, "intent:…" = Verknüpfung, "http…" = Link */
+    val notesLink: String = "",
     val updatedAt: Long = 0,
     val deleted: Boolean = false,
     val dirty: Boolean = true,
@@ -210,12 +212,19 @@ data class ExamTopic(
     val dirty: Boolean = true,
 )
 
+object HolidayKind {
+    const val FERIEN = "FERIEN"
+    const val FEIERTAG = "FEIERTAG"
+    const val FREI = "FREI"
+}
+
 @Entity(tableName = "holidays")
 data class Holiday(
     @PrimaryKey val id: String = newId(),
     val name: String = "",
     val startDate: Long = 0,
     val endDate: Long = 0,
+    val kind: String = HolidayKind.FREI,
     val updatedAt: Long = 0,
     val deleted: Boolean = false,
     val dirty: Boolean = true,
@@ -267,4 +276,5 @@ object SettingKeys {
     /** Montag (epochDay) einer Woche, die eine A-Woche ist. */
     const val AB_REFERENCE = "ab_reference_monday"
     const val SEEDED = "seeded"
+    const val HESSEN_HOLIDAYS = "hessen_ferien_v1"
 }

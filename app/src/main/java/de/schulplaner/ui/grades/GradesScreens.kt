@@ -46,7 +46,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.navigation.NavController
 import de.schulplaner.app
 import de.schulplaner.data.CategoryKind
 import de.schulplaner.data.Grade
@@ -54,6 +53,7 @@ import de.schulplaner.data.GradeCategory
 import de.schulplaner.domain.Fmt
 import de.schulplaner.domain.GradeCalc
 import de.schulplaner.domain.TermStats
+import de.schulplaner.ui.LocalNavigator
 import de.schulplaner.ui.Routes
 import de.schulplaner.ui.components.AppSheet
 import de.schulplaner.ui.components.ChoiceChip
@@ -79,7 +79,8 @@ import java.time.LocalDate
 import kotlin.math.roundToInt
 
 @Composable
-fun GradesOverviewScreen(nav: NavController) {
+fun GradesOverviewScreen() {
+    val nav = LocalNavigator.current
     val c = colors
     val repo = LocalContext.current.app.repo
     val terms by repo.terms.collectAsStateWithLifecycle()
@@ -109,7 +110,7 @@ fun GradesOverviewScreen(nav: NavController) {
         }
         if (subjects.isEmpty() || term == null) {
             GlassCard {
-                EmptyHint(Ic.Grades, "Lege zuerst deine Fächer an.", action = "Fächer anlegen", onAction = { nav.navigate(Routes.SET_SUBJECTS) })
+                EmptyHint(Ic.Grades, "Lege zuerst deine Fächer an.", action = "Fächer anlegen", onAction = { nav.open(Routes.SET_SUBJECTS) })
             }
             return@Column
         }
@@ -117,7 +118,6 @@ fun GradesOverviewScreen(nav: NavController) {
         val results = TermStats.results(term.id, subjects, categories, grades, subjectTerms)
         val avg = TermStats.average(results)
         val withValue = results.filter { it.value != null }
-        val under = withValue.count { it.value!! < 5.0 }
 
         GlassCard(padding = PaddingValues(start = 20.dp, end = 16.dp, top = 18.dp, bottom = 18.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -137,7 +137,6 @@ fun GradesOverviewScreen(nav: NavController) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     StatPill("Fächer", "${withValue.size}")
                     StatPill("LK", "${subjects.count { it.isLk && !it.archived }}")
-                    StatPill("Unterkurse", "$under", warn = under > 0)
                 }
             }
         }
@@ -157,7 +156,7 @@ fun GradesOverviewScreen(nav: NavController) {
                     Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(18.dp))
-                        .clickable { nav.navigate(Routes.subjectGrades(r.subject.id, term.id)) }
+                        .clickable { nav.open(Routes.subjectGrades(r.subject.id, term.id)) }
                         .padding(horizontal = 12.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -206,7 +205,8 @@ private fun SortChip(label: String, active: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-fun SubjectGradesScreen(subjectId: String, termId: String, nav: NavController) {
+fun SubjectGradesScreen(subjectId: String, termId: String) {
+    val nav = LocalNavigator.current
     val c = colors
     val repo = LocalContext.current.app.repo
     val subjects by repo.subjects.collectAsStateWithLifecycle()
@@ -237,7 +237,7 @@ fun SubjectGradesScreen(subjectId: String, termId: String, nav: NavController) {
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Row(Modifier.fillMaxWidth().padding(top = 20.dp), verticalAlignment = Alignment.CenterVertically) {
-            GlassIconButton(Ic.ChevronLeft, "Zurück", { nav.popBackStack() })
+            GlassIconButton(Ic.ChevronLeft, "Zurück", { nav.back() })
             Box(Modifier.weight(1f))
             if (term != null) Pill(term.name)
         }

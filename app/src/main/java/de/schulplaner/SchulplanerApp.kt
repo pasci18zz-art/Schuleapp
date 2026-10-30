@@ -6,6 +6,7 @@ import de.schulplaner.data.AppDatabase
 import de.schulplaner.data.AttachmentStore
 import de.schulplaner.data.Prefs
 import de.schulplaner.data.Repository
+import de.schulplaner.reminders.Reminders
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -22,7 +23,11 @@ class SchulplanerApp : Application() {
         super.onCreate()
         repo = Repository(AppDatabase.create(this), appScope, AttachmentStore(this))
         prefs = Prefs(this)
-        appScope.launch(Dispatchers.IO) { repo.seedIfNeeded() }
+        appScope.launch(Dispatchers.IO) {
+            repo.seedIfNeeded()
+            repo.seedHessenHolidays()
+        }
+        appScope.launch { Reminders.scheduleFromPrefs(this@SchulplanerApp, replace = false) }
     }
 }
 

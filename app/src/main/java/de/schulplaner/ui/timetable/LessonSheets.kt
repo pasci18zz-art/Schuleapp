@@ -3,6 +3,7 @@ package de.schulplaner.ui.timetable
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -35,6 +36,10 @@ import de.schulplaner.domain.Fmt
 import de.schulplaner.domain.Lesson
 import de.schulplaner.ui.components.AppSheet
 import de.schulplaner.ui.components.Field
+import de.schulplaner.ui.components.FormGroup
+import de.schulplaner.ui.components.FormRow
+import de.schulplaner.ui.components.FormTextRow
+import de.schulplaner.ui.components.MiniSegmented
 import de.schulplaner.ui.components.FormLabel
 import de.schulplaner.ui.components.Ic
 import de.schulplaner.ui.components.PrimaryButton
@@ -53,7 +58,7 @@ import java.time.LocalDate
 
 /** Antippen einer Stunde: HA eintragen, Entfall/Raum/Vertretung für diesen Tag, Notizen zum Fach. */
 @Composable
-fun LessonSheet(lesson: Lesson, onDismiss: () -> Unit, onAddTask: () -> Unit) {
+fun LessonSheet(lesson: Lesson, onDismiss: () -> Unit, onAddTask: () -> Unit, onViewTask: (de.schulplaner.data.Task) -> Unit) {
     val c = colors
     val repo = LocalContext.current.app.repo
     val tasks by repo.tasks.collectAsStateWithLifecycle()
@@ -72,6 +77,7 @@ fun LessonSheet(lesson: Lesson, onDismiss: () -> Unit, onAddTask: () -> Unit) {
                 val parts = listOf(Fmt.dayDate(lesson.date), "${lesson.periodLabel} Std", lesson.room.takeIf { it.isNotBlank() }?.let { "R $it" })
                 Text(parts.filterNotNull().joinToString(" · "), style = T.small.copy(fontSize = T.label.fontSize), color = c.sub)
             }
+            de.schulplaner.ui.components.NotesButton(lesson.subject?.notesLink)
         }
 
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -101,8 +107,23 @@ fun LessonSheet(lesson: Lesson, onDismiss: () -> Unit, onAddTask: () -> Unit) {
         val due = tasks.filter { it.dueDate == epoch && it.subjectId == subjectId }
         if (due.isNotEmpty()) {
             FormLabel("Bis zu dieser Stunde")
+            // Nur lesen: antippen zeigt die ganze Aufgabe.
             due.forEach { t ->
-                TaskRow(t.title, "HA", null, t.done, false, { repo.setTaskDone(t, !t.done) }, {})
+                Row(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(c.card)
+                        .clickable { onViewTask(t) }.padding(horizontal = 14.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            t.title,
+                            style = T.body.copy(textDecoration = if (t.done) androidx.compose.ui.text.style.TextDecoration.LineThrough else null),
+                            color = if (t.done) c.sub else c.text,
+                        )
+                        if (t.description.isNotBlank()) Text(t.description, style = T.small, color = c.sub, maxLines = 2)
+                    }
+                    Icon(Ic.ChevronRight, null, tint = c.sub, modifier = Modifier.size(16.dp))
+                }
             }
         }
 
@@ -178,44 +199,33 @@ fun SlotEditSheet(initial: LessonSlot, isNew: Boolean, onDismiss: () -> Unit) {
             Text("Lege zuerst Fächer in den Einstellungen an.", style = T.body, color = c.sub)
             return@AppSheet
         }
-        FormLabel("Fach")
         SubjectPicker(subjects, slot.subjectId, { id -> if (id != null) slot = slot.copy(subjectId = id) }, allowNone = false)
-
-        FormLabel("Tag")
-        Segmented((1..5).map { it to Fmt.dayShort(it) }, slot.dayOfWeek, { slot = slot.copy(dayOfWeek = it) })
-
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                FormLabel("Ab Stunde")
-                val p = schedule.periodByNumber[slot.period]
-                Text(p?.let { Fmt.minutes(it.startMinute) + " Uhr" } ?: "", style = T.small, color = c.sub, modifier = Modifier.padding(start = 4.dp))
-            }
-            Stepper(
-                "${slot.period}.",
-                onMinus = { slot = slot.copy(period = (slot.period - 1).coerceAtLeast(1)) },
-                onPlus = { slot = slot.copy(period = (slot.period + 1).coerceAtMost(12)) },
-            )
-        }
-
-        FormLabel("Länge")
-        Segmented(listOf(1 to "Einzel", 2 to "Doppel", 3 to "3 Std"), slot.length, { slot = slot.copy(length = it) })
-
-        FormLabel("Wann")
-        Segmented(
-            listOf(WeekType.ALL to "Jede Woche", WeekType.A to "A-Woche", WeekType.B to "B-Woche"),
-            slot.weekType,
-            { slot = slot.copy(weekType = it) },
-        )
-
         val subject = subjects.firstOrNull { it.id == slot.subjectId }
-        Field(slot.room, { slot = slot.copy(room = it) }, if (subject?.room?.isNotBlank() == true) "Raum (sonst ${subject?.room})" else "Raum")
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            androidx.compose.foundation.layout.Box(Modifier.size(12.dp).clip(RoundedCornerShape(6.dp)).background(subjectColor(subject?.color)))
-            Text(
-                "Tipp: Fächer, die nur alle zwei Wochen sind, als A- oder B-Woche eintragen.",
-                style = T.small,
-                color = c.sub,
-            )
+        FormGroup {
+            FormRow("Tag") {
+                MiniSegmented((1..5).map { it to Fmt.dayShort(it) }, slot.dayOfWeek, { slot = slot.copy(dayOfWeek = it) }, Modifier.weight(1f))
+            }
+            FormRow("Ab Stunde") {
+                val p = schedule.periodByNumber[slot.period]
+                Text(p?.let { Fmt.minutes(it.startMinute) + " Uhr" } ?: "", style = T.small, color = c.sub, modifier = Modifier.weight(1f))
+                Stepper(
+                    "${slot.period}.",
+                    onMinus = { slot = slot.copy(period = (slot.period - 1).coerceAtLeast(1)) },
+                    onPlus = { slot = slot.copy(period = (slot.period + 1).coerceAtMost(12)) },
+                )
+            }
+            FormRow("Länge") {
+                MiniSegmented(listOf(1 to "Einzel", 2 to "Doppel", 3 to "3 Std"), slot.length, { slot = slot.copy(length = it) }, Modifier.weight(1f))
+            }
+            FormRow("Woche") {
+                MiniSegmented(
+                    listOf(WeekType.ALL to "Jede", WeekType.A to "A", WeekType.B to "B"),
+                    slot.weekType,
+                    { slot = slot.copy(weekType = it) },
+                    Modifier.weight(1f),
+                )
+            }
+            FormTextRow("Raum", slot.room, { slot = slot.copy(room = it) }, placeholder = subject?.room?.ifBlank { null } ?: "z. B. 204", divider = false)
         }
     }
 }

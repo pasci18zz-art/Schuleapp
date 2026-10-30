@@ -3,6 +3,8 @@ package de.schulplaner.ui.tasks
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -24,7 +26,12 @@ import de.schulplaner.ui.components.AppSheet
 import de.schulplaner.ui.components.AttachmentStrip
 import de.schulplaner.ui.components.ChoiceChip
 import de.schulplaner.ui.components.DateDialog
-import de.schulplaner.ui.components.Field
+import de.schulplaner.ui.components.FormGroup
+import de.schulplaner.ui.components.FormRow
+import de.schulplaner.ui.components.FormTextRow
+import de.schulplaner.ui.components.InlineTextField
+import de.schulplaner.ui.components.LocalUndo
+import de.schulplaner.ui.components.MiniSegmented
 import de.schulplaner.ui.components.FormLabel
 import de.schulplaner.ui.components.Segmented
 import de.schulplaner.ui.components.SheetHeader
@@ -77,6 +84,7 @@ fun TaskEditSheet(initial: Task, isNew: Boolean, onDismiss: () -> Unit) {
     var showDate by remember { mutableStateOf(false) }
     val saved = remember { booleanArrayOf(false) }
 
+    val undo = LocalUndo.current
     AppSheet(onDismiss = {
         if (isNew && !saved[0]) repo.discardAttachments(task.id)
         onDismiss()
@@ -95,16 +103,17 @@ fun TaskEditSheet(initial: Task, isNew: Boolean, onDismiss: () -> Unit) {
             onDelete = if (!isNew) {
                 {
                     saved[0] = true
-                    repo.deleteTask(task)
+                    val original = task
+                    repo.deleteTask(original)
+                    undo.show("Aufgabe gelöscht") { repo.restoreTask(original) }
                     close()
                 }
             } else {
                 null
             },
         )
-        Field(task.title, { task = task.copy(title = it) }, "Was ist zu tun?")
+        InlineTextField(task.title, { task = task.copy(title = it) }, "Was ist zu tun?", Modifier.fillMaxWidth().padding(horizontal = 4.dp), big = true)
 
-        FormLabel("Fach")
         SubjectPicker(subjects, task.subjectId, { id ->
             task = task.copy(subjectId = id)
             if (mode == DueMode.NEXT) {
@@ -114,41 +123,39 @@ fun TaskEditSheet(initial: Task, isNew: Boolean, onDismiss: () -> Unit) {
             }
         })
 
-        FormLabel("Art")
-        Segmented(
-            listOf(TaskType.HOMEWORK to "HA", TaskType.EXTRA to "Zusatz", TaskType.OTHER to "Sonstiges"),
-            task.type,
-            { task = task.copy(type = it) },
-        )
-
-        FormLabel("Fällig")
-        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            val next = nextDate(task.subjectId)
-            if (next != null) {
-                ChoiceChip("Nächste Stunde · ${Fmt.dayDate(next)}", mode == DueMode.NEXT, {
-                    mode = DueMode.NEXT
-                    task = task.copy(dueDate = next.toEpochDay())
-                })
+        FormGroup {
+            FormRow("Art") {
+                MiniSegmented(
+                    listOf(TaskType.HOMEWORK to "HA", TaskType.EXTRA to "Zusatz", TaskType.OTHER to "Sonst."),
+                    task.type,
+                    { task = task.copy(type = it) },
+                    Modifier.weight(1f),
+                )
             }
-            ChoiceChip("Morgen", mode == DueMode.TOMORROW, {
-                mode = DueMode.TOMORROW
-                task = task.copy(dueDate = today.plusDays(1).toEpochDay())
-            })
-            val customLabel = if (mode == DueMode.CUSTOM && task.dueDate != null) {
-                Fmt.dayDate(LocalDate.ofEpochDay(task.dueDate!!))
-            } else {
-                "Datum …"
+            FormRow("Fällig") {
+                Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    val next = nextDate(task.subjectId)
+                    if (next != null) {
+                        ChoiceChip("Nächste Std · ${Fmt.dayDate(next)}", mode == DueMode.NEXT, {
+                            mode = DueMode.NEXT
+                            task = task.copy(dueDate = next.toEpochDay())
+                        })
+                    }
+                    ChoiceChip("Morgen", mode == DueMode.TOMORROW, {
+                        mode = DueMode.TOMORROW
+                        task = task.copy(dueDate = today.plusDays(1).toEpochDay())
+                    })
+                    val customLabel = if (mode == DueMode.CUSTOM && task.dueDate != null) Fmt.dayDate(LocalDate.ofEpochDay(task.dueDate!!)) else "Datum …"
+                    ChoiceChip(customLabel, mode == DueMode.CUSTOM, { showDate = true })
+                    ChoiceChip("Ohne", mode == DueMode.NONE, {
+                        mode = DueMode.NONE
+                        task = task.copy(dueDate = null)
+                    })
+                }
             }
-            ChoiceChip(customLabel, mode == DueMode.CUSTOM, { showDate = true })
-            ChoiceChip("Ohne", mode == DueMode.NONE, {
-                mode = DueMode.NONE
-                task = task.copy(dueDate = null)
-            })
+            FormTextRow("Notizen", task.description, { task = task.copy(description = it) }, placeholder = "optional", singleLine = false, divider = false)
         }
 
-        Field(task.description, { task = task.copy(description = it) }, "Notizen", singleLine = false, minLines = 2)
-
-        FormLabel("Anhänge")
         AttachmentStrip(OwnerType.TASK, task.id, attachments.filter { it.ownerId == task.id })
     }
 

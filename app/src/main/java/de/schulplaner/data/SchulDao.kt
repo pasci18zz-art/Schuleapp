@@ -114,6 +114,12 @@ interface SchulDao {
     @Upsert
     suspend fun upsertAttachment(item: Attachment)
 
+    @Query("SELECT * FROM attachments WHERE ownerId = :ownerId")
+    suspend fun attachmentsIncludingDeleted(ownerId: String): List<Attachment>
+
+    @Query("SELECT * FROM holidays WHERE id = :id")
+    suspend fun holiday(id: String): Holiday?
+
     // Einstellungen
     @Query("SELECT * FROM settings WHERE deleted = 0")
     fun settings(): Flow<List<Setting>>

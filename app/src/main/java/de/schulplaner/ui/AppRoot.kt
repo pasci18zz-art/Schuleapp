@@ -1,39 +1,59 @@
 package de.schulplaner.ui
 
-import androidx.compose.animation.animateColorAsState
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PagerState
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -41,8 +61,12 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import de.schulplaner.app
 import de.schulplaner.ui.components.AppBackground
 import de.schulplaner.ui.components.Ic
+import de.schulplaner.ui.components.LocalUndo
+import de.schulplaner.ui.components.UndoBar
+import de.schulplaner.ui.components.UndoState
 import de.schulplaner.ui.components.colors
 import de.schulplaner.ui.exams.ExamDetailScreen
 import de.schulplaner.ui.exams.ExamsScreen
@@ -56,16 +80,15 @@ import de.schulplaner.ui.settings.TermsScreen
 import de.schulplaner.ui.tasks.TasksScreen
 import de.schulplaner.ui.timetable.TimetableScreen
 import de.schulplaner.ui.today.TodayScreen
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlin.math.abs
 
 object Routes {
-    const val TODAY = "today"
-    const val TIMETABLE = "timetable"
-    const val TASKS = "tasks"
-    const val EXAMS = "exams"
+    const val MAIN = "main"
     const val EXAM = "exam/{id}"
-    const val GRADES = "grades"
     const val SUBJECT_GRADES = "grades/{subjectId}/{termId}"
-    const val SETTINGS = "settings"
     const val SET_SUBJECTS = "settings/subjects"
     const val SET_TERMS = "settings/terms"
     const val SET_PERIODS = "settings/periods"
@@ -75,58 +98,105 @@ object Routes {
     fun subjectGrades(subjectId: String, termId: String) = "grades/$subjectId/$termId"
 }
 
-private data class Tab(val route: String, val icon: ImageVector, val label: String, val matches: List<String>)
+object Tabs {
+    const val TODAY = 0
+    const val TIMETABLE = 1
+    const val TASKS = 2
+    const val EXAMS = 3
+    const val GRADES = 4
+    const val SETTINGS = 5
+}
+
+private data class Tab(val icon: ImageVector, val label: String, val owns: String?)
 
 private val tabs = listOf(
-    Tab(Routes.TODAY, Ic.Home, "Heute", listOf("today", "settings")),
-    Tab(Routes.TIMETABLE, Ic.Calendar, "Stundenplan", listOf("timetable")),
-    Tab(Routes.TASKS, Ic.Tasks, "Aufgaben", listOf("tasks")),
-    Tab(Routes.EXAMS, Ic.Exam, "Klausuren", listOf("exams", "exam")),
-    Tab(Routes.GRADES, Ic.Grades, "Noten", listOf("grades")),
+    Tab(Ic.Home, "Heute", null),
+    Tab(Ic.Calendar, "Stundenplan", null),
+    Tab(Ic.Tasks, "Aufgaben", null),
+    Tab(Ic.Exam, "Klausuren", "exam"),
+    Tab(Ic.Grades, "Noten", "grades"),
+    Tab(Ic.Settings, "Einstellungen", "settings"),
 )
+
+/** Navigation: Tabs liegen nebeneinander (wischbar), Unterseiten öffnen sich darüber. */
+class AppNavigator(val nav: NavHostController, val pager: PagerState, private val scope: CoroutineScope) {
+    /** Zu einem Tab wechseln – immer auf dessen Startseite (Unterseiten werden geschlossen). */
+    fun tab(index: Int) {
+        if (nav.currentDestination?.route != Routes.MAIN) nav.popBackStack(Routes.MAIN, inclusive = false)
+        scope.launch { pager.animateScrollToPage(index, animationSpec = spring(dampingRatio = 0.9f, stiffness = 380f)) }
+    }
+
+    fun open(route: String) = nav.navigate(route)
+    fun back() = nav.popBackStack()
+}
+
+val LocalNavigator = staticCompositionLocalOf<AppNavigator> { error("Kein Navigator") }
 
 @Composable
 fun AppRoot() {
     val nav = rememberNavController()
-    AppBackground {
-        NavHost(
-            navController = nav,
-            startDestination = Routes.TODAY,
-            enterTransition = { fadeIn(tween(220)) + scaleIn(tween(220), initialScale = 0.985f) },
-            exitTransition = { fadeOut(tween(160)) },
-            popEnterTransition = { fadeIn(tween(220)) },
-            popExitTransition = { fadeOut(tween(160)) },
-        ) {
-            composable(Routes.TODAY) { Centered(wide = true) { TodayScreen(nav) } }
-            composable(Routes.TIMETABLE) { Centered { TimetableScreen() } }
-            composable(Routes.TASKS) { Centered { TasksScreen() } }
-            composable(Routes.EXAMS) { Centered { ExamsScreen(nav) } }
-            composable(Routes.EXAM, arguments = listOf(navArgument("id") { type = NavType.StringType })) { entry ->
-                Centered { ExamDetailScreen(entry.arguments?.getString("id") ?: "", nav) }
-            }
-            composable(Routes.GRADES) { Centered { GradesOverviewScreen(nav) } }
-            composable(
-                Routes.SUBJECT_GRADES,
-                arguments = listOf(
-                    navArgument("subjectId") { type = NavType.StringType },
-                    navArgument("termId") { type = NavType.StringType },
-                ),
-            ) { entry ->
-                Centered {
-                    SubjectGradesScreen(
-                        subjectId = entry.arguments?.getString("subjectId") ?: "",
-                        termId = entry.arguments?.getString("termId") ?: "",
-                        nav = nav,
-                    )
+    val pager = rememberPagerState(pageCount = { tabs.size })
+    val scope = rememberCoroutineScope()
+    val navigator = remember(nav, pager) { AppNavigator(nav, pager, scope) }
+    val undo = remember { UndoState() }
+    val entry by nav.currentBackStackEntryAsState()
+    val route = entry?.destination?.route ?: Routes.MAIN
+
+    NotificationPermission()
+
+    CompositionLocalProvider(LocalNavigator provides navigator, LocalUndo provides undo) {
+        AppBackground {
+            NavHost(
+                navController = nav,
+                startDestination = Routes.MAIN,
+                enterTransition = { slideInHorizontally(spring(dampingRatio = 0.9f, stiffness = 420f)) { it / 3 } + fadeIn(tween(220)) },
+                exitTransition = { slideOutHorizontally(tween(260)) { -it / 10 } + fadeOut(tween(200)) },
+                popEnterTransition = { slideInHorizontally(tween(260)) { -it / 10 } + fadeIn(tween(220)) },
+                popExitTransition = { slideOutHorizontally(spring(dampingRatio = 0.9f, stiffness = 420f)) { it / 3 } + fadeOut(tween(200)) },
+            ) {
+                composable(Routes.MAIN) { MainPager(pager) }
+                composable(Routes.EXAM, arguments = listOf(navArgument("id") { type = NavType.StringType })) { e ->
+                    Centered { ExamDetailScreen(e.arguments?.getString("id") ?: "") }
                 }
+                composable(
+                    Routes.SUBJECT_GRADES,
+                    arguments = listOf(
+                        navArgument("subjectId") { type = NavType.StringType },
+                        navArgument("termId") { type = NavType.StringType },
+                    ),
+                ) { e ->
+                    Centered {
+                        SubjectGradesScreen(e.arguments?.getString("subjectId") ?: "", e.arguments?.getString("termId") ?: "")
+                    }
+                }
+                composable(Routes.SET_SUBJECTS) { Centered { SubjectsScreen() } }
+                composable(Routes.SET_TERMS) { Centered { TermsScreen() } }
+                composable(Routes.SET_PERIODS) { Centered { PeriodsScreen() } }
+                composable(Routes.SET_HOLIDAYS) { Centered { HolidaysScreen() } }
             }
-            composable(Routes.SETTINGS) { Centered { SettingsScreen(nav) } }
-            composable(Routes.SET_SUBJECTS) { Centered { SubjectsScreen(nav) } }
-            composable(Routes.SET_TERMS) { Centered { TermsScreen(nav) } }
-            composable(Routes.SET_PERIODS) { Centered { PeriodsScreen(nav) } }
-            composable(Routes.SET_HOLIDAYS) { Centered { HolidaysScreen(nav) } }
+            UndoBar(undo, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 84.dp))
+            BottomNav(navigator, route, Modifier.align(Alignment.BottomCenter))
         }
-        BottomNav(nav, Modifier.align(Alignment.BottomCenter))
+        BackHandler(enabled = route == Routes.MAIN && pager.currentPage != Tabs.TODAY) { navigator.tab(Tabs.TODAY) }
+    }
+}
+
+@Composable
+private fun MainPager(pager: PagerState) {
+    HorizontalPager(
+        state = pager,
+        modifier = Modifier.fillMaxSize(),
+        beyondViewportPageCount = 1,
+        key = { it },
+    ) { page ->
+        when (page) {
+            Tabs.TODAY -> Centered(wide = true) { TodayScreen() }
+            Tabs.TIMETABLE -> Centered(wide = true) { TimetableScreen() }
+            Tabs.TASKS -> Centered { TasksScreen() }
+            Tabs.EXAMS -> Centered { ExamsScreen() }
+            Tabs.GRADES -> Centered { GradesOverviewScreen() }
+            else -> Centered { SettingsScreen() }
+        }
     }
 }
 
@@ -138,53 +208,99 @@ private fun Centered(wide: Boolean = false, content: @Composable () -> Unit) {
     }
 }
 
+private val ItemW = 48.dp
+private val ItemGap = 2.dp
+private val BarPad = 6.dp
+
 @Composable
-private fun BottomNav(nav: NavHostController, modifier: Modifier) {
+private fun BottomNav(navigator: AppNavigator, route: String, modifier: Modifier) {
     val c = colors
-    val entry by nav.currentBackStackEntryAsState()
-    val route = entry?.destination?.route ?: Routes.TODAY
-    val shape = RoundedCornerShape(29.dp)
-    Row(
+    val pager = navigator.pager
+    val density = LocalDensity.current
+    val onMain = route == Routes.MAIN
+    val root = route.substringBefore('/')
+    val ownerIndex = tabs.indexOfFirst { it.owns == root }.takeIf { it >= 0 } ?: pager.currentPage
+    // Auf der Hauptseite folgt die Markierung direkt dem Wischen, sonst gleitet sie hin.
+    val animated by animateFloatAsState(
+        if (onMain) pager.currentPage.toFloat() else ownerIndex.toFloat(),
+        spring(dampingRatio = 0.8f, stiffness = Spring.StiffnessMediumLow),
+        label = "nav-pos",
+    )
+    val position = if (onMain) pager.currentPage + pager.currentPageOffsetFraction else animated
+    val shape = RoundedCornerShape(28.dp)
+    val step = ItemW + ItemGap
+
+    Box(
         modifier
             .navigationBarsPadding()
             .padding(bottom = 14.dp)
-            .shadow(if (c.isDark) 0.dp else 14.dp, shape, ambientColor = c.shadow, spotColor = c.shadow)
+            .shadow(if (c.isDark) 0.dp else 12.dp, shape, ambientColor = c.shadow, spotColor = c.shadow)
             .clip(shape)
             .background(c.nav)
             .border(1.dp, c.cardBorder, shape)
-            .height(58.dp)
-            .padding(horizontal = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
+            .height(56.dp)
+            .padding(horizontal = BarPad)
+            // Über die Leiste wischen: der Tab unter dem Finger wird ausgewählt.
+            .pointerInputScrub(tabs.size, with(density) { step.toPx() }) { navigator.tab(it) },
+        contentAlignment = Alignment.CenterStart,
     ) {
-        tabs.forEach { tab ->
-            val root = route.substringBefore('/')
-            val active = tab.matches.any { it == root }
-            val bg by animateColorAsState(if (active) c.accent else Color.Transparent, tween(220), label = "nav-bg")
-            val tint by animateColorAsState(if (active) c.accentInk else c.sub, tween(220), label = "nav-tint")
-            Box(
-                Modifier
-                    .size(width = 50.dp, height = 44.dp)
-                    .clip(RoundedCornerShape(22.dp))
-                    .background(bg)
-                    .semantics { contentDescription = tab.label }
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        role = Role.Tab,
-                    ) {
-                        if (!active || route != tab.route) {
-                            nav.navigate(tab.route) {
-                                popUpTo(Routes.TODAY) { saveState = true }
-                                launchSingleTop = true
-                                restoreState = !active
-                            }
-                        }
-                    },
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(tab.icon, null, tint = tint, modifier = Modifier.size(22.dp))
+        Box(
+            Modifier
+                .offset(x = step * position)
+                .size(ItemW, 44.dp)
+                .clip(RoundedCornerShape(22.dp))
+                .background(c.accent),
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(ItemGap), verticalAlignment = Alignment.CenterVertically) {
+            tabs.forEachIndexed { i, tab ->
+                val f = (1f - abs(position - i)).coerceIn(0f, 1f)
+                Box(
+                    Modifier
+                        .size(ItemW, 44.dp)
+                        .clip(RoundedCornerShape(22.dp))
+                        .semantics { contentDescription = tab.label }
+                        .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, role = Role.Tab) {
+                            navigator.tab(i)
+                        },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(tab.icon, null, tint = lerp(c.sub, c.accentInk, f), modifier = Modifier.size(21.dp))
+                }
             }
+        }
+    }
+}
+
+private fun Modifier.pointerInputScrub(count: Int, stepPx: Float, onSelect: (Int) -> Unit): Modifier =
+    this.then(
+        Modifier.pointerInput(count, stepPx) {
+            var last = -1
+            detectHorizontalDragGestures(
+                onDragStart = { last = -1 },
+                onHorizontalDrag = { change, _ ->
+                    change.consume()
+                    val idx = (change.position.x / stepPx).toInt().coerceIn(0, count - 1)
+                    if (idx != last) {
+                        last = idx
+                        onSelect(idx)
+                    }
+                },
+            )
+        },
+    )
+
+/** Fragt einmalig nach der Erlaubnis für Benachrichtigungen (Erinnerung am Vorabend). */
+@Composable
+private fun NotificationPermission() {
+    val ctx = LocalContext.current
+    val prefs = ctx.app.prefs
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    LaunchedEffect(Unit) {
+        if (android.os.Build.VERSION.SDK_INT < 33) return@LaunchedEffect
+        val granted = ContextCompat.checkSelfPermission(ctx, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+        if (!granted && !prefs.notificationsAsked.first() && prefs.reminderOn.first()) {
+            prefs.setNotificationsAsked()
+            launcher.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
     }
 }

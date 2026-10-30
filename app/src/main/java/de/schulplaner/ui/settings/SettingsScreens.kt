@@ -40,10 +40,21 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.navigation.NavController
 import de.schulplaner.R
 import de.schulplaner.app
 import de.schulplaner.data.Holiday
+import de.schulplaner.data.HolidayKind
+import de.schulplaner.notes.Notebooks
+import de.schulplaner.notes.NotesLinkDialog
+import de.schulplaner.reminders.Reminders
+import de.schulplaner.ui.components.ColorRow
+import de.schulplaner.ui.components.FormGroup
+import de.schulplaner.ui.components.FormRow
+import de.schulplaner.ui.components.FormTextRow
+import de.schulplaner.ui.components.FormValueRow
+import de.schulplaner.ui.components.MiniSegmented
+import de.schulplaner.ui.components.MoreSection
+import androidx.compose.foundation.layout.width
 import de.schulplaner.data.PeriodTime
 import de.schulplaner.data.SettingKeys
 import de.schulplaner.data.Subject
@@ -51,6 +62,7 @@ import de.schulplaner.data.Term
 import de.schulplaner.domain.Fmt
 import de.schulplaner.domain.Schedule
 import de.schulplaner.quick.QuickHaTileService
+import de.schulplaner.ui.LocalNavigator
 import de.schulplaner.ui.Routes
 import de.schulplaner.ui.components.AppSheet
 import de.schulplaner.ui.components.ConfirmDialog
@@ -78,17 +90,22 @@ import kotlinx.coroutines.launch
 import java.time.LocalDate
 
 @Composable
-private fun SettingsPage(title: String, nav: NavController, action: (@Composable () -> Unit)? = null, content: @Composable ColumnScope.() -> Unit) {
+private fun SettingsPage(title: String, root: Boolean = false, action: (@Composable () -> Unit)? = null, content: @Composable ColumnScope.() -> Unit) {
+    val nav = LocalNavigator.current
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(screenPadding()),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Row(Modifier.fillMaxWidth().padding(top = 20.dp), verticalAlignment = Alignment.CenterVertically) {
-            GlassIconButton(Ic.ChevronLeft, "Zurück", { nav.popBackStack() })
-            Box(Modifier.weight(1f))
-            action?.invoke()
+        if (root) {
+            ScreenHeader(title = title)
+        } else {
+            Row(Modifier.fillMaxWidth().padding(top = 20.dp), verticalAlignment = Alignment.CenterVertically) {
+                GlassIconButton(Ic.ChevronLeft, "Zurück", { nav.back() })
+                Box(Modifier.weight(1f))
+                action?.invoke()
+            }
+            ScreenHeader(title = title)
         }
-        ScreenHeader(title = title)
         content()
     }
 }
@@ -113,7 +130,8 @@ private fun NavRow(icon: ImageVector, title: String, subtitle: String, onClick: 
 }
 
 @Composable
-fun SettingsScreen(nav: NavController) {
+fun SettingsScreen() {
+    val nav = LocalNavigator.current
     val c = colors
     val ctx = LocalContext.current
     val repo = ctx.app.repo
@@ -125,14 +143,17 @@ fun SettingsScreen(nav: NavController) {
     val holidays by repo.holidays.collectAsStateWithLifecycle()
     val schedule by repo.scheduleData.collectAsStateWithLifecycle()
     val theme by prefs.theme.collectAsStateWithLifecycle("system")
+    val reminderOn by prefs.reminderOn.collectAsStateWithLifecycle(true)
+    val reminderMinute by prefs.reminderMinute.collectAsStateWithLifecycle(18 * 60)
+    var pickTime by remember { mutableStateOf(false) }
     val today = LocalDate.now()
 
-    SettingsPage("Einstellungen", nav) {
+    SettingsPage("Einstellungen", root = true) {
         GlassCard(padding = PaddingValues(6.dp)) {
-            NavRow(Ic.Book, "Fächer", "${subjects.size} Fächer · Farben, Lehrer, Räume") { nav.navigate(Routes.SET_SUBJECTS) }
-            NavRow(Ic.Layers, "Halbjahre", terms.joinToString(", ") { it.name }.ifBlank { "Keine" }) { nav.navigate(Routes.SET_TERMS) }
-            NavRow(Ic.Clock, "Stundenzeiten", "${periods.size} Stunden") { nav.navigate(Routes.SET_PERIODS) }
-            NavRow(Ic.Palm, "Ferien & freie Tage", "${holidays.size} eingetragen") { nav.navigate(Routes.SET_HOLIDAYS) }
+            NavRow(Ic.Book, "Fächer", "${subjects.size} Fächer · Farben, Lehrer, Räume") { nav.open(Routes.SET_SUBJECTS) }
+            NavRow(Ic.Layers, "Halbjahre", terms.joinToString(", ") { it.name }.ifBlank { "Keine" }) { nav.open(Routes.SET_TERMS) }
+            NavRow(Ic.Clock, "Stundenzeiten", "${periods.size} Stunden") { nav.open(Routes.SET_PERIODS) }
+            NavRow(Ic.Palm, "Ferien & freie Tage", "${holidays.size} eingetragen") { nav.open(Routes.SET_HOLIDAYS) }
         }
 
         GlassCard(padding = PaddingValues(16.dp)) {
@@ -165,6 +186,31 @@ fun SettingsScreen(nav: NavController) {
                 { v -> scope.launch { prefs.setTheme(v) } },
                 Modifier.padding(top = 12.dp),
             )
+        }
+
+        GlassCard(padding = PaddingValues(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Icon(Ic.Clock, null, tint = c.accent, modifier = Modifier.size(22.dp))
+                Text("Erinnerung am Vorabend", style = T.section, color = c.text, modifier = Modifier.weight(1f))
+                MiniSegmented(listOf(true to "An", false to "Aus"), reminderOn, { on ->
+                    scope.launch {
+                        prefs.setReminder(on, reminderMinute)
+                        Reminders.scheduleFromPrefs(ctx, replace = true)
+                    }
+                }, Modifier.width(110.dp))
+            }
+            if (reminderOn) {
+                Row(Modifier.padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Uhrzeit", style = T.body, color = c.sub, modifier = Modifier.weight(1f))
+                    Text(
+                        Fmt.minutes(reminderMinute) + " Uhr",
+                        style = T.body,
+                        color = c.text,
+                        modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(c.line).clickable { pickTime = true }.padding(horizontal = 12.dp, vertical = 8.dp),
+                    )
+                }
+                Text("Erinnert an offene HA und Klausuren für den nächsten Tag.", style = T.small, color = c.sub, modifier = Modifier.padding(top = 8.dp))
+            }
         }
 
         GlassCard(padding = PaddingValues(16.dp)) {
@@ -207,18 +253,26 @@ fun SettingsScreen(nav: NavController) {
             Text("Abgleich zwischen Handy und Tablet über Supabase folgt im nächsten Schritt.", style = T.small, color = c.sub, modifier = Modifier.padding(top = 8.dp))
         }
     }
+    if (pickTime) {
+        TimeDialog(reminderMinute, onDismiss = { pickTime = false }) { m ->
+            scope.launch {
+                prefs.setReminder(true, m)
+                Reminders.scheduleFromPrefs(ctx, replace = true)
+            }
+        }
+    }
 }
 
 // ---------------- Fächer ----------------
 
 @Composable
-fun SubjectsScreen(nav: NavController) {
+fun SubjectsScreen() {
     val c = colors
     val repo = LocalContext.current.app.repo
     val subjects by repo.subjects.collectAsStateWithLifecycle()
     var edit by remember { mutableStateOf<Pair<Subject, Boolean>?>(null) }
 
-    SettingsPage("Fächer", nav, action = {
+    SettingsPage("Fächer", action = {
         GlassIconButton(Ic.Plus, "Fach hinzufügen", {
             val used = subjects.map { it.color }.toSet()
             edit = Subject(color = SubjectPalette.firstOrNull { it !in used } ?: SubjectPalette.first(), sortOrder = subjects.size) to true
@@ -263,6 +317,7 @@ private fun SubjectEditSheet(initial: Subject, isNew: Boolean, onDismiss: () -> 
     val repo = LocalContext.current.app.repo
     var s by remember { mutableStateOf(initial) }
     var confirm by remember { mutableStateOf(false) }
+    var notesDialog by remember { mutableStateOf(false) }
     AppSheet(onDismiss = onDismiss) { close ->
         SheetHeader(
             if (isNew) "Neues Fach" else "Fach",
@@ -274,35 +329,41 @@ private fun SubjectEditSheet(initial: Subject, isNew: Boolean, onDismiss: () -> 
             } else {
                 null
             },
-            onDelete = if (!isNew) {
-                { confirm = true }
-            } else {
-                null
-            },
         )
-        Field(s.name, { s = s.copy(name = it) }, "Name (z. B. Mathematik)", capitalization = KeyboardCapitalization.Words)
-        Field(s.shortName, { s = s.copy(shortName = it.take(5)) }, "Kürzel für den Stundenplan (z. B. M)", capitalization = KeyboardCapitalization.Characters)
-        Field(s.teacher, { s = s.copy(teacher = it) }, "Lehrer/in", capitalization = KeyboardCapitalization.Words)
-        Field(s.room, { s = s.copy(room = it) }, "Raum")
-        FormLabel("Kurs")
-        Segmented(listOf(false to "Grundkurs", true to "Leistungskurs"), s.isLk, { s = s.copy(isLk = it) })
-        FormLabel("Farbe")
-        SubjectPalette.chunked(6).forEach { row ->
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                row.forEach { argb ->
-                    val selected = s.color == argb
-                    Box(
-                        Modifier
-                            .weight(1f)
-                            .aspectRatio(1f)
-                            .clip(CircleShape)
-                            .background(Color(argb))
-                            .border(3.dp, if (selected) c.text else Color.Transparent, CircleShape)
-                            .clickable { s = s.copy(color = argb) },
-                    )
-                }
+        FormGroup {
+            FormTextRow("Name", s.name, { s = s.copy(name = it) }, placeholder = "z. B. Mathematik", capitalization = KeyboardCapitalization.Words)
+            FormTextRow("Kürzel", s.shortName, { s = s.copy(shortName = it.take(5)) }, placeholder = "z. B. M", capitalization = KeyboardCapitalization.Characters)
+            FormRow("Kurs") {
+                MiniSegmented(listOf(false to "GK", true to "LK"), s.isLk, { s = s.copy(isLk = it) }, Modifier.weight(1f))
+            }
+            FormRow("Farbe", divider = false) {
+                ColorRow(s.color) { s = s.copy(color = it) }
             }
         }
+        MoreSection(initiallyOpen = !isNew && (s.teacher.isNotBlank() || s.room.isNotBlank() || s.notesLink.isNotBlank())) {
+            FormGroup {
+                FormTextRow("Lehrer/in", s.teacher, { s = s.copy(teacher = it) }, placeholder = "optional", capitalization = KeyboardCapitalization.Words)
+                FormTextRow("Raum", s.room, { s = s.copy(room = it) }, placeholder = "optional")
+                FormValueRow("Notizbuch", Notebooks.label(s.notesLink), { notesDialog = true }, divider = false, leading = {
+                    Box(
+                        Modifier.size(26.dp).clip(RoundedCornerShape(8.dp)).background(if (c.isDark) Color(0xFF3A3218) else Color(0xFFFFF6D6)),
+                        contentAlignment = Alignment.Center,
+                    ) { Icon(Ic.Note, null, tint = Color(0xFFC9A227), modifier = Modifier.size(15.dp)) }
+                })
+            }
+        }
+        if (!isNew) {
+            Text(
+                "Fach löschen",
+                style = T.label.copy(fontSize = T.body.fontSize * 0.93f),
+                color = c.warn,
+                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable { confirm = true }.padding(12.dp),
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            )
+        }
+    }
+    if (notesDialog) {
+        NotesLinkDialog(s.notesLink, onDismiss = { notesDialog = false }) { s = s.copy(notesLink = it) }
     }
     if (confirm) {
         ConfirmDialog("Fach löschen?", "\"${s.name}\" wird aus Stundenplan und Listen entfernt.", onDismiss = { confirm = false }) {
@@ -315,14 +376,14 @@ private fun SubjectEditSheet(initial: Subject, isNew: Boolean, onDismiss: () -> 
 // ---------------- Halbjahre ----------------
 
 @Composable
-fun TermsScreen(nav: NavController) {
+fun TermsScreen() {
     val c = colors
     val repo = LocalContext.current.app.repo
     val terms by repo.terms.collectAsStateWithLifecycle()
     var edit by remember { mutableStateOf<Pair<Term, Boolean>?>(null) }
     val current = repo.currentTerm(terms)
 
-    SettingsPage("Halbjahre", nav, action = {
+    SettingsPage("Halbjahre", action = {
         GlassIconButton(Ic.Plus, "Halbjahr hinzufügen", {
             val last = terms.maxByOrNull { it.endDate }
             val start = last?.let { LocalDate.ofEpochDay(it.endDate).plusDays(1) } ?: LocalDate.now()
@@ -395,13 +456,13 @@ private fun TermEditSheet(initial: Term, isNew: Boolean, onDismiss: () -> Unit) 
 // ---------------- Stundenzeiten ----------------
 
 @Composable
-fun PeriodsScreen(nav: NavController) {
+fun PeriodsScreen() {
     val c = colors
     val repo = LocalContext.current.app.repo
     val periods by repo.periods.collectAsStateWithLifecycle()
     var editing by remember { mutableStateOf<Pair<PeriodTime, Boolean>?>(null) }
 
-    SettingsPage("Stundenzeiten", nav, action = {
+    SettingsPage("Stundenzeiten", action = {
         GlassIconButton(Ic.Plus, "Stunde hinzufügen", {
             val last = periods.maxByOrNull { it.number }
             val n = (last?.number ?: 0) + 1
@@ -455,13 +516,15 @@ private fun TimeChip(text: String, onClick: () -> Unit) {
 // ---------------- Ferien ----------------
 
 @Composable
-fun HolidaysScreen(nav: NavController) {
+fun HolidaysScreen() {
     val c = colors
     val repo = LocalContext.current.app.repo
     val holidays by repo.holidays.collectAsStateWithLifecycle()
     var edit by remember { mutableStateOf<Pair<Holiday, Boolean>?>(null) }
 
-    SettingsPage("Ferien", nav, action = {
+    SettingsPage("Ferien", action = {
+        GlassIconButton(Ic.Swap, "Hessen-Ferien neu laden", { repo.reloadHessenHolidays() })
+        Box(Modifier.width(8.dp))
         GlassIconButton(Ic.Plus, "Ferien hinzufügen", {
             val d = LocalDate.now().toEpochDay()
             edit = Holiday(startDate = d, endDate = d) to true
@@ -470,13 +533,14 @@ fun HolidaysScreen(nav: NavController) {
         if (holidays.isEmpty()) {
             GlassCard { EmptyHint(Ic.Palm, "Trag Ferien und freie Tage ein – dann zeigt der Stundenplan dort nichts an.") }
         } else {
+            Text("Hessische Ferien und Feiertage sind schon eingetragen. Bewegliche Ferientage deiner Schule kannst du mit + ergänzen.", style = T.small, color = c.sub, modifier = Modifier.padding(horizontal = 8.dp))
             GlassCard(padding = PaddingValues(6.dp)) {
-                holidays.forEach { h ->
+                holidays.filter { it.endDate >= LocalDate.now().minusMonths(2).toEpochDay() }.forEach { h ->
                     Row(
                         Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).clickable { edit = h to false }.padding(horizontal = 14.dp, vertical = 14.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        SubjectDot(c.accent)
+                        SubjectDot(if (h.kind == HolidayKind.FEIERTAG) c.exam else c.accent)
                         Text(h.name.ifBlank { "Frei" }, style = T.body, color = c.text, modifier = Modifier.weight(1f).padding(start = 12.dp))
                         val s = LocalDate.ofEpochDay(h.startDate)
                         val e = LocalDate.ofEpochDay(h.endDate)

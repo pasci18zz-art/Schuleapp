@@ -25,7 +25,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.navigation.NavController
 import de.schulplaner.app
 import de.schulplaner.data.Exam
 import de.schulplaner.data.ExamTopic
@@ -33,6 +32,7 @@ import de.schulplaner.data.Grade
 import de.schulplaner.data.Subject
 import de.schulplaner.domain.Fmt
 import de.schulplaner.domain.Schedule
+import de.schulplaner.ui.LocalNavigator
 import de.schulplaner.ui.Routes
 import de.schulplaner.ui.components.EmptyHint
 import de.schulplaner.ui.components.GlassCard
@@ -50,7 +50,8 @@ import de.schulplaner.ui.theme.T
 import java.time.LocalDate
 
 @Composable
-fun ExamsScreen(nav: NavController) {
+fun ExamsScreen() {
+    val nav = LocalNavigator.current
     val repo = LocalContext.current.app.repo
     val exams by repo.exams.collectAsStateWithLifecycle()
     val subjects by repo.subjects.collectAsStateWithLifecycle()
@@ -85,18 +86,18 @@ fun ExamsScreen(nav: NavController) {
             }
         }
         items(upcoming, key = { it.id }) { e ->
-            ExamCard(e, subjectMap[e.subjectId], topics, null, today) { nav.navigate(Routes.exam(e.id)) }
+            ExamCard(e, subjectMap[e.subjectId], topics, null, today) { nav.open(Routes.exam(e.id)) }
         }
         if (past.isNotEmpty()) {
             item { SectionTitle("Vergangen") }
             items(past, key = { it.id }) { e ->
-                ExamCard(e, subjectMap[e.subjectId], topics, e.gradeId?.let { gradeMap[it] }, today, dim = true) { nav.navigate(Routes.exam(e.id)) }
+                ExamCard(e, subjectMap[e.subjectId], topics, e.gradeId?.let { gradeMap[it] }, today, dim = true) { nav.open(Routes.exam(e.id)) }
             }
         }
     }
 
     create?.let { e ->
-        ExamEditSheet(e, isNew = true, onDismiss = { create = null }, onSaved = { nav.navigate(Routes.exam(it.id)) })
+        ExamEditSheet(e, isNew = true, onDismiss = { create = null }, onSaved = { nav.open(Routes.exam(it.id)) })
     }
 }
 

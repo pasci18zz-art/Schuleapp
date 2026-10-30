@@ -44,6 +44,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -66,26 +67,10 @@ val colors: SchulColors
 
 fun subjectColor(argb: Long?): Color = if (argb == null) Color(0xFF7C8A9E) else Color(argb)
 
-/** Hintergrund mit weichen Farbflächen, über denen die Milchglas-Kacheln liegen. */
+/** Ruhiger, einfarbiger Hintergrund. */
 @Composable
 fun AppBackground(modifier: Modifier = Modifier, content: @Composable BoxScope.() -> Unit) {
-    val c = colors
-    Box(
-        modifier
-            .fillMaxSize()
-            .background(c.bg)
-            .drawBehind {
-                fun orb(color: Color, center: Offset, radius: Float) {
-                    drawCircle(Brush.radialGradient(listOf(color, Color.Transparent), center, radius), radius, center)
-                }
-                val w = size.width
-                val h = size.height
-                orb(c.orbA, Offset(w * 0.05f, h * 0.06f), w * 0.75f)
-                orb(c.orbB, Offset(w * 1.0f, h * 0.45f), w * 0.7f)
-                orb(c.orbC, Offset(w * 0.15f, h * 0.98f), w * 0.75f)
-            },
-        content = content,
-    )
+    Box(modifier.fillMaxSize().background(colors.bg), content = content)
 }
 
 /** Gibt beim Drücken leicht nach (wie bei Samsung). */
@@ -112,11 +97,11 @@ private fun Modifier.combinedClickableCompat(source: MutableInteractionSource, o
         Modifier.combinedClickable(interactionSource = source, indication = null, onClick = onClick, onLongClick = onLongClick),
     )
 
-/** Milchglas-Kachel. */
+/** Kachel: weiß (bzw. dunkelgrau) mit feinem Rand. */
 @Composable
 fun GlassCard(
     modifier: Modifier = Modifier,
-    shape: Shape = RoundedCornerShape(28.dp),
+    shape: Shape = RoundedCornerShape(22.dp),
     padding: PaddingValues = PaddingValues(16.dp),
     onClick: (() -> Unit)? = null,
     onLongClick: (() -> Unit)? = null,
@@ -126,7 +111,7 @@ fun GlassCard(
     Column(
         modifier
             .pressable(onClick, onLongClick)
-            .shadow(if (c.isDark) 0.dp else 10.dp, shape, ambientColor = c.shadow, spotColor = c.shadow)
+            .shadow(if (c.isDark) 0.dp else 1.5.dp, shape, ambientColor = c.shadow, spotColor = c.shadow)
             .clip(shape)
             .background(c.card)
             .border(1.dp, c.cardBorder, shape)
@@ -353,8 +338,14 @@ fun TaskRow(
 ) {
     val c = colors
     val titleColor by animateColorAsState(if (done) c.sub else c.text, tween(200), label = "title")
+    val alpha by animateFloatAsState(if (done) 0.55f else 1f, tween(250), label = "done-alpha")
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).clickable(onClick = onClick).padding(end = 12.dp, top = 2.dp, bottom = 2.dp),
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(18.dp))
+            .clickable(onClick = onClick)
+            .graphicsLayer { this.alpha = alpha }
+            .padding(end = 10.dp, top = 1.dp, bottom = 1.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         CheckCircle(done, onToggle, ringColor = if (overdue) c.warn else c.sub)
@@ -385,3 +376,21 @@ fun HSpace(w: Dp) = Spacer(Modifier.width(w))
 
 @Composable
 fun VSpace(h: Dp) = Spacer(Modifier.height(h))
+
+/** Kleiner Knopf, der das Notizbuch eines Fachs öffnet (z. B. Samsung Notes). */
+@Composable
+fun NotesButton(link: String?, modifier: Modifier = Modifier) {
+    if (link.isNullOrBlank()) return
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val c = colors
+    Box(
+        modifier
+            .size(30.dp)
+            .clip(RoundedCornerShape(9.dp))
+            .background(if (c.isDark) Color(0xFF3A3218) else Color(0xFFFFF6D6))
+            .clickable { de.schulplaner.notes.Notebooks.open(ctx, link) },
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(Ic.Note, "Notizbuch öffnen", tint = Color(0xFFC9A227), modifier = Modifier.size(16.dp))
+    }
+}
