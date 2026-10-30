@@ -4,6 +4,17 @@ import android.content.Context
 import android.content.Intent
 import android.widget.Toast
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import de.schulplaner.ui.components.pressable
+import kotlin.math.cos
+import kotlin.math.sin
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -99,30 +110,30 @@ fun AppShortcutsRow(modifier: Modifier = Modifier) {
     Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         QuickApp.entries.forEach { app ->
             val pkg = remember(links[app.key]) { resolve(ctx, app, links[app.key]) }
-            val icon = remember(pkg) { pkg?.let { appIcon(ctx, it) } }
-            val label = remember(pkg) { pkg?.let { appLabel(ctx, it) } ?: app.fallbackName }
-            GlassCard(
-                Modifier.weight(1f),
-                padding = PaddingValues(vertical = 12.dp, horizontal = 6.dp),
-                onClick = {
-                    val launch = pkg?.let { ctx.packageManager.getLaunchIntentForPackage(it) }
-                    if (launch != null) {
-                        ctx.startActivity(launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                    } else {
-                        Toast.makeText(ctx, "App nicht gefunden – bitte auswählen", Toast.LENGTH_SHORT).show()
-                        picking = app
-                    }
-                },
-                onLongClick = { picking = app },
+            val shape = RoundedCornerShape(20.dp)
+            Box(
+                Modifier
+                    .weight(1f)
+                    .height(64.dp)
+                    .pressable(
+                        onClick = {
+                            val launch = pkg?.let { ctx.packageManager.getLaunchIntentForPackage(it) }
+                            if (launch != null) {
+                                ctx.startActivity(launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                            } else {
+                                Toast.makeText(ctx, "App nicht gefunden – bitte auswählen", Toast.LENGTH_SHORT).show()
+                                picking = app
+                            }
+                        },
+                        onLongClick = { picking = app },
+                    )
+                    .shadow(8.dp, shape, ambientColor = app.colorB, spotColor = app.colorB)
+                    .clip(shape)
+                    .background(Brush.linearGradient(listOf(app.colorA, app.colorB)))
+                    .semantics { contentDescription = app.fallbackName },
+                contentAlignment = Alignment.Center,
             ) {
-                Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    if (icon != null) {
-                        Image(icon, label, Modifier.size(40.dp))
-                    } else {
-                        FallbackIcon(app)
-                    }
-                    Text(label, style = T.smallBold, color = colors.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }
+                AppSymbol(app)
             }
         }
     }
@@ -138,14 +149,44 @@ fun AppShortcutsRow(modifier: Modifier = Modifier) {
     }
 }
 
-/** Eigenes Symbol, falls die App nicht installiert ist. */
+/** Weißes Symbol, das für die App steht (Notizen, Claude, Spotify). */
 @Composable
-private fun FallbackIcon(app: QuickApp) {
-    Box(
-        Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(Brush.linearGradient(listOf(app.colorA, app.colorB))),
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(app.icon(), null, tint = Color.White, modifier = Modifier.size(22.dp))
+private fun AppSymbol(app: QuickApp) {
+    when (app) {
+        QuickApp.NOTES -> Icon(Ic.Note, null, tint = Color.White, modifier = Modifier.size(30.dp))
+        QuickApp.CLAUDE -> Canvas(Modifier.size(34.dp)) {
+            // Strahlenkranz
+            val c = Offset(size.width / 2, size.height / 2)
+            val rays = 12
+            for (i in 0 until rays) {
+                val ang = Math.toRadians(i * 360.0 / rays - 90)
+                val inner = size.minDimension * 0.10f
+                val outer = size.minDimension * (if (i % 2 == 0) 0.48f else 0.36f)
+                drawLine(
+                    Color.White,
+                    Offset(c.x + (cos(ang) * inner).toFloat(), c.y + (sin(ang) * inner).toFloat()),
+                    Offset(c.x + (cos(ang) * outer).toFloat(), c.y + (sin(ang) * outer).toFloat()),
+                    strokeWidth = size.minDimension * 0.11f,
+                    cap = StrokeCap.Round,
+                )
+            }
+        }
+        QuickApp.MUSIC -> Canvas(Modifier.size(34.dp)) {
+            // Kreis mit drei Klangbögen
+            val r = size.minDimension / 2
+            val c = Offset(size.width / 2, size.height / 2)
+            drawCircle(Color.White, r, c)
+            val green = Color(0xFF14A04A)
+            for (k in 0 until 3) {
+                val w = r * (1.25f - k * 0.28f)
+                val y = c.y - r * 0.32f + k * r * 0.34f
+                val path = Path().apply {
+                    moveTo(c.x - w / 2, y)
+                    quadraticBezierTo(c.x, y - r * 0.22f, c.x + w / 2, y + r * 0.06f)
+                }
+                drawPath(path, green, style = Stroke(width = r * (0.2f - k * 0.03f), cap = StrokeCap.Round))
+            }
+        }
     }
 }
 

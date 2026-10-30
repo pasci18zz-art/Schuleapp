@@ -144,10 +144,7 @@ fun GradesOverviewScreen() {
         GlassCard(padding = PaddingValues(start = 6.dp, end = 6.dp, top = 14.dp, bottom = 6.dp)) {
             Row(Modifier.padding(start = 12.dp, end = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("Fächer", style = T.section, color = c.text, modifier = Modifier.weight(1f))
-                Row(Modifier.clip(RoundedCornerShape(14.dp)).background(c.line).padding(3.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    SortChip("A–Z", !sortByPoints) { sortByPoints = false }
-                    SortChip("Punkte", sortByPoints) { sortByPoints = true }
-                }
+                de.schulplaner.ui.components.MiniSegmented(listOf(false to "A–Z", true to "Punkte"), sortByPoints, { sortByPoints = it }, Modifier.width(150.dp))
             }
             val sorted = if (sortByPoints) results.sortedByDescending { it.value ?: -1.0 } else results
             sorted.forEach { r ->

@@ -26,6 +26,8 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
@@ -57,6 +59,8 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -246,32 +250,18 @@ fun CheckCircle(checked: Boolean, onToggle: () -> Unit, ringColor: Color = color
     val bg by animateColorAsState(if (checked) checkedColor else Color.Transparent, tween(180), label = "check-bg")
     val border by animateColorAsState(if (checked) checkedColor else ringColor, tween(180), label = "check-border")
     val shape = if (square) RoundedCornerShape(8.dp) else CircleShape
-    // Kleines Konfetti beim Abhaken.
-    val burst = remember { Animatable(1f) }
+    // Konfetti beim Abhaken – wird in einer Ebene über der ganzen App gezeichnet, damit nichts abgeschnitten wird.
+    val confetti = LocalConfetti.current
+    val center = remember { arrayOf(Offset.Unspecified) }
     var previous by remember { mutableStateOf(checked) }
     LaunchedEffect(checked) {
-        if (checked && !previous) {
-            burst.snapTo(0f)
-            burst.animateTo(1f, tween(600, easing = FastOutSlowInEasing))
-        }
+        if (checked && !previous && center[0] != Offset.Unspecified) confetti.pop(center[0])
         previous = checked
     }
-    val confetti = listOf(c.accent, Color(0xFFFFB020), Color(0xFF3BD873), Color(0xFFFF6B8B), Color(0xFF5AB2FF))
     Box(
         Modifier
             .size(size + 18.dp)
-            .drawBehind {
-                val p = burst.value
-                if (p < 1f) {
-                    val center = Offset(this.size.width / 2, this.size.height / 2)
-                    for (i in 0 until 10) {
-                        val angle = Math.toRadians((i * 36 + 12).toDouble())
-                        val dist = size.toPx() * (0.45f + 0.75f * p)
-                        val pos = Offset(center.x + (cos(angle) * dist).toFloat(), center.y + (sin(angle) * dist).toFloat())
-                        drawCircle(confetti[i % confetti.size].copy(alpha = 1f - p), (2.8f - 1.6f * p) * density, pos)
-                    }
-                }
-            }
+            .onGloballyPositioned { center[0] = it.boundsInRoot().center }
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, role = Role.Checkbox, onClick = onToggle),
         contentAlignment = Alignment.Center,
     ) {
@@ -319,28 +309,64 @@ fun ProgressBar(progress: Float, color: Color, modifier: Modifier = Modifier, he
 @Composable
 fun <K> Segmented(options: List<Pair<K, String>>, selected: K, onSelect: (K) -> Unit, modifier: Modifier = Modifier) {
     val c = colors
-    Row(
+    SlidingSegments(
+        options, selected, onSelect,
         modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(22.dp))
             .background(c.card)
             .border(1.dp, c.cardBorder, RoundedCornerShape(22.dp))
             .padding(4.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        options.forEach { (key, label) ->
-            val active = key == selected
-            val bg by animateColorAsState(if (active) c.accent else Color.Transparent, tween(200), label = "seg")
-            Box(
-                Modifier
-                    .weight(1f)
-                    .height(38.dp)
-                    .clip(RoundedCornerShape(18.dp))
-                    .background(bg)
-                    .clickable { onSelect(key) },
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(label, style = T.label.copy(fontSize = T.body.fontSize * 0.93f), color = if (active) c.accentInk else c.sub, maxLines = 1)
+        itemHeight = 38.dp, gap = 4.dp, radius = 18.dp,
+        indicator = c.accent, activeText = c.accentInk, inactiveText = c.sub,
+        textStyle = T.label.copy(fontSize = T.body.fontSize * 0.93f),
+    )
+}
+
+/**
+ * Umschalter mit gleitender Markierung (wie in der Navigationsleiste).
+ * Die Markierung federt zum gewählten Eintrag, die Schriftfarbe blendet mit.
+ */
+@Composable
+fun <K> SlidingSegments(
+    options: List<Pair<K, String>>,
+    selected: K,
+    onSelect: (K) -> Unit,
+    modifier: Modifier,
+    itemHeight: Dp,
+    gap: Dp,
+    radius: Dp,
+    indicator: Color,
+    activeText: Color,
+    inactiveText: Color,
+    textStyle: androidx.compose.ui.text.TextStyle,
+    indicatorShadow: Boolean = false,
+) {
+    val index = options.indexOfFirst { it.first == selected }.coerceAtLeast(0)
+    val pos by animateFloatAsState(index.toFloat(), spring(dampingRatio = 0.72f, stiffness = 420f), label = "seg-pos")
+    BoxWithConstraints(modifier) {
+        val n = options.size.coerceAtLeast(1)
+        val itemW = (maxWidth - gap * (n - 1)) / n
+        Box(
+            Modifier
+                .offset(x = (itemW + gap) * pos)
+                .size(itemW, itemHeight)
+                .then(if (indicatorShadow) Modifier.shadow(2.dp, RoundedCornerShape(radius)) else Modifier)
+                .clip(RoundedCornerShape(radius))
+                .background(indicator),
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
+            options.forEachIndexed { i, (key, label) ->
+                val f = (1f - kotlin.math.abs(pos - i)).coerceIn(0f, 1f)
+                Box(
+                    Modifier
+                        .size(itemW, itemHeight)
+                        .clip(RoundedCornerShape(radius))
+                        .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { onSelect(key) },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(label, style = textStyle, color = androidx.compose.ui.graphics.lerp(inactiveText, activeText, f), maxLines = 1)
+                }
             }
         }
     }

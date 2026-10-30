@@ -62,6 +62,7 @@ fun GradeEditSheet(initial: Grade, isNew: Boolean, subjectSelectable: Boolean, o
     var confirmDelete by remember { mutableStateOf(false) }
     val saved = remember { booleanArrayOf(false) }
     val undo = LocalUndo.current
+    val confetti = de.schulplaner.ui.components.LocalConfetti.current
 
     LaunchedEffect(grade.subjectId, grade.termId) {
         if (grade.subjectId.isNotBlank() && grade.termId.isNotBlank()) {
@@ -83,6 +84,7 @@ fun GradeEditSheet(initial: Grade, isNew: Boolean, subjectSelectable: Boolean, o
                 {
                     saved[0] = true
                     repo.saveGrade(grade.copy(title = grade.title.trim(), reason = grade.reason.trim()))
+                    if (grade.points >= 13) confetti.celebrate()
                     close()
                 }
             } else {
@@ -133,7 +135,7 @@ fun GradeEditSheet(initial: Grade, isNew: Boolean, subjectSelectable: Boolean, o
             saved[0] = true
             val original = grade
             repo.deleteGrade(original)
-            undo.show("Note gelöscht") { repo.restoreGrade(original) }
+            undo.show("Gelöscht") { repo.restoreGrade(original) }
             onDismiss()
         }
     }

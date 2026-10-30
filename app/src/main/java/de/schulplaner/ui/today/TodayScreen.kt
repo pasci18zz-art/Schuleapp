@@ -425,7 +425,7 @@ private fun TasksTile(s: TodayState, max: Int, compact: Boolean = false, onOpen:
             ) {
                 CheckCircle(t.done, {
                     repo.setTaskDone(t, !t.done)
-                    if (!t.done) undo.show("„${t.title}“ erledigt") { repo.setTaskDone(t, false) }
+                    if (!t.done) undo.show("Erledigt") { repo.setTaskDone(t, false) }
                 }, ringColor = if (overdue) c.warn else c.sub, size = 20.dp)
                 Column(Modifier.weight(1f)) {
                     Text(

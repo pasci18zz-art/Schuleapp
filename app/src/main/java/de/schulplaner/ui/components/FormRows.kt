@@ -160,22 +160,15 @@ fun FormValueRow(label: String, value: String, onClick: () -> Unit, divider: Boo
 @Composable
 fun <K> MiniSegmented(options: List<Pair<K, String>>, selected: K, onSelect: (K) -> Unit, modifier: Modifier = Modifier) {
     val c = colors
-    Row(modifier.clip(RoundedCornerShape(12.dp)).background(c.line).padding(3.dp), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-        options.forEach { (key, label) ->
-            val active = key == selected
-            Box(
-                Modifier
-                    .weight(1f)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(if (active) c.card else Color.Transparent)
-                    .clickable { onSelect(key) }
-                    .padding(vertical = 7.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(label, style = T.label, color = if (active) c.text else c.sub, maxLines = 1)
-            }
-        }
-    }
+    SlidingSegments(
+        options, selected, onSelect,
+        modifier.clip(RoundedCornerShape(12.dp)).background(c.line).padding(3.dp),
+        itemHeight = 32.dp, gap = 3.dp, radius = 10.dp,
+        indicator = if (c.isDark) Color(0xFF2E323C) else Color.White,
+        activeText = c.text, inactiveText = c.sub,
+        textStyle = T.label,
+        indicatorShadow = !c.isDark,
+    )
 }
 
 /** Aufklappbarer Bereich "Mehr" für selten gebrauchte Einstellungen. */

@@ -7,9 +7,12 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.Icon
+import androidx.compose.ui.draw.shadow
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -58,7 +61,7 @@ fun UndoBar(state: UndoState, modifier: Modifier = Modifier) {
     if (event != null) last[0] = event
     LaunchedEffect(event?.id) {
         val e = event ?: return@LaunchedEffect
-        delay(4500)
+        delay(2600)
         state.dismiss(e.id)
     }
     AnimatedVisibility(
@@ -70,26 +73,36 @@ fun UndoBar(state: UndoState, modifier: Modifier = Modifier) {
         val e = last[0] ?: return@AnimatedVisibility
         Row(
             Modifier
-                .widthIn(max = 520.dp)
-                .fillMaxWidth()
+                .widthIn(max = 360.dp)
                 .padding(horizontal = 18.dp)
-                .clip(RoundedCornerShape(16.dp))
-                .background(c.snackbar)
-                .padding(start = 16.dp, end = 6.dp, top = 4.dp, bottom = 4.dp),
+                .shadow(if (c.isDark) 0.dp else 8.dp, RoundedCornerShape(50), ambientColor = c.shadow, spotColor = c.shadow)
+                .clip(RoundedCornerShape(50))
+                .background(if (c.isDark) Color(0xFF2E323C) else Color.White)
+                .border(1.dp, c.cardBorder, RoundedCornerShape(50))
+                .padding(start = 16.dp, end = 4.dp, top = 2.dp, bottom = 2.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(e.message, style = T.label.copy(fontSize = T.body.fontSize * 0.93f), color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+            Icon(Ic.Check, null, tint = c.good, modifier = Modifier.size(16.dp))
+            Text(
+                e.message,
+                style = T.label,
+                color = c.text,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(start = 8.dp).weight(1f, fill = false),
+            )
             Text(
                 "Rückgängig",
-                style = T.label.copy(fontSize = T.body.fontSize * 0.93f),
-                color = Color(0xFFAEB6FF),
+                style = T.label,
+                color = c.accent,
                 modifier = Modifier
-                    .clip(RoundedCornerShape(12.dp))
+                    .padding(start = 4.dp)
+                    .clip(RoundedCornerShape(50))
                     .clickable {
                         e.undo()
                         state.dismiss(e.id)
                     }
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                    .padding(horizontal = 12.dp, vertical = 9.dp),
             )
         }
     }

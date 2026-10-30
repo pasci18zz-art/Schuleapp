@@ -2,6 +2,11 @@ package de.schulplaner.ui.tasks
 
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -103,14 +108,14 @@ fun TasksScreen() {
                 )
             }
             item {
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(vertical = 2.dp)) {
-                    item { ChoiceChip("Alle", type == null, { type = null }) }
-                    items(listOf(TaskType.HOMEWORK, TaskType.EXTRA, TaskType.OTHER)) { t ->
-                        ChoiceChip(TaskType.label(t), type == t, { type = if (type == t) null else t })
-                    }
-                    items(subjects.filter { s -> tasks.any { it.subjectId == s.id } }, key = { it.id }) { s ->
-                        ChoiceChip(s.name, subjectFilter == s.id, { subjectFilter = if (subjectFilter == s.id) null else s.id }, leading = { SubjectDot(subjectColor(s.color), 9.dp) })
-                    }
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    de.schulplaner.ui.components.MiniSegmented(
+                        listOf<Pair<String?, String>>(null to "Alle", TaskType.HOMEWORK to "HA", TaskType.EXTRA to "Zusatz", TaskType.OTHER to "Sonst."),
+                        type,
+                        { type = it },
+                        Modifier.weight(1f),
+                    )
+                    SubjectFilter(subjects, subjectFilter) { subjectFilter = it }
                 }
             }
             if (groups.isEmpty()) {
@@ -138,7 +143,7 @@ fun TasksScreen() {
                                 overdue = overdue,
                                 onToggle = {
                                     repo.setTaskDone(t, !t.done)
-                                    if (!t.done) undo.show("„${t.title}“ erledigt") { repo.setTaskDone(t, false) }
+                                    if (!t.done) undo.show("Erledigt") { repo.setTaskDone(t, false) }
                                 },
                                 onClick = { edit = t to false },
                                 trailing = {
@@ -206,3 +211,70 @@ private fun groupTasks(tasks: List<Task>, today: LocalDate, status: Status): Lis
 @Suppress("unused")
 @Composable
 private fun RowSpacer() = Row(Modifier.padding(2.dp)) {}
+
+/** "Fach"-Knopf mit aufklappendem Menü zum Filtern. */
+@Composable
+private fun SubjectFilter(subjects: List<de.schulplaner.data.Subject>, selectedId: String?, onSelect: (String?) -> Unit) {
+    val c = colors
+    var open by remember { mutableStateOf(false) }
+    val selected = subjects.firstOrNull { it.id == selectedId }
+    val rot by androidx.compose.animation.core.animateFloatAsState(if (open) 180f else 0f, label = "dd")
+    Box {
+        Row(
+            Modifier
+                .height(38.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(if (selected != null) c.accentSoft else c.line)
+                .clickable { open = true }
+                .padding(horizontal = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            if (selected != null) SubjectDot(subjectColor(selected.color), 9.dp)
+            Text(
+                selected?.let { it.shortName.ifBlank { it.name } } ?: "Fach",
+                style = T.label,
+                color = if (selected != null) c.accent else c.text,
+                maxLines = 1,
+            )
+            Icon(Ic.ChevronDown, null, tint = c.sub, modifier = Modifier.size(14.dp).graphicsLayer { rotationZ = rot })
+        }
+        androidx.compose.material3.MaterialTheme(
+            shapes = androidx.compose.material3.MaterialTheme.shapes.copy(extraSmall = RoundedCornerShape(18.dp)),
+        ) {
+            androidx.compose.material3.DropdownMenu(
+                expanded = open,
+                onDismissRequest = { open = false },
+                modifier = Modifier.widthIn(min = 220.dp).heightIn(max = 420.dp),
+            ) {
+                FilterItem("Alle Fächer", null, selectedId == null) {
+                    onSelect(null)
+                    open = false
+                }
+                subjects.forEach { s ->
+                    FilterItem(s.name, subjectColor(s.color), selectedId == s.id) {
+                        onSelect(s.id)
+                        open = false
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FilterItem(label: String, dot: androidx.compose.ui.graphics.Color?, selected: Boolean, onClick: () -> Unit) {
+    val c = colors
+    androidx.compose.material3.DropdownMenuItem(
+        text = { Text(label, style = T.body, color = if (selected) c.accent else c.text) },
+        leadingIcon = {
+            if (dot != null) SubjectDot(dot, 10.dp) else Icon(Ic.Layers, null, tint = c.sub, modifier = Modifier.size(16.dp))
+        },
+        trailingIcon = if (selected) {
+            { Icon(Ic.Check, null, tint = c.accent, modifier = Modifier.size(16.dp)) }
+        } else {
+            null
+        },
+        onClick = onClick,
+    )
+}

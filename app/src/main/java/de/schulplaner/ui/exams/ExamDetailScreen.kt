@@ -63,6 +63,7 @@ import java.time.LocalDate
 @Composable
 fun ExamDetailScreen(id: String) {
     val nav = LocalNavigator.current
+    val confetti = de.schulplaner.ui.components.LocalConfetti.current
     val c = colors
     val repo = LocalContext.current.app.repo
     val exams by repo.exams.collectAsStateWithLifecycle()
@@ -196,6 +197,7 @@ fun ExamDetailScreen(id: String) {
         AppSheet(onDismiss = { resultSheet = false }) { close ->
             SheetHeader("Ergebnis", onSave = {
                 repo.setExamResult(exam, points)
+                if (points >= 13) confetti.celebrate()
                 close()
             }, onDelete = if (grade != null) {
                 {

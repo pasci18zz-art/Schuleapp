@@ -65,6 +65,9 @@ import androidx.navigation.navArgument
 import de.schulplaner.app
 import de.schulplaner.ui.components.AppBackground
 import de.schulplaner.ui.components.Ic
+import de.schulplaner.ui.components.ConfettiOverlay
+import de.schulplaner.ui.components.ConfettiState
+import de.schulplaner.ui.components.LocalConfetti
 import de.schulplaner.ui.components.LocalUndo
 import de.schulplaner.ui.components.UndoBar
 import de.schulplaner.ui.components.UndoState
@@ -140,12 +143,13 @@ fun AppRoot() {
     val scope = rememberCoroutineScope()
     val navigator = remember(nav, pager) { AppNavigator(nav, pager, scope) }
     val undo = remember { UndoState() }
+    val confetti = remember { ConfettiState() }
     val entry by nav.currentBackStackEntryAsState()
     val route = entry?.destination?.route ?: Routes.MAIN
 
     NotificationPermission()
 
-    CompositionLocalProvider(LocalNavigator provides navigator, LocalUndo provides undo) {
+    CompositionLocalProvider(LocalNavigator provides navigator, LocalUndo provides undo, LocalConfetti provides confetti) {
         AppBackground {
             NavHost(
                 navController = nav,
@@ -177,6 +181,7 @@ fun AppRoot() {
             }
             UndoBar(undo, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 84.dp))
             BottomNav(navigator, route, Modifier.align(Alignment.BottomCenter))
+            ConfettiOverlay(confetti)
         }
         BackHandler(enabled = route == Routes.MAIN && pager.currentPage != Tabs.TODAY) { navigator.tab(Tabs.TODAY) }
     }

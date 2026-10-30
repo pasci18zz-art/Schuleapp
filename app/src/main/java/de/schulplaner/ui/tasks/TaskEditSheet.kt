@@ -105,7 +105,7 @@ fun TaskEditSheet(initial: Task, isNew: Boolean, onDismiss: () -> Unit) {
                     saved[0] = true
                     val original = task
                     repo.deleteTask(original)
-                    undo.show("Aufgabe gelöscht") { repo.restoreTask(original) }
+                    undo.show("Gelöscht") { repo.restoreTask(original) }
                     close()
                 }
             } else {
