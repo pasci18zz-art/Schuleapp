@@ -42,9 +42,33 @@ class Repository(
     val notes = dao.notes().state()
     val attachments = dao.attachments().state()
 
+    val sessions = dao.sessions().state()
+
+    /** Die laufende oder pausierte Lernsession (höchstens eine). */
+    val currentStudy: StateFlow<StudySession?> = sessions
+        .map { list -> list.firstOrNull { !it.finished } }
+        .stateIn(scope, SharingStarted.Eagerly, null)
+
     val settings: StateFlow<Map<String, String>> = dao.settings()
         .map { list -> list.associate { it.id to it.value } }
         .stateIn(scope, SharingStarted.Eagerly, emptyMap())
+
+    private fun buildSchedule(
+        s: List<Subject>,
+        sl: List<LessonSlot>,
+        p: List<PeriodTime>,
+        ov: List<LessonOverride>,
+        h: List<Holiday>,
+        st: Map<String, String>,
+    ) = ScheduleData(
+        subjects = s.associateBy { it.id },
+        slots = sl.filter { slot -> slot.isFree || s.any { it.id == slot.subjectId } },
+        periods = p,
+        overrides = ov.associateBy { it.id },
+        holidays = h,
+        abEnabled = st[SettingKeys.AB_ENABLED] == "true",
+        abReference = st[SettingKeys.AB_REFERENCE]?.toLongOrNull(),
+    )
 
     val scheduleData: StateFlow<ScheduleData> = combine(
         combine(subjects, slots, periods) { s, sl, p -> Triple(s, sl, p) },
@@ -52,28 +76,41 @@ class Repository(
         holidays,
         settings,
     ) { (s, sl, p), ov, h, st ->
-        ScheduleData(
-            subjects = s.associateBy { it.id },
-            slots = sl.filter { slot -> slot.isFree || s.any { it.id == slot.subjectId } },
-            periods = p,
-            overrides = ov.associateBy { it.id },
-            holidays = h,
-            abEnabled = st[SettingKeys.AB_ENABLED] == "true",
-            abReference = st[SettingKeys.AB_REFERENCE]?.toLongOrNull(),
-        )
+        buildSchedule(s, sl, p, ov, h, st)
     }.stateIn(scope, SharingStarted.Eagerly, ScheduleData())
+
+    /** Alles, was Widgets brauchen – direkt aus der Datenbank (auch wenn die App gerade erst startet). */
+    class Snapshot(
+        val schedule: ScheduleData,
+        val tasks: List<Task>,
+        val kinds: List<TaskKind>,
+        val sessions: List<StudySession>,
+        val settings: Map<String, String>,
+    ) {
+        val current: StudySession? get() = sessions.firstOrNull { !it.finished }
+    }
+
+    suspend fun snapshot(): Snapshot {
+        val st = dao.settings().first().associate { it.id to it.value }
+        val schedule = buildSchedule(
+            dao.subjects().first(), dao.slots().first(), dao.periods().first(),
+            dao.overrides().first(), dao.holidays().first(), st,
+        )
+        return Snapshot(schedule, dao.tasks().first(), parseKinds(st), dao.sessions().first(), st)
+    }
 
     private val kindJson = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
     private val kindListSerializer = kotlinx.serialization.builtins.ListSerializer(TaskKind.serializer())
 
     /** Aufgabenarten (eigene oder die Vorgaben). */
+    private fun parseKinds(st: Map<String, String>): List<TaskKind> =
+        st[SettingKeys.TASK_KINDS]
+            ?.let { runCatching { kindJson.decodeFromString(kindListSerializer, it) }.getOrNull() }
+            ?.takeIf { it.isNotEmpty() }
+            ?: TaskKind.defaults
+
     val taskKinds: StateFlow<List<TaskKind>> = settings
-        .map { st ->
-            st[SettingKeys.TASK_KINDS]
-                ?.let { runCatching { kindJson.decodeFromString(kindListSerializer, it) }.getOrNull() }
-                ?.takeIf { it.isNotEmpty() }
-                ?: TaskKind.defaults
-        }
+        .map { parseKinds(it) }
         .stateIn(scope, SharingStarted.Eagerly, TaskKind.defaults)
 
     fun saveTaskKinds(kinds: List<TaskKind>) = setSetting(SettingKeys.TASK_KINDS, kindJson.encodeToString(kindListSerializer, kinds))
@@ -279,6 +316,68 @@ class Repository(
         dao.upsertGrade(g.copy(deleted = false, updatedAt = now(), dirty = true))
         restoreAttachmentsOf(g.id)
     }
+
+    // ---------- Lernsessions (Stoppuhr) ----------
+
+    private suspend fun write(block: suspend () -> Unit) {
+        block()
+        onLocalChange?.invoke()
+    }
+
+    /** Start, Pause oder Weiter – je nach Zustand der aktuellen Session. */
+    suspend fun toggleStudyNow() = write {
+        val t = now()
+        val cur = dao.currentSession()
+        when {
+            cur == null -> {
+                val st = dao.settings().first().associate { it.id to it.value }
+                val kind = st[SettingKeys.STUDY_KIND]?.takeIf { it in StudyKind.all } ?: StudyKind.LEARN
+                val subject = st[SettingKeys.STUDY_SUBJECT]?.ifBlank { null }
+                dao.upsertSession(StudySession(kind = kind, subjectId = subject, startedAt = t, runningSince = t, updatedAt = t))
+            }
+            cur.runningSince != null -> dao.upsertSession(cur.copy(elapsedMs = cur.totalMs(t), runningSince = null, updatedAt = t, dirty = true))
+            else -> dao.upsertSession(cur.copy(runningSince = t, updatedAt = t, dirty = true))
+        }
+    }
+
+    /** Beendet die aktuelle Session. Unter einer Minute wird sie verworfen (versehentlich gestartet). */
+    suspend fun stopStudyNow() = write {
+        val t = now()
+        val cur = dao.currentSession() ?: return@write
+        val total = cur.totalMs(t)
+        if (total < 60_000) {
+            dao.upsertSession(cur.copy(deleted = true, finished = true, runningSince = null, updatedAt = t, dirty = true))
+        } else {
+            dao.upsertSession(cur.copy(elapsedMs = total, runningSince = null, finished = true, endedAt = t, updatedAt = t, dirty = true))
+        }
+    }
+
+    /** Art wählen: für die laufende Session und als Vorauswahl für die nächste. */
+    suspend fun setStudyKindNow(kind: String) = write {
+        val t = now()
+        dao.upsertSetting(Setting(SettingKeys.STUDY_KIND, kind, updatedAt = t, dirty = true))
+        dao.currentSession()?.let { dao.upsertSession(it.copy(kind = kind, updatedAt = t, dirty = true)) }
+    }
+
+    /** Aufgabe abhaken (aus dem Widget). */
+    suspend fun completeTaskNow(id: String) = write {
+        val t = dao.task(id) ?: return@write
+        if (!t.done) dao.upsertTask(t.copy(done = true, doneAt = now(), updatedAt = now(), dirty = true))
+    }
+
+    fun toggleStudy() = io { toggleStudyNow() }
+    fun stopStudy() = io { stopStudyNow() }
+    fun setStudyKind(kind: String) = io { setStudyKindNow(kind) }
+
+    fun setStudySubject(subjectId: String?) = io {
+        val t = now()
+        dao.upsertSetting(Setting(SettingKeys.STUDY_SUBJECT, subjectId ?: "", updatedAt = t, dirty = true))
+        dao.currentSession()?.let { dao.upsertSession(it.copy(subjectId = subjectId, updatedAt = t, dirty = true)) }
+    }
+
+    fun saveSession(s: StudySession) = io { dao.upsertSession(s.copy(updatedAt = now(), dirty = true)) }
+    fun deleteSession(s: StudySession) = io { dao.upsertSession(s.copy(deleted = true, updatedAt = now(), dirty = true)) }
+    fun restoreSession(s: StudySession) = io { dao.upsertSession(s.copy(deleted = false, updatedAt = now(), dirty = true)) }
 
     // ---------- Einstellungen ----------
     fun setSetting(key: String, value: String) = io {

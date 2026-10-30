@@ -14,7 +14,12 @@ import androidx.lifecycle.ProcessLifecycleOwner
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
+import de.schulplaner.study.StudyNotifier
+import de.schulplaner.widget.Widgets
 
 class SchulplanerApp : Application() {
     val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -47,6 +52,20 @@ class SchulplanerApp : Application() {
             repo.seedHessenHolidays()
         }
         appScope.launch { Reminders.scheduleFromPrefs(this@SchulplanerApp, replace = false) }
+
+        // Lern-Mitteilung folgt der aktuellen Session (auch wenn sie vom anderen Gerät kommt).
+        appScope.launch {
+            combine(repo.currentStudy, repo.subjects) { s, subjects -> s to subjects.associateBy { it.id } }
+                .collectLatest { (s, subjects) -> StudyNotifier.show(this@SchulplanerApp, s, subjects) }
+        }
+        // Widgets nach Änderungen neu zeichnen (gebündelt).
+        appScope.launch(Dispatchers.IO) {
+            combine(repo.tasks, repo.scheduleData, repo.sessions, repo.settings) { _, _, _, _ -> Unit }
+                .collectLatest {
+                    delay(700)
+                    runCatching { Widgets.render(this@SchulplanerApp, repo.snapshot()) }
+                }
+        }
     }
 }
 

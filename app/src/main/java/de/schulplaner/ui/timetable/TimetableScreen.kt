@@ -46,6 +46,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import de.schulplaner.app
 import de.schulplaner.data.Exam
@@ -84,7 +85,7 @@ import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.YearMonth
 
-private val RowH = 58.dp
+private val RowH = 64.dp
 private val Gap = 4.dp
 private val HeaderH = 42.dp
 private val TimeW = 32.dp
@@ -385,14 +386,16 @@ private fun LessonCell(l: Lesson, editMode: Boolean, wide: Boolean, tasks: List<
         val roomText = listOfNotNull(l.room.ifBlank { null }, if (editMode && l.slot.weekType != WeekType.ALL) "nur ${l.slot.weekType}" else null).joinToString(" · ")
         if (roomText.isNotBlank()) Text(roomText, style = T.smallBold.copy(fontSize = T.small.fontSize * 0.8f), color = c.sub, maxLines = 1, overflow = TextOverflow.Clip)
         if (exam) Text("Klausur", style = T.smallBold.copy(fontSize = T.small.fontSize * 0.82f), color = c.exam, maxLines = 1)
-        // HA direkt als Text unter dem Fach (antippen zeigt sie an).
-        val maxTasks = if (len >= 2) 2 else 1
-        tasks.take(maxTasks).forEach { t ->
+        // HA direkt als Text unter dem Fach (antippen zeigt sie an) – überall gleich groß, zu langer Text endet mit "…".
+        val taskStyle = T.label.copy(fontSize = 11.5.sp, lineHeight = 13.5.sp)
+        val linesLeft = if (len >= 2) 5 else if (roomText.isBlank() && !exam) 2 else 1
+        val shown = tasks.take(if (len >= 2) 3 else 1)
+        shown.forEach { t ->
             Text(
-                "• " + t.title,
-                style = T.small.copy(fontSize = T.small.fontSize * 0.82f, lineHeight = T.small.fontSize * 0.98f),
+                t.title,
+                style = taskStyle,
                 color = c.text,
-                maxLines = if (len >= 2 && tasks.size == 1) 3 else 2,
+                maxLines = (linesLeft / shown.size).coerceAtLeast(1),
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(4.dp)).clickable { onTask(t) },
             )

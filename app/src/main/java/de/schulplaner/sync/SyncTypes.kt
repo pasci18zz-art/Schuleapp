@@ -94,4 +94,9 @@ fun syncTypes(dao: SchulDao): List<SyncType<*>> = listOf(
         { dao.syncDirtySetting() }, { dao.syncGetSetting(it) }, { dao.upsertSetting(it) }, { i, u -> dao.syncCleanSetting(i, u) },
         { it.id }, { it.updatedAt }, { it.deleted }, { it.copy(dirty = false) },
     ),
+    SyncType(
+        "study", StudySession.serializer(),
+        { dao.syncDirtyStudySession() }, { dao.syncGetStudySession(it) }, { dao.upsertSession(it) }, { i, u -> dao.syncCleanStudySession(i, u) },
+        { it.id }, { it.updatedAt }, { it.deleted }, { it.copy(dirty = false) },
+    ),
 )

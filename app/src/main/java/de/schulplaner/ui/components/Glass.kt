@@ -65,6 +65,11 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.HazeStyle
+import dev.chrisbanes.haze.HazeTint
+import dev.chrisbanes.haze.haze
+import dev.chrisbanes.haze.hazeChild
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -84,43 +89,64 @@ val colors: SchulColors
 
 fun subjectColor(argb: Long?): Color = if (argb == null) Color(0xFF7C8A9E) else Color(argb)
 
-/** Ruhiger, einfarbiger Hintergrund. */
+/** Gemeinsamer Zustand für den Weichzeichner: Der Hintergrund ist die Quelle, Glas-Kacheln zeichnen ihn verschwommen. */
+val LocalHaze = androidx.compose.runtime.staticCompositionLocalOf<HazeState?> { null }
+
+/** Lebendiger Hintergrund mit treibenden Farbflächen; Kacheln darüber zeigen ihn weichgezeichnet. */
 @Composable
 fun AppBackground(modifier: Modifier = Modifier, content: @Composable BoxScope.() -> Unit) {
     val c = colors
+    val haze = remember { HazeState() }
     // Langsam treibende, weiche Farbflächen und ein paar schwebende Punkte – nur im Zeichnen gelesen,
     // damit nichts neu aufgebaut werden muss.
     val t = rememberInfiniteTransition(label = "bg")
     val a = t.animateFloat(0f, 1f, infiniteRepeatable(tween(23000, easing = LinearEasing), RepeatMode.Reverse), label = "a")
     val b = t.animateFloat(0f, 1f, infiniteRepeatable(tween(31000, easing = LinearEasing), RepeatMode.Reverse), label = "b")
     val drift = t.animateFloat(0f, 1f, infiniteRepeatable(tween(40000, easing = LinearEasing), RepeatMode.Restart), label = "drift")
-    Box(
-        modifier
-            .fillMaxSize()
-            .background(c.bg)
-            .drawBehind {
-                val w = size.width
-                val h = size.height
-                val av = a.value
-                val bv = b.value
-                fun orb(color: Color, x: Float, y: Float, r: Float) {
-                    drawCircle(Brush.radialGradient(listOf(color, Color.Transparent), Offset(x, y), r), r, Offset(x, y))
-                }
-                orb(c.orb1, w * (0.05f + 0.35f * av), h * (0.05f + 0.08f * bv), w * 0.85f)
-                orb(c.orb2, w * (1.0f - 0.3f * bv), h * (0.42f + 0.12f * av), w * 0.7f)
-                orb(c.orb3, w * (0.1f + 0.3f * bv), h * (0.92f - 0.1f * av), w * 0.8f)
-                // Schwebende Punkte, die langsam nach oben wandern.
-                val dv = drift.value
-                for (i in 0 until 14) {
-                    val seed = (i * 7919) % 1000 / 1000f
-                    val x = w * ((seed * 13.7f + i * 0.071f) % 1f)
-                    val speed = 0.6f + (i % 4) * 0.25f
-                    val y = h * (1.1f - ((dv * speed + seed) % 1f) * 1.2f)
-                    val r = (2.2f + (i % 3) * 1.3f) * density
-                    drawCircle(if (i % 2 == 0) c.accent.copy(alpha = 0.10f) else c.orb2.copy(alpha = 0.35f), r, Offset(x, y))
-                }
-            },
-        content = content,
+    Box(modifier.fillMaxSize().background(c.bg)) {
+        // Eigene Ebene nur für den Hintergrund (Geschwister der Inhalte), damit die Kacheln genau diese Ebene weichzeichnen.
+        Box(
+            Modifier
+                .fillMaxSize()
+                .haze(haze)
+                .drawBehind {
+                    drawRect(c.bg)
+                    val w = size.width
+                    val h = size.height
+                    val av = a.value
+                    val bv = b.value
+                    fun orb(color: Color, x: Float, y: Float, r: Float) {
+                        drawCircle(Brush.radialGradient(listOf(color, Color.Transparent), Offset(x, y), r), r, Offset(x, y))
+                    }
+                    orb(c.orb1, w * (0.05f + 0.35f * av), h * (0.05f + 0.08f * bv), w * 0.85f)
+                    orb(c.orb2, w * (1.0f - 0.3f * bv), h * (0.42f + 0.12f * av), w * 0.7f)
+                    orb(c.orb3, w * (0.1f + 0.3f * bv), h * (0.92f - 0.1f * av), w * 0.8f)
+                    // Schwebende Punkte, die langsam nach oben wandern.
+                    val dv = drift.value
+                    for (i in 0 until 14) {
+                        val seed = (i * 7919) % 1000 / 1000f
+                        val x = w * ((seed * 13.7f + i * 0.071f) % 1f)
+                        val speed = 0.6f + (i % 4) * 0.25f
+                        val y = h * (1.1f - ((dv * speed + seed) % 1f) * 1.2f)
+                        val r = (3f + (i % 3) * 1.8f) * density
+                        drawCircle(if (i % 2 == 0) c.accent.copy(alpha = 0.16f) else c.orb2.copy(alpha = 0.5f), r, Offset(x, y))
+                    }
+                },
+        )
+        androidx.compose.runtime.CompositionLocalProvider(LocalHaze provides haze) {
+            Box(Modifier.fillMaxSize(), content = content)
+        }
+    }
+}
+
+/** Glas: weichgezeichneter Hintergrund mit leichter Tönung (ohne Blur-Unterstützung: nur die Tönung). */
+@Composable
+fun Modifier.frosted(tint: Color = colors.card, blur: Dp = 26.dp): Modifier {
+    val haze = LocalHaze.current ?: return this.background(tint)
+    val c = colors
+    return this.hazeChild(
+        haze,
+        HazeStyle(backgroundColor = c.bg, tints = listOf(HazeTint(tint)), blurRadius = blur, noiseFactor = 0.06f),
     )
 }
 
@@ -164,7 +190,7 @@ fun GlassCard(
             .pressable(onClick, onLongClick)
             .shadow(if (c.isDark) 0.dp else 1.5.dp, shape, ambientColor = c.shadow, spotColor = c.shadow)
             .clip(shape)
-            .background(c.card)
+            .frosted()
             .background(Brush.verticalGradient(listOf(c.glassShine, Color.Transparent), endY = 260f))
             .border(1.dp, c.cardBorder, shape)
             .padding(padding),
@@ -221,7 +247,7 @@ fun GlassIconButton(icon: ImageVector, contentDescription: String, onClick: () -
             .size(size)
             .pressable(onClick)
             .clip(CircleShape)
-            .background(if (filled) c.accent else c.card)
+            .then(if (filled) Modifier.background(c.accent) else Modifier.frosted())
             .border(1.dp, if (filled) Color.Transparent else c.cardBorder, CircleShape),
         contentAlignment = Alignment.Center,
     ) {
@@ -309,20 +335,27 @@ fun ProgressBar(progress: Float, color: Color, modifier: Modifier = Modifier, he
 
 /** Segment-Umschalter (z. B. Offen / Alle / Erledigt). */
 @Composable
-fun <K> Segmented(options: List<Pair<K, String>>, selected: K, onSelect: (K) -> Unit, modifier: Modifier = Modifier) {
+fun <K> Segmented(
+    options: List<Pair<K, String>>,
+    selected: K,
+    onSelect: (K) -> Unit,
+    modifier: Modifier = Modifier,
+    icons: List<ImageVector?>? = null,
+) {
     val c = colors
     SlidingSegments(
         options, selected, onSelect,
         modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(22.dp))
-            .background(c.glassTrack)
+            .frosted(c.glassTrack, blur = 18.dp)
             .border(1.dp, c.cardBorder, RoundedCornerShape(22.dp))
             .padding(4.dp),
         itemHeight = 38.dp, gap = 4.dp, radius = 18.dp,
         indicator = c.accent, activeText = c.accentInk, inactiveText = c.sub,
         textStyle = T.label.copy(fontSize = T.body.fontSize * 0.93f),
         indicatorShadow = true,
+        icons = icons,
     )
 }
 

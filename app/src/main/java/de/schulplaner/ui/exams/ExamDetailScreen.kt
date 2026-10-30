@@ -159,16 +159,18 @@ fun ExamDetailScreen(id: String) {
 
         GlassCard(padding = PaddingValues(start = 6.dp, end = 6.dp, top = 14.dp, bottom = 8.dp)) {
             Text("Lernplan", style = T.section, color = c.text, modifier = Modifier.padding(start = 12.dp, bottom = 4.dp))
-            topics.forEach { t -> TopicRow(t, onToggle = { repo.saveTopic(t.copy(done = !t.done)) }, onDelete = { repo.deleteTopic(t) }) }
-            Row(Modifier.padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Field(newTopic, { newTopic = it }, "Neues Thema", Modifier.weight(1f))
-                SoftIconButton(Ic.Plus, "Thema hinzufügen", {
-                    if (newTopic.isNotBlank()) {
-                        repo.saveTopic(ExamTopic(examId = exam.id, text = newTopic.trim(), sortOrder = (topics.maxOfOrNull { it.sortOrder } ?: 0) + 1))
-                        newTopic = ""
-                    }
-                })
-            }
+            de.schulplaner.ui.components.StepsEditor(
+                steps = topics,
+                newText = newTopic,
+                onNewText = { newTopic = it },
+                onAdd = { text -> repo.saveTopic(ExamTopic(examId = exam.id, text = text, sortOrder = (topics.maxOfOrNull { it.sortOrder } ?: 0) + 1)) },
+                onToggle = { t -> repo.saveTopic(t.copy(done = !t.done)) },
+                onRename = { t, text -> repo.saveTopic(t.copy(text = text)) },
+                onRemove = { t -> repo.deleteTopic(t) },
+                onReorder = { list -> list.forEachIndexed { i, t -> if (t.sortOrder != i) repo.saveTopic(t.copy(sortOrder = i)) } },
+                placeholder = "Neues Thema",
+                framed = false,
+            )
         }
 
         GlassCard(padding = PaddingValues(16.dp)) {

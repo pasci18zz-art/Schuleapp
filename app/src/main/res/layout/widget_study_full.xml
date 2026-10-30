@@ -1,0 +1,146 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@android:id/background"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_glass_bg"
+    android:clipToOutline="true"
+    android:padding="12dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@drawable/widget_chip"
+            android:orientation="horizontal"
+            android:padding="3dp">
+
+            <FrameLayout
+                android:id="@+id/kind_ha"
+                android:layout_width="0dp"
+                android:layout_height="34dp"
+                android:layout_weight="1"
+                android:contentDescription="Hausaufgaben">
+
+                <ImageView
+                    android:id="@+id/kind_ha_bg"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:importantForAccessibility="no"
+                    android:scaleType="fitXY"
+                    android:src="@drawable/widget_pill" />
+
+                <ImageView
+                    android:id="@+id/kind_ha_icon"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:importantForAccessibility="no"
+                    android:padding="8dp"
+                    android:src="@drawable/ic_w_house" />
+            </FrameLayout>
+
+            <FrameLayout
+                android:id="@+id/kind_ref"
+                android:layout_width="0dp"
+                android:layout_height="34dp"
+                android:layout_weight="1"
+                android:contentDescription="Referat">
+
+                <ImageView
+                    android:id="@+id/kind_ref_bg"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:importantForAccessibility="no"
+                    android:scaleType="fitXY"
+                    android:src="@drawable/widget_pill" />
+
+                <ImageView
+                    android:id="@+id/kind_ref_icon"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:importantForAccessibility="no"
+                    android:padding="8dp"
+                    android:src="@drawable/ic_w_presentation" />
+            </FrameLayout>
+
+            <FrameLayout
+                android:id="@+id/kind_learn"
+                android:layout_width="0dp"
+                android:layout_height="34dp"
+                android:layout_weight="1"
+                android:contentDescription="Lernen">
+
+                <ImageView
+                    android:id="@+id/kind_learn_bg"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:importantForAccessibility="no"
+                    android:scaleType="fitXY"
+                    android:src="@drawable/widget_pill" />
+
+                <ImageView
+                    android:id="@+id/kind_learn_icon"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:importantForAccessibility="no"
+                    android:padding="8dp"
+                    android:src="@drawable/ic_w_pen" />
+            </FrameLayout>
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <Chronometer
+                android:id="@+id/study_timer"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:fontFamily="sans-serif"
+                android:maxLines="1"
+                android:textColor="#FFFFFFFF"
+                android:textSize="34sp"
+                android:textStyle="bold" />
+
+            <ImageView
+                android:id="@+id/study_toggle"
+                android:layout_width="46dp"
+                android:layout_height="46dp"
+                android:background="@drawable/widget_btn_accent"
+                android:contentDescription="Start oder Pause"
+                android:padding="12dp"
+                android:src="@drawable/ic_w_play" />
+
+            <FrameLayout
+                android:layout_width="8dp"
+                android:layout_height="1dp" />
+
+            <ImageView
+                android:id="@+id/study_stop"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:background="@drawable/widget_btn_glass"
+                android:contentDescription="Beenden"
+                android:padding="12dp"
+                android:src="@drawable/ic_w_stop" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/study_info"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:text="Diese Woche: 0 min"
+            android:textColor="#B3FFFFFF"
+            android:textSize="12sp" />
+    </LinearLayout>
+</FrameLayout>

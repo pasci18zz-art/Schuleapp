@@ -12,9 +12,9 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         Subject::class, Term::class, GradeCategory::class, Grade::class, SubjectTerm::class,
         LessonSlot::class, PeriodTime::class, LessonOverride::class, Holiday::class,
         Task::class, Exam::class, ExamTopic::class, SubjectNote::class, Attachment::class,
-        Setting::class,
+        Setting::class, StudySession::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -23,7 +23,7 @@ abstract class AppDatabase : RoomDatabase() {
     companion object {
         fun create(context: Context): AppDatabase =
             Room.databaseBuilder(context, AppDatabase::class.java, "schulplaner.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                 .build()
 
         /** Version 2: Notizbuch-Link pro Fach, Art der freien Tage. Bestehende Daten bleiben erhalten. */
@@ -38,6 +38,18 @@ abstract class AppDatabase : RoomDatabase() {
         val MIGRATION_2_3 = object : Migration(2, 3) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE subjects ADD COLUMN icon TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
+        /** Version 4: Lernsessions (Stoppuhr). */
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `study_sessions` (`id` TEXT NOT NULL, `kind` TEXT NOT NULL, `subjectId` TEXT, " +
+                        "`startedAt` INTEGER NOT NULL, `endedAt` INTEGER, `elapsedMs` INTEGER NOT NULL, `runningSince` INTEGER, " +
+                        "`finished` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, `deleted` INTEGER NOT NULL, `dirty` INTEGER NOT NULL, " +
+                        "PRIMARY KEY(`id`))",
+                )
             }
         }
     }

@@ -4,4 +4,8 @@
     <string name="tile_label">HA eintragen</string>
     <string name="shortcut_ha_short">HA eintragen</string>
     <string name="shortcut_ha_long">Hausaufgabe eintragen</string>
+    <string name="widget_today">Heute</string>
+    <string name="widget_today_desc">Aktuelle und nächste Stunde, dazu deine Aufgaben</string>
+    <string name="widget_study">Lernzeit</string>
+    <string name="widget_study_desc">Stoppuhr für Lernsessions: starten, pausieren, beenden</string>
 </resources>

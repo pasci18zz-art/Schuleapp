@@ -250,6 +250,47 @@ data class ExamTopic(
     @Transient val dirty: Boolean = true,
 )
 
+/** Arten einer Lernsession (fest): Hausaufgaben, Referat, Lernen. */
+object StudyKind {
+    const val HOMEWORK = "HA"
+    const val TALK = "REFERAT"
+    const val LEARN = "LERNEN"
+    val all = listOf(HOMEWORK, TALK, LEARN)
+
+    fun label(kind: String) = when (kind) {
+        HOMEWORK -> "Hausaufgaben"
+        TALK -> "Referat"
+        else -> "Lernen"
+    }
+}
+
+/**
+ * Lernsession (Stoppuhr). Die Zeit ergibt sich aus [elapsedMs] plus der laufenden Strecke seit [runningSince].
+ * Höchstens eine Session ist nicht [finished] – das ist die aktuelle.
+ */
+@Entity(tableName = "study_sessions")
+@Serializable
+data class StudySession(
+    @PrimaryKey val id: String = newId(),
+    val kind: String = StudyKind.LEARN,
+    val subjectId: String? = null,
+    /** Beginn (ms seit 1970). */
+    val startedAt: Long = 0,
+    /** Ende (ms), nur bei beendeten Sessions. */
+    val endedAt: Long? = null,
+    /** Bisher gezählte Zeit ohne die laufende Strecke. */
+    val elapsedMs: Long = 0,
+    /** Läuft gerade seit (ms), null = pausiert oder beendet. */
+    val runningSince: Long? = null,
+    val finished: Boolean = false,
+    val updatedAt: Long = 0,
+    val deleted: Boolean = false,
+    @Transient val dirty: Boolean = true,
+) {
+    fun totalMs(now: Long = System.currentTimeMillis()): Long = elapsedMs + (runningSince?.let { (now - it).coerceAtLeast(0) } ?: 0)
+    val isRunning: Boolean get() = runningSince != null && !finished
+}
+
 object HolidayKind {
     const val FERIEN = "FERIEN"
     const val FEIERTAG = "FEIERTAG"
@@ -321,4 +362,7 @@ object SettingKeys {
     const val HESSEN_HOLIDAYS = "hessen_ferien_v1"
     /** Liste der Aufgabenarten als JSON. */
     const val TASK_KINDS = "task_kinds"
+    /** Vorauswahl der Stoppuhr (Art, Fach), wenn gerade keine Session läuft. */
+    const val STUDY_KIND = "study_kind"
+    const val STUDY_SUBJECT = "study_subject"
 }

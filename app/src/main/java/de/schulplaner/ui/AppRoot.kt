@@ -42,6 +42,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import de.schulplaner.ui.components.blurWhenSheetOpen
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.graphicsLayer
@@ -98,6 +99,7 @@ object Routes {
     const val SET_PERIODS = "settings/periods"
     const val SET_HOLIDAYS = "settings/holidays"
     const val SET_KINDS = "settings/kinds"
+    const val STUDY = "study"
 
     fun exam(id: String) = "exam/$id"
     fun subjectGrades(subjectId: String, termId: String) = "grades/$subjectId/$termId"
@@ -138,7 +140,7 @@ class AppNavigator(val nav: NavHostController, val pager: PagerState, private va
 val LocalNavigator = staticCompositionLocalOf<AppNavigator> { error("Kein Navigator") }
 
 @Composable
-fun AppRoot() {
+fun AppRoot(startRoute: String? = null) {
     val nav = rememberNavController()
     val pager = rememberPagerState(pageCount = { tabs.size })
     val scope = rememberCoroutineScope()
@@ -149,9 +151,21 @@ fun AppRoot() {
     val route = entry?.destination?.route ?: Routes.MAIN
 
     NotificationPermission()
+    LaunchedEffect(Unit) {
+        when (startRoute) {
+            "tasks" -> navigator.tab(Tabs.TASKS)
+            Routes.STUDY -> navigator.open(Routes.STUDY)
+        }
+    }
 
-    CompositionLocalProvider(LocalNavigator provides navigator, LocalUndo provides undo, LocalConfetti provides confetti) {
-        AppBackground {
+    val sheetBlur = remember { de.schulplaner.ui.components.SheetBlurState() }
+    CompositionLocalProvider(
+        LocalNavigator provides navigator,
+        LocalUndo provides undo,
+        LocalConfetti provides confetti,
+        de.schulplaner.ui.components.LocalSheetBlur provides sheetBlur,
+    ) {
+        AppBackground(Modifier.blurWhenSheetOpen(sheetBlur)) {
             NavHost(
                 navController = nav,
                 startDestination = Routes.MAIN,
@@ -180,6 +194,7 @@ fun AppRoot() {
                 composable(Routes.SET_PERIODS) { Centered { PeriodsScreen() } }
                 composable(Routes.SET_HOLIDAYS) { Centered { HolidaysScreen() } }
                 composable(Routes.SET_KINDS) { Centered { de.schulplaner.ui.settings.TaskKindsScreen() } }
+                composable(Routes.STUDY) { Centered { de.schulplaner.ui.study.StudyScreen() } }
             }
             UndoBar(undo, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 84.dp))
             BottomNav(navigator, route, Modifier.align(Alignment.BottomCenter))

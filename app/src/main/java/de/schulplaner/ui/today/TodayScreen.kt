@@ -86,6 +86,7 @@ import de.schulplaner.ui.components.screenPadding
 import de.schulplaner.ui.components.subjectColor
 import de.schulplaner.ui.tasks.TaskDefaults
 import de.schulplaner.ui.tasks.TaskLine
+import de.schulplaner.ui.study.StudyTile
 import de.schulplaner.ui.tasks.kindOf
 import de.schulplaner.ui.tasks.stepPercent
 import de.schulplaner.data.TaskKind
@@ -206,6 +207,7 @@ fun TodayScreen() {
                         TasksTile(state, max = 8, onOpen = { nav.tab(Tabs.TASKS) }, onEdit = { editTask = it to false }, onAdd = onAddTask)
                     }
                     Column(Modifier.weight(1f).appear(4), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        StudyTile(onOpen = { nav.open(Routes.STUDY) })
                         ExamsListTile(state, onOpen = { nav.open(Routes.exam(it.id)) })
                         GradesTile(onOpen = { nav.tab(Tabs.GRADES) })
                     }
@@ -221,8 +223,9 @@ fun TodayScreen() {
                         ExamTile(state, onOpen = { nav.open(Routes.exam(it.id)) }, onEmpty = { nav.tab(Tabs.EXAMS) })
                     }
                 }
-                AppShortcutsRow(Modifier.appear(5))
-                Box(Modifier.appear(6)) { GradesTile(onOpen = { nav.tab(Tabs.GRADES) }) }
+                StudyTile(Modifier.appear(5), onOpen = { nav.open(Routes.STUDY) })
+                AppShortcutsRow(Modifier.appear(6))
+                Box(Modifier.appear(7)) { GradesTile(onOpen = { nav.tab(Tabs.GRADES) }) }
             }
         }
     }

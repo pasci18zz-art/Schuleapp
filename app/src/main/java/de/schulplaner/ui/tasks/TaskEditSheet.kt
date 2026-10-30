@@ -47,6 +47,7 @@ import de.schulplaner.ui.components.KindIcons
 import de.schulplaner.ui.components.LocalUndo
 import de.schulplaner.ui.components.SheetHeader
 import de.schulplaner.ui.components.SoftIconButton
+import de.schulplaner.ui.components.StepsEditor
 import de.schulplaner.ui.components.SubjectPicker
 import de.schulplaner.ui.components.colors
 import de.schulplaner.ui.theme.T
@@ -182,19 +183,26 @@ fun TaskEditSheet(initial: Task, isNew: Boolean, onDismiss: () -> Unit) {
             FormTextRow("Notizen", task.description, { task = task.copy(description = it) }, placeholder = "optional", singleLine = false, divider = false)
         }
 
-        StepsEditor(
-            steps = steps,
-            newStep = newStep,
-            onNewStep = { newStep = it },
-            onAdd = {
-                if (newStep.isNotBlank()) {
-                    steps = steps + ExamTopic(examId = task.id, text = newStep.trim())
-                    newStep = ""
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                FormLabel("Unterpunkte")
+                if (steps.isNotEmpty()) {
+                    val p = steps.count { it.done } * 100 / steps.size
+                    Text("  $p %", style = T.label, color = if (p == 100) c.good else c.accent)
                 }
-            },
-            onToggle = { st -> steps = steps.map { if (it.id == st.id) it.copy(done = !it.done) else it } },
-            onRemove = { st -> steps = steps.filter { it.id != st.id } },
-        )
+            }
+            StepsEditor(
+                steps = steps,
+                newText = newStep,
+                onNewText = { newStep = it },
+                onAdd = { text -> steps = steps + ExamTopic(examId = task.id, text = text) },
+                onToggle = { st -> steps = steps.map { if (it.id == st.id) it.copy(done = !it.done) else it } },
+                onRename = { st, text -> steps = steps.map { if (it.id == st.id) it.copy(text = text) else it } },
+                onRemove = { st -> steps = steps.filter { it.id != st.id } },
+                onReorder = { steps = it },
+                placeholder = "Unterpunkt hinzufügen (optional)",
+            )
+        }
 
         AttachmentStrip(attachments.filter { it.ownerId == task.id })
     }
@@ -206,47 +214,6 @@ fun TaskEditSheet(initial: Task, isNew: Boolean, onDismiss: () -> Unit) {
         ) { d ->
             mode = DueMode.CUSTOM
             task = task.copy(dueDate = d.toEpochDay())
-        }
-    }
-}
-
-/** Abhakbare Unterpunkte (z. B. Kapitel eines Buchs) mit Prozentanzeige. */
-@Composable
-private fun StepsEditor(
-    steps: List<ExamTopic>,
-    newStep: String,
-    onNewStep: (String) -> Unit,
-    onAdd: () -> Unit,
-    onToggle: (ExamTopic) -> Unit,
-    onRemove: (ExamTopic) -> Unit,
-) {
-    val c = colors
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            FormLabel("Unterpunkte")
-            if (steps.isNotEmpty()) {
-                val p = steps.count { it.done } * 100 / steps.size
-                Text("  $p %", style = T.label, color = if (p == 100) c.good else c.accent)
-            }
-        }
-        FormGroup {
-            steps.forEach { st ->
-                Row(Modifier.fillMaxWidth().padding(end = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    CheckCircle(st.done, { onToggle(st) }, square = true, size = 22.dp, checkedColor = c.good)
-                    Text(
-                        st.text,
-                        style = T.body.copy(textDecoration = if (st.done) TextDecoration.LineThrough else null),
-                        color = if (st.done) c.sub else c.text,
-                        modifier = Modifier.weight(1f),
-                    )
-                    SoftIconButton(Ic.Close, "Unterpunkt entfernen", { onRemove(st) }, tint = c.sub, background = Color.Transparent)
-                }
-                FormDivider()
-            }
-            Row(Modifier.fillMaxWidth().padding(start = 14.dp, end = 6.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                InlineTextField(newStep, onNewStep, if (steps.isEmpty()) "Unterpunkt hinzufügen (optional)" else "Weiterer Punkt", Modifier.weight(1f))
-                SoftIconButton(Ic.Plus, "Unterpunkt hinzufügen", onAdd)
-            }
         }
     }
 }

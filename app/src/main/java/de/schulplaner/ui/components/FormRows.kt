@@ -125,6 +125,8 @@ fun InlineTextField(
     keyboardType: KeyboardType = KeyboardType.Text,
     capitalization: KeyboardCapitalization = KeyboardCapitalization.Sentences,
     big: Boolean = false,
+    imeAction: androidx.compose.ui.text.input.ImeAction = androidx.compose.ui.text.input.ImeAction.Default,
+    onImeAction: (() -> Unit)? = null,
 ) {
     val c = colors
     val style = if (big) T.title.copy(fontSize = T.section.fontSize * 1.3f, color = c.text) else T.body.copy(color = c.text)
@@ -135,7 +137,13 @@ fun InlineTextField(
         singleLine = singleLine,
         textStyle = style,
         cursorBrush = SolidColor(c.accent),
-        keyboardOptions = KeyboardOptions(capitalization = capitalization, keyboardType = keyboardType),
+        keyboardOptions = KeyboardOptions(capitalization = capitalization, keyboardType = keyboardType, imeAction = imeAction),
+        // Eigene Aktion: Tastatur bleibt offen (z. B. "Enter = nächster Unterpunkt").
+        keyboardActions = if (onImeAction != null) {
+            androidx.compose.foundation.text.KeyboardActions(onDone = { onImeAction() }, onNext = { onImeAction() }, onSend = { onImeAction() })
+        } else {
+            androidx.compose.foundation.text.KeyboardActions.Default
+        },
         decorationBox = { inner ->
             Box {
                 if (value.isEmpty()) Text(placeholder, style = style.copy(color = c.sub.copy(alpha = 0.7f), fontWeight = if (big) style.fontWeight else T.bodyRegular.fontWeight))

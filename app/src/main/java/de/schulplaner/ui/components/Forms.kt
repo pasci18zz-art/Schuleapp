@@ -52,6 +52,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
@@ -72,11 +73,34 @@ import kotlinx.coroutines.launch
 import java.io.File
 import java.time.LocalDate
 
+/** Zählt offene Sheets; solange eins offen ist, wird die App dahinter weichgezeichnet. */
+class SheetBlurState {
+    var open by mutableStateOf(0)
+}
+
+val LocalSheetBlur = androidx.compose.runtime.staticCompositionLocalOf { SheetBlurState() }
+
+/** Zeichnet den Inhalt weich, solange ein Sheet offen ist (Frosted Glass hinter dem Sheet). */
+@Composable
+fun Modifier.blurWhenSheetOpen(state: SheetBlurState): Modifier {
+    val target = if (state.open > 0) 22f else 0f
+    val radius by androidx.compose.animation.core.animateFloatAsState(target, tween(280), label = "sheet-blur")
+    return this.graphicsLayer {
+        val px = radius * density
+        renderEffect = if (px > 0.5f) androidx.compose.ui.graphics.BlurEffect(px, px, androidx.compose.ui.graphics.TileMode.Clamp) else null
+    }
+}
+
 /** Bottom-Sheet im App-Stil. [content] bekommt eine Funktion, die das Sheet animiert schließt. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppSheet(onDismiss: () -> Unit, content: @Composable ColumnScope.(close: () -> Unit) -> Unit) {
     val c = colors
+    val blur = LocalSheetBlur.current
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        blur.open++
+        onDispose { blur.open-- }
+    }
     val state = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
     val close: () -> Unit = {
@@ -94,6 +118,8 @@ fun AppSheet(onDismiss: () -> Unit, content: @Composable ColumnScope.(close: () 
         },
     ) {
         BlurBehind()
+        // Eigenes Fenster: Der App-Weichzeichner reicht nicht bis hierher, das Sheet nutzt die Fenster-Unschärfe.
+        androidx.compose.runtime.CompositionLocalProvider(LocalHaze provides null) {
         Column(
             Modifier
                 .fillMaxWidth()
@@ -105,6 +131,7 @@ fun AppSheet(onDismiss: () -> Unit, content: @Composable ColumnScope.(close: () 
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             content(close)
+        }
         }
     }
 }

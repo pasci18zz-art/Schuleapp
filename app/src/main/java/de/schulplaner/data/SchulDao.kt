@@ -130,6 +130,19 @@ interface SchulDao {
     @Upsert
     suspend fun upsertSetting(item: Setting)
 
+    // Lernsessions
+    @Query("SELECT * FROM study_sessions WHERE deleted = 0 ORDER BY startedAt DESC")
+    fun sessions(): Flow<List<StudySession>>
+
+    @Upsert
+    suspend fun upsertSession(item: StudySession)
+
+    @Query("SELECT * FROM study_sessions WHERE deleted = 0 AND finished = 0 ORDER BY startedAt DESC LIMIT 1")
+    suspend fun currentSession(): StudySession?
+
+    @Query("SELECT * FROM study_sessions WHERE deleted = 0 AND finished = 1 ORDER BY startedAt DESC LIMIT 1")
+    suspend fun lastSession(): StudySession?
+
     // ---------- Sync ----------
 
     @Query("SELECT * FROM subjects WHERE dirty = 1")
@@ -311,4 +324,13 @@ interface SchulDao {
 
     @Query("SELECT * FROM settings WHERE deleted = 0")
     suspend fun syncAllSetting(): List<Setting>
+
+    @Query("SELECT * FROM study_sessions WHERE dirty = 1")
+    suspend fun syncDirtyStudySession(): List<StudySession>
+
+    @Query("SELECT * FROM study_sessions WHERE id = :id")
+    suspend fun syncGetStudySession(id: String): StudySession?
+
+    @Query("UPDATE study_sessions SET dirty = 0 WHERE id = :id AND updatedAt = :updatedAt")
+    suspend fun syncCleanStudySession(id: String, updatedAt: Long)
 }
