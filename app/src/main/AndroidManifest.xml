@@ -3,11 +3,18 @@
 
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
-    <!-- Für den Notizbuch-Knopf: Samsung Notes und Apps, die Verknüpfungen anbieten -->
+    <!-- App-Verknüpfungen auf der Startseite (Notes, Cloud, Spotify) und Auswahl anderer Apps -->
     <queries>
         <package android:name="com.samsung.android.app.notes" />
+        <package android:name="com.spotify.music" />
+        <package android:name="com.microsoft.skydrive" />
+        <package android:name="com.google.android.apps.docs" />
+        <package android:name="com.samsung.android.scloud" />
+        <package android:name="com.dropbox.android" />
+        <package android:name="com.google.android.keep" />
         <intent>
-            <action android:name="android.intent.action.CREATE_SHORTCUT" />
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
         </intent>
     </queries>
 

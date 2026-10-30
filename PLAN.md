@@ -21,9 +21,10 @@ Design-Entwürfe (klickbar): https://claude.ai/artifact/YaVbw4kmq8qm3xJXT1iN3n
 | Erledigte Aufgaben | bleiben ausgegraut/durchgestrichen stehen, bis ihr Fälligkeitstag vorbei ist, dann unter „Erledigt“; „Rückgängig“-Leiste |
 | Kalender | im Stundenplan als Umschalter Woche/Monat; Tablet: große Monatsansicht mit Tagesleiste |
 | Ferien | offizielle Hessen-Ferien + Feiertage vorinstalliert, Ferien-Countdown auf „Heute“ |
-| Notizbuch | kleiner Knopf pro Fach: öffnet Samsung Notes, eine Verknüpfung oder einen Link (Samsung bietet keine Schnittstelle für einzelne Notizbücher) |
+| App-Verknüpfungen | drei Kacheln auf „Heute“: Notes (Samsung Notes), Cloud, Spotify – echte App-Symbole, lange drücken = andere App wählen; Handy in einer Zeile, Tablet unten links |
+| Lebendigkeit | treibende Farbflächen und schwebende Punkte im Hintergrund, farbige „Jetzt“-Kachel mit Glanz, Konfetti beim Abhaken, Sonne/Mond oben, Kacheln gleiten herein |
 | Erinnerung | am Vorabend (Standard 18:00) an offene HA und Klausuren für morgen |
-| Nicht gewünscht | Unterkurs-Anzeige, wiederkehrende Aufgaben, Vibration, Abi-Countdown |
+| Nicht gewünscht | Unterkurs-Anzeige, wiederkehrende Aufgaben, Vibration, Abi-Countdown, Notizbuch-Knopf pro Fach |
 | Sync | Supabase (kostenlos), offline zuerst, „neueste Änderung gewinnt“ |
 | APK | wird bei jedem Push von GitHub Actions gebaut, immer mit demselben Schlüssel signiert |
 
@@ -59,7 +60,7 @@ wandert das Datum mit.
 1. ✅ Grundgerüst, Datenmodell, alle Tabs, Einstellungen, Schnell-HA-Kachel, APK-Build
 2. ⏳ Sync mit Supabase (Login, Abgleich, Fotos)
 3. ⏳ Widgets: Heute, Aufgaben (abhakbar), Klausur-Countdown, nächste Stunde
-4. ✅ Erinnerung am Vorabend; ✅ Kalender, Ferien, Rückgängig, Notizbuch-Knopf, neues Design
+4. ✅ Erinnerung am Vorabend; ✅ Kalender, Ferien, Rückgängig, App-Verknüpfungen, neues Design
 5. ⏳ Abi-Übersicht (Hessen-Regeln), Backup als Datei, Notenstatistik
 6. ⏳ Feinschliff Design/Animationen
 

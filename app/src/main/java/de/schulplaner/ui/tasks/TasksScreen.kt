@@ -39,7 +39,6 @@ import de.schulplaner.ui.components.GlassCard
 import de.schulplaner.ui.components.Ic
 import de.schulplaner.ui.components.Pill
 import de.schulplaner.ui.components.LocalUndo
-import de.schulplaner.ui.components.NotesButton
 import de.schulplaner.ui.components.ScreenHeader
 import de.schulplaner.ui.components.SectionTitle
 import de.schulplaner.ui.components.Segmented
@@ -144,7 +143,6 @@ fun TasksScreen() {
                                 onClick = { edit = t to false },
                                 trailing = {
                                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                        if (!t.done) NotesButton(subject?.notesLink)
                                         Pill(TaskType.label(t.type), c.line, c.sub)
                                     }
                                 },

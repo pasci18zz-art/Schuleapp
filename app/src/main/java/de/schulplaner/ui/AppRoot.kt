@@ -44,6 +44,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -264,7 +265,7 @@ private fun BottomNav(navigator: AppNavigator, route: String, modifier: Modifier
                         },
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(tab.icon, null, tint = lerp(c.sub, c.accentInk, f), modifier = Modifier.size(21.dp))
+                    Icon(tab.icon, null, tint = lerp(c.sub, c.accentInk, f), modifier = Modifier.size(21.dp).graphicsLayer { scaleX = 1f + 0.1f * f; scaleY = 1f + 0.1f * f })
                 }
             }
         }

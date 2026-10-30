@@ -25,7 +25,7 @@ data class Subject(
     val isLk: Boolean = false,
     val sortOrder: Int = 0,
     val archived: Boolean = false,
-    /** Notizbuch-Knopf: "" = keiner, "app" = Samsung Notes öffnen, "intent:…" = Verknüpfung, "http…" = Link */
+    /** Früher Notizbuch-Knopf pro Fach – wird nicht mehr genutzt, bleibt aber für bestehende Datenbanken. */
     val notesLink: String = "",
     val updatedAt: Long = 0,
     val deleted: Boolean = false,

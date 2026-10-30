@@ -1,6 +1,23 @@
 package de.schulplaner.ui.today
 
 import androidx.compose.foundation.background
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.rotate
+import de.schulplaner.ui.components.HeroCard
+import de.schulplaner.ui.components.appear
+import kotlin.math.cos
+import kotlin.math.sin
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -52,7 +69,6 @@ import de.schulplaner.ui.Tabs
 import de.schulplaner.data.Holiday
 import de.schulplaner.data.HolidayKind
 import de.schulplaner.ui.components.LocalUndo
-import de.schulplaner.ui.components.NotesButton
 import de.schulplaner.ui.components.CheckCircle
 import de.schulplaner.ui.components.EmptyHint
 import de.schulplaner.ui.components.GlassCard
@@ -143,9 +159,12 @@ fun TodayScreen() {
                 title = "Heute",
                 overline = Fmt.full(today),
                 chip = state.weekLabel,
-            )
+                modifier = Modifier.appear(0),
+            ) {
+                SkyBadge(now.hour)
+            }
 
-            FerienTile(schedule.holidays, today)
+            Box(Modifier.appear(1)) { FerienTile(schedule.holidays, today) }
 
             if (schedule.slots.isEmpty()) {
                 GlassCard {
@@ -160,22 +179,23 @@ fun TodayScreen() {
 
             if (wide) {
                 Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Column(Modifier.weight(1f).appear(2), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                         NowTile(state)
                         LessonsTile(state, onLessonClick)
+                        AppShortcutsRow()
                     }
-                    Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Column(Modifier.weight(1f).fillMaxHeight().appear(3), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                         TasksTile(state, max = 8, onOpen = { nav.tab(Tabs.TASKS) }, onEdit = { editTask = it to false })
                     }
-                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Column(Modifier.weight(1f).appear(4), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                         ExamsListTile(state, onOpen = { nav.open(Routes.exam(it.id)) })
                         GradesTile(onOpen = { nav.tab(Tabs.GRADES) })
                     }
                 }
             } else {
-                NowTile(state)
-                LessonsTile(state, onLessonClick)
-                Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                NowTile(state, Modifier.appear(2))
+                Box(Modifier.appear(3)) { LessonsTile(state, onLessonClick) }
+                Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min).appear(4), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Box(Modifier.weight(1f).fillMaxHeight()) {
                         TasksTile(state, max = 2, compact = true, onOpen = { nav.tab(Tabs.TASKS) }, onEdit = { editTask = it to false })
                     }
@@ -183,7 +203,8 @@ fun TodayScreen() {
                         ExamTile(state, onOpen = { nav.open(Routes.exam(it.id)) }, onEmpty = { nav.tab(Tabs.EXAMS) })
                     }
                 }
-                GradesTile(onOpen = { nav.tab(Tabs.GRADES) })
+                AppShortcutsRow(Modifier.appear(5))
+                Box(Modifier.appear(6)) { GradesTile(onOpen = { nav.tab(Tabs.GRADES) }) }
             }
         }
     }
@@ -194,24 +215,28 @@ fun TodayScreen() {
 }
 
 @Composable
-private fun NowTile(s: TodayState) {
-    val c = colors
+private fun NowTile(s: TodayState, modifier: Modifier = Modifier) {
+    val white = Color.White
+    val soft = Color.White.copy(alpha = 0.78f)
     val lesson = s.current ?: s.next
-    GlassCard(padding = androidx.compose.foundation.layout.PaddingValues(18.dp)) {
+    HeroCard(modifier.fillMaxWidth()) {
         when {
             s.holidayName != null && s.lessons.isEmpty() -> {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                    Icon(Ic.Palm, null, tint = c.accent, modifier = Modifier.size(30.dp))
+                    Icon(Ic.Palm, null, tint = white, modifier = Modifier.size(30.dp))
                     Column {
-                        Text("Ferien", style = T.overline, color = c.accent)
-                        Text(s.holidayName, style = T.title.copy(fontSize = T.section.fontSize * 1.3f), color = c.text)
+                        Text("FERIEN", style = T.overline, color = soft)
+                        Text(s.holidayName, style = T.title.copy(fontSize = T.section.fontSize * 1.3f), color = white)
                     }
                 }
             }
             lesson == null -> {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                    Icon(Ic.Sun, null, tint = c.accent, modifier = Modifier.size(30.dp))
-                    Text("Heute kein Unterricht mehr", style = T.body, color = c.text)
+                    Icon(Ic.Sun, null, tint = white, modifier = Modifier.size(30.dp))
+                    Column {
+                        Text("GESCHAFFT", style = T.overline, color = soft)
+                        Text("Heute kein Unterricht mehr", style = T.body, color = white)
+                    }
                 }
             }
             else -> {
@@ -231,28 +256,90 @@ private fun NowTile(s: TodayState) {
                     else -> lesson.start?.let { Fmt.time(it) } ?: ""
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(label.uppercase(), style = T.overline, color = c.accent, modifier = Modifier.weight(1f))
-                    Text(right, style = T.small.copy(fontWeight = T.label.fontWeight), color = c.sub)
+                    Text(label.uppercase(), style = T.overline, color = soft, modifier = Modifier.weight(1f))
+                    Text(
+                        right,
+                        style = T.smallBold,
+                        color = white,
+                        modifier = Modifier.clip(RoundedCornerShape(50)).background(Color.White.copy(alpha = 0.18f)).padding(horizontal = 10.dp, vertical = 4.dp),
+                    )
                 }
                 Row(Modifier.padding(top = 14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                    SubjectBadge(lesson.subject, 50)
+                    Box(
+                        Modifier.size(50.dp).clip(RoundedCornerShape(17.dp)).background(Color.White.copy(alpha = 0.2f)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Box(Modifier.size(10.dp).clip(RoundedCornerShape(5.dp)).background(subjectColor(lesson.subject?.color)).align(Alignment.TopEnd).padding(2.dp))
+                        Text(lesson.subject?.label ?: "?", style = T.label.copy(fontSize = T.body.fontSize * 1.05f), color = white, maxLines = 1)
+                    }
                     Column(Modifier.weight(1f)) {
-                        Text(lesson.subject?.name ?: "?", style = T.title.copy(fontSize = T.section.fontSize * 1.3f), color = c.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(lesson.subject?.name ?: "?", style = T.title.copy(fontSize = T.section.fontSize * 1.3f), color = white, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Row(horizontalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.padding(top = 3.dp)) {
-                            if (lesson.room.isNotBlank()) IconText(Ic.Pin, "R ${lesson.room}")
+                            if (lesson.room.isNotBlank()) IconText(Ic.Pin, "R ${lesson.room}", soft)
                             val teacher = lesson.subject?.teacher.orEmpty()
-                            if (teacher.isNotBlank()) IconText(Ic.User, teacher)
+                            if (teacher.isNotBlank()) IconText(Ic.User, teacher, soft)
                         }
                     }
                 }
                 if (lesson.note.isNotBlank()) {
-                    Text(lesson.note, style = T.small, color = c.warn, modifier = Modifier.padding(top = 8.dp))
+                    Text(lesson.note, style = T.smallBold, color = white, modifier = Modifier.padding(top = 8.dp))
                 }
                 if (isNow) {
                     val total = Duration.between(lesson.startDateTime, lesson.endDateTime).seconds.toFloat()
                     val done = Duration.between(lesson.startDateTime, s.now).seconds.toFloat()
-                    ProgressBar(if (total > 0) done / total else 0f, c.accent, Modifier.padding(top = 14.dp))
+                    val p by animateFloatAsState(if (total > 0) (done / total).coerceIn(0f, 1f) else 0f, tween(800), label = "now")
+                    Box(Modifier.padding(top = 14.dp).fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)).background(Color.White.copy(alpha = 0.25f))) {
+                        Box(Modifier.fillMaxWidth(p).height(6.dp).clip(RoundedCornerShape(3.dp)).background(white))
+                    }
                 }
+            }
+        }
+    }
+}
+
+/** Kleines lebendiges Symbol oben rechts: Sonne am Tag, Mond mit Sternen am Abend. */
+@Composable
+private fun SkyBadge(hour: Int) {
+    val day = hour in 6..17
+    val t = rememberInfiniteTransition(label = "sky")
+    val spin = t.animateFloat(0f, 360f, infiniteRepeatable(tween(24000, easing = LinearEasing)), label = "spin")
+    val twinkle = t.animateFloat(0.3f, 1f, infiniteRepeatable(tween(1600), RepeatMode.Reverse), label = "twinkle")
+    val bob = t.animateFloat(-2f, 2f, infiniteRepeatable(tween(2600), RepeatMode.Reverse), label = "bob")
+    val brush = if (day) {
+        Brush.linearGradient(listOf(Color(0xFFFFD36E), Color(0xFFFF9F43)))
+    } else {
+        Brush.linearGradient(listOf(Color(0xFF4F5BD5), Color(0xFF2B2F6B)))
+    }
+    Box(
+        Modifier.size(44.dp).clip(CircleShape).background(brush),
+        contentAlignment = Alignment.Center,
+    ) {
+        Canvas(Modifier.size(44.dp)) {
+            val cx = size.width / 2
+            val cy = size.height / 2
+            if (day) {
+                rotate(spin.value) {
+                    for (i in 0 until 8) {
+                        val ang = Math.toRadians(i * 45.0)
+                        val r1 = size.minDimension * 0.27f
+                        val r2 = size.minDimension * 0.37f
+                        drawLine(
+                            Color.White,
+                            Offset(cx + (cos(ang) * r1).toFloat(), cy + (sin(ang) * r1).toFloat()),
+                            Offset(cx + (cos(ang) * r2).toFloat(), cy + (sin(ang) * r2).toFloat()),
+                            strokeWidth = 2.2.dp.toPx(),
+                            cap = StrokeCap.Round,
+                        )
+                    }
+                }
+                drawCircle(Color.White, size.minDimension * 0.17f, Offset(cx, cy))
+            } else {
+                val y = cy + bob.value.dp.toPx() * 0.5f
+                drawCircle(Color(0xFFFFF3C4), size.minDimension * 0.2f, Offset(cx - 2.dp.toPx(), y))
+                drawCircle(Color(0xFF3A4090), size.minDimension * 0.18f, Offset(cx + 3.dp.toPx(), y - 3.dp.toPx()))
+                drawCircle(Color.White.copy(alpha = twinkle.value), 1.4.dp.toPx(), Offset(size.width * 0.75f, size.height * 0.3f))
+                drawCircle(Color.White.copy(alpha = 1.3f - twinkle.value), 1.1.dp.toPx(), Offset(size.width * 0.28f, size.height * 0.25f))
+                drawCircle(Color.White.copy(alpha = twinkle.value * 0.8f), 1.dp.toPx(), Offset(size.width * 0.7f, size.height * 0.75f))
             }
         }
     }
@@ -351,7 +438,6 @@ private fun TasksTile(s: TodayState, max: Int, compact: Boolean = false, onOpen:
                     val sub = listOfNotNull(subject?.label, due?.let { Fmt.due(today, it) }).joinToString(" · ")
                     Text(sub, style = T.small.copy(fontSize = T.small.fontSize * 0.92f), color = if (overdue) c.warn else c.sub, maxLines = 1)
                 }
-                if (!compact && !t.done) NotesButton(subject?.notesLink)
             }
         }
     }
@@ -515,11 +601,10 @@ fun SubjectBadge(subject: Subject?, sizeDp: Int) {
 }
 
 @Composable
-private fun IconText(icon: androidx.compose.ui.graphics.vector.ImageVector, text: String) {
-    val c = colors
+private fun IconText(icon: androidx.compose.ui.graphics.vector.ImageVector, text: String, color: Color) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        Icon(icon, null, tint = c.sub, modifier = Modifier.size(14.dp))
-        Text(text, style = T.small.copy(fontSize = T.label.fontSize), color = c.sub, maxLines = 1)
+        Icon(icon, null, tint = color, modifier = Modifier.size(14.dp))
+        Text(text, style = T.small.copy(fontSize = T.label.fontSize), color = color, maxLines = 1)
     }
 }
 

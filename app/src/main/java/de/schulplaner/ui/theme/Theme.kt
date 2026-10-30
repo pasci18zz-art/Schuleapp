@@ -37,14 +37,21 @@ data class SchulColors(
     val nav: Color,
     val sheet: Color,
     val snackbar: Color,
+    /** Weiche, langsam treibende Farbflächen im Hintergrund. */
+    val orb1: Color,
+    val orb2: Color,
+    val orb3: Color,
+    /** Verlauf der "Jetzt"-Kachel. */
+    val heroStart: Color,
+    val heroEnd: Color,
     /** Deckkraft für Fächerfarben als Hintergrund (Kacheln im Stundenplan). */
     val tint: Float,
 )
 
 val LightSchulColors = SchulColors(
     isDark = false,
-    bg = Color(0xFFF5F6F8),
-    card = Color.White,
+    bg = Color(0xFFF4F5F9),
+    card = Color(0xE6FFFFFF),
     cardBorder = Color(0xFFEBEDF1),
     shadow = Color(0x14101828),
     text = Color(0xFF111418),
@@ -60,14 +67,19 @@ val LightSchulColors = SchulColors(
     nav = Color.White,
     sheet = Color.White,
     snackbar = Color(0xFF1C1F26),
+    orb1 = Color(0x4D8C9BFF),
+    orb2 = Color(0x40FFB98F),
+    orb3 = Color(0x385FD3B5),
+    heroStart = Color(0xFF4F5BD5),
+    heroEnd = Color(0xFF8A5CE0),
     tint = 0.16f,
 )
 
 val DarkSchulColors = SchulColors(
     isDark = true,
     bg = Color(0xFF0F1115),
-    card = Color(0xFF181B21),
-    cardBorder = Color(0xFF23262E),
+    card = Color(0xE6181B21),
+    cardBorder = Color(0xFF262A33),
     shadow = Color(0x00000000),
     text = Color(0xFFEEF0F4),
     sub = Color(0xFF9AA1AF),
@@ -82,6 +94,11 @@ val DarkSchulColors = SchulColors(
     nav = Color(0xFF1C1F26),
     sheet = Color(0xFF181B21),
     snackbar = Color(0xFF2A2E37),
+    orb1 = Color(0x4D3A46C8),
+    orb2 = Color(0x2EC25A2E),
+    orb3 = Color(0x2E1F9E86),
+    heroStart = Color(0xFF3D47B8),
+    heroEnd = Color(0xFF6A3FB8),
     tint = 0.24f,
 )
 

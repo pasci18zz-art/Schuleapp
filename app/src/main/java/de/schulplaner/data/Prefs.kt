@@ -19,6 +19,15 @@ class Prefs(private val context: Context) {
     private val reminderMinuteKey = intPreferencesKey("reminder_minute")
     private val notifAskedKey = booleanPreferencesKey("notif_asked")
 
+    /** Gewählte Apps für die Verknüpfungen auf der Startseite (Schlüssel → Paketname). */
+    val appLinks: Flow<Map<String, String>> = context.dataStore.data.map { prefs ->
+        prefs.asMap().filterKeys { it.name.startsWith("app_") }.mapKeys { it.key.name }.mapValues { it.value.toString() }
+    }
+
+    suspend fun setAppLink(key: String, packageName: String) {
+        context.dataStore.edit { it[stringPreferencesKey(key)] = packageName }
+    }
+
     /** "system", "light" oder "dark" */
     val theme: Flow<String> = context.dataStore.data.map { it[themeKey] ?: "system" }
 

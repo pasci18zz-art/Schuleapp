@@ -76,5 +76,6 @@ object Ic {
     val Layers by lazy { icon("layers", "m12 3 9 5-9 5-9-5z", "m3 13 9 5 9-5") }
     val Sparkle by lazy { icon("sparkle", "M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M6 18l2.5-2.5M15.5 8.5 18 6") }
     val Book by lazy { icon("book", "M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z", "M4 21a2 2 0 0 1 2-2h13v2H6") }
+    val Music by lazy { icon("music", "M9 18V5l12-2v13", circle(6f, 18f, 3f), circle(18f, 16f, 3f)) }
     val Cloud by lazy { icon("cloud", "M7 18a5 5 0 1 1 1-9.9A6 6 0 0 1 19 10a4 4 0 0 1 0 8z") }
 }

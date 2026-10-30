@@ -2,7 +2,14 @@ package de.schulplaner.ui.components
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -37,7 +44,12 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import kotlin.math.cos
+import kotlin.math.sin
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -70,7 +82,41 @@ fun subjectColor(argb: Long?): Color = if (argb == null) Color(0xFF7C8A9E) else 
 /** Ruhiger, einfarbiger Hintergrund. */
 @Composable
 fun AppBackground(modifier: Modifier = Modifier, content: @Composable BoxScope.() -> Unit) {
-    Box(modifier.fillMaxSize().background(colors.bg), content = content)
+    val c = colors
+    // Langsam treibende, weiche Farbflächen und ein paar schwebende Punkte – nur im Zeichnen gelesen,
+    // damit nichts neu aufgebaut werden muss.
+    val t = rememberInfiniteTransition(label = "bg")
+    val a = t.animateFloat(0f, 1f, infiniteRepeatable(tween(23000, easing = LinearEasing), RepeatMode.Reverse), label = "a")
+    val b = t.animateFloat(0f, 1f, infiniteRepeatable(tween(31000, easing = LinearEasing), RepeatMode.Reverse), label = "b")
+    val drift = t.animateFloat(0f, 1f, infiniteRepeatable(tween(40000, easing = LinearEasing), RepeatMode.Restart), label = "drift")
+    Box(
+        modifier
+            .fillMaxSize()
+            .background(c.bg)
+            .drawBehind {
+                val w = size.width
+                val h = size.height
+                val av = a.value
+                val bv = b.value
+                fun orb(color: Color, x: Float, y: Float, r: Float) {
+                    drawCircle(Brush.radialGradient(listOf(color, Color.Transparent), Offset(x, y), r), r, Offset(x, y))
+                }
+                orb(c.orb1, w * (0.05f + 0.35f * av), h * (0.05f + 0.08f * bv), w * 0.85f)
+                orb(c.orb2, w * (1.0f - 0.3f * bv), h * (0.42f + 0.12f * av), w * 0.7f)
+                orb(c.orb3, w * (0.1f + 0.3f * bv), h * (0.92f - 0.1f * av), w * 0.8f)
+                // Schwebende Punkte, die langsam nach oben wandern.
+                val dv = drift.value
+                for (i in 0 until 14) {
+                    val seed = (i * 7919) % 1000 / 1000f
+                    val x = w * ((seed * 13.7f + i * 0.071f) % 1f)
+                    val speed = 0.6f + (i % 4) * 0.25f
+                    val y = h * (1.1f - ((dv * speed + seed) % 1f) * 1.2f)
+                    val r = (2.2f + (i % 3) * 1.3f) * density
+                    drawCircle(if (i % 2 == 0) c.accent.copy(alpha = 0.10f) else c.orb2.copy(alpha = 0.35f), r, Offset(x, y))
+                }
+            },
+        content = content,
+    )
 }
 
 /** Gibt beim Drücken leicht nach (wie bei Samsung). */
@@ -200,9 +246,32 @@ fun CheckCircle(checked: Boolean, onToggle: () -> Unit, ringColor: Color = color
     val bg by animateColorAsState(if (checked) checkedColor else Color.Transparent, tween(180), label = "check-bg")
     val border by animateColorAsState(if (checked) checkedColor else ringColor, tween(180), label = "check-border")
     val shape = if (square) RoundedCornerShape(8.dp) else CircleShape
+    // Kleines Konfetti beim Abhaken.
+    val burst = remember { Animatable(1f) }
+    var previous by remember { mutableStateOf(checked) }
+    LaunchedEffect(checked) {
+        if (checked && !previous) {
+            burst.snapTo(0f)
+            burst.animateTo(1f, tween(600, easing = FastOutSlowInEasing))
+        }
+        previous = checked
+    }
+    val confetti = listOf(c.accent, Color(0xFFFFB020), Color(0xFF3BD873), Color(0xFFFF6B8B), Color(0xFF5AB2FF))
     Box(
         Modifier
             .size(size + 18.dp)
+            .drawBehind {
+                val p = burst.value
+                if (p < 1f) {
+                    val center = Offset(this.size.width / 2, this.size.height / 2)
+                    for (i in 0 until 10) {
+                        val angle = Math.toRadians((i * 36 + 12).toDouble())
+                        val dist = size.toPx() * (0.45f + 0.75f * p)
+                        val pos = Offset(center.x + (cos(angle) * dist).toFloat(), center.y + (sin(angle) * dist).toFloat())
+                        drawCircle(confetti[i % confetti.size].copy(alpha = 1f - p), (2.8f - 1.6f * p) * density, pos)
+                    }
+                }
+            }
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, role = Role.Checkbox, onClick = onToggle),
         contentAlignment = Alignment.Center,
     ) {
@@ -377,20 +446,47 @@ fun HSpace(w: Dp) = Spacer(Modifier.width(w))
 @Composable
 fun VSpace(h: Dp) = Spacer(Modifier.height(h))
 
-/** Kleiner Knopf, der das Notizbuch eines Fachs öffnet (z. B. Samsung Notes). */
+
+/** Kacheln gleiten beim ersten Anzeigen nacheinander herein. */
 @Composable
-fun NotesButton(link: String?, modifier: Modifier = Modifier) {
-    if (link.isNullOrBlank()) return
-    val ctx = androidx.compose.ui.platform.LocalContext.current
-    val c = colors
-    Box(
-        modifier
-            .size(30.dp)
-            .clip(RoundedCornerShape(9.dp))
-            .background(if (c.isDark) Color(0xFF3A3218) else Color(0xFFFFF6D6))
-            .clickable { de.schulplaner.notes.Notebooks.open(ctx, link) },
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(Ic.Note, "Notizbuch öffnen", tint = Color(0xFFC9A227), modifier = Modifier.size(16.dp))
+fun Modifier.appear(index: Int): Modifier {
+    val anim = remember { Animatable(0f) }
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay(60L * index)
+        anim.animateTo(1f, spring(dampingRatio = 0.85f, stiffness = 260f))
     }
+    return this.graphicsLayer {
+        alpha = anim.value.coerceIn(0f, 1f)
+        translationY = (1f - anim.value) * 28.dp.toPx()
+    }
+}
+
+/** Farbige Hauptkachel mit Verlauf und sanftem Glanz, der ab und zu darüberläuft. */
+@Composable
+fun HeroCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+    val c = colors
+    val shape = RoundedCornerShape(24.dp)
+    val t = rememberInfiniteTransition(label = "hero")
+    val shine = t.animateFloat(-1f, 2.5f, infiniteRepeatable(tween(5200, easing = LinearEasing), RepeatMode.Restart), label = "shine")
+    Column(
+        modifier
+            .shadow(if (c.isDark) 0.dp else 10.dp, shape, ambientColor = c.heroStart, spotColor = c.heroStart)
+            .clip(shape)
+            .background(Brush.linearGradient(listOf(c.heroStart, c.heroEnd)))
+            .drawBehind {
+                // Zwei weiche Kreise als Deko im Hintergrund der Kachel.
+                drawCircle(Color.White.copy(alpha = 0.10f), size.height * 0.9f, Offset(size.width * 0.95f, -size.height * 0.1f))
+                drawCircle(Color.White.copy(alpha = 0.07f), size.height * 0.55f, Offset(size.width * 0.78f, size.height * 1.05f))
+                val x = shine.value * size.width
+                drawRect(
+                    Brush.linearGradient(
+                        listOf(Color.Transparent, Color.White.copy(alpha = 0.16f), Color.Transparent),
+                        start = Offset(x - size.width * 0.3f, 0f),
+                        end = Offset(x, size.height),
+                    ),
+                )
+            }
+            .padding(18.dp),
+        content = content,
+    )
 }

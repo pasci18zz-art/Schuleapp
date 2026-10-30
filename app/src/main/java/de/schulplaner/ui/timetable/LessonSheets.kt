@@ -77,7 +77,6 @@ fun LessonSheet(lesson: Lesson, onDismiss: () -> Unit, onAddTask: () -> Unit, on
                 val parts = listOf(Fmt.dayDate(lesson.date), "${lesson.periodLabel} Std", lesson.room.takeIf { it.isNotBlank() }?.let { "R $it" })
                 Text(parts.filterNotNull().joinToString(" · "), style = T.small.copy(fontSize = T.label.fontSize), color = c.sub)
             }
-            de.schulplaner.ui.components.NotesButton(lesson.subject?.notesLink)
         }
 
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {

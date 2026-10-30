@@ -44,8 +44,6 @@ import de.schulplaner.R
 import de.schulplaner.app
 import de.schulplaner.data.Holiday
 import de.schulplaner.data.HolidayKind
-import de.schulplaner.notes.Notebooks
-import de.schulplaner.notes.NotesLinkDialog
 import de.schulplaner.reminders.Reminders
 import de.schulplaner.ui.components.ColorRow
 import de.schulplaner.ui.components.FormGroup
@@ -317,7 +315,6 @@ private fun SubjectEditSheet(initial: Subject, isNew: Boolean, onDismiss: () -> 
     val repo = LocalContext.current.app.repo
     var s by remember { mutableStateOf(initial) }
     var confirm by remember { mutableStateOf(false) }
-    var notesDialog by remember { mutableStateOf(false) }
     AppSheet(onDismiss = onDismiss) { close ->
         SheetHeader(
             if (isNew) "Neues Fach" else "Fach",
@@ -340,16 +337,10 @@ private fun SubjectEditSheet(initial: Subject, isNew: Boolean, onDismiss: () -> 
                 ColorRow(s.color) { s = s.copy(color = it) }
             }
         }
-        MoreSection(initiallyOpen = !isNew && (s.teacher.isNotBlank() || s.room.isNotBlank() || s.notesLink.isNotBlank())) {
+        MoreSection(initiallyOpen = !isNew && (s.teacher.isNotBlank() || s.room.isNotBlank())) {
             FormGroup {
                 FormTextRow("Lehrer/in", s.teacher, { s = s.copy(teacher = it) }, placeholder = "optional", capitalization = KeyboardCapitalization.Words)
-                FormTextRow("Raum", s.room, { s = s.copy(room = it) }, placeholder = "optional")
-                FormValueRow("Notizbuch", Notebooks.label(s.notesLink), { notesDialog = true }, divider = false, leading = {
-                    Box(
-                        Modifier.size(26.dp).clip(RoundedCornerShape(8.dp)).background(if (c.isDark) Color(0xFF3A3218) else Color(0xFFFFF6D6)),
-                        contentAlignment = Alignment.Center,
-                    ) { Icon(Ic.Note, null, tint = Color(0xFFC9A227), modifier = Modifier.size(15.dp)) }
-                })
+                FormTextRow("Raum", s.room, { s = s.copy(room = it) }, placeholder = "optional", divider = false)
             }
         }
         if (!isNew) {
@@ -361,9 +352,6 @@ private fun SubjectEditSheet(initial: Subject, isNew: Boolean, onDismiss: () -> 
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center,
             )
         }
-    }
-    if (notesDialog) {
-        NotesLinkDialog(s.notesLink, onDismiss = { notesDialog = false }) { s = s.copy(notesLink = it) }
     }
     if (confirm) {
         ConfirmDialog("Fach löschen?", "\"${s.name}\" wird aus Stundenplan und Listen entfernt.", onDismiss = { confirm = false }) {

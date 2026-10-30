@@ -20,7 +20,6 @@ import de.schulplaner.data.TaskType
 import de.schulplaner.domain.Fmt
 import de.schulplaner.ui.components.AppSheet
 import de.schulplaner.ui.components.AttachmentStrip
-import de.schulplaner.ui.components.NotesButton
 import de.schulplaner.ui.components.Pill
 import de.schulplaner.ui.components.SubjectDot
 import de.schulplaner.ui.components.colors
@@ -43,7 +42,6 @@ fun TaskViewSheet(task: Task, onDismiss: () -> Unit) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             if (subject != null) SubjectDot(subjectColor(subject.color))
             Text(subject?.name ?: "Ohne Fach", style = T.label, color = c.sub, modifier = Modifier.weight(1f))
-            NotesButton(subject?.notesLink)
         }
         Text(
             task.title,
