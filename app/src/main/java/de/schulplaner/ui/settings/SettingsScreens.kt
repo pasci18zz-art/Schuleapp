@@ -608,7 +608,7 @@ private fun SyncCard() {
     var error by remember { mutableStateOf<String?>(null) }
     var rev by remember { mutableStateOf(0) }
     var editServer by remember { mutableStateOf(false) }
-    val configured = remember(rev, account) { configured }
+    val configured = remember(rev, account) { sync.configured }
     val host = remember(rev, account) { sync.host }
 
     GlassCard(padding = PaddingValues(16.dp)) {
