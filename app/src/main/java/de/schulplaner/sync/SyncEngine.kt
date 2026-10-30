@@ -68,6 +68,17 @@ class SyncEngine(
 
     val configured get() = supabase.configured
     val host get() = supabase.host
+    val urlOverride get() = supabase.urlOverride
+    val keyOverride get() = supabase.keyOverride
+
+    /** Server-Adresse/Schlüssel auf diesem Gerät setzen (leer = Wert aus GitHub). */
+    fun setServer(url: String, key: String) {
+        supabase.session = null
+        supabase.cursor = null
+        _account.value = null
+        supabase.urlOverride = url
+        supabase.keyOverride = key
+    }
 
     // ---------- Konto ----------
 

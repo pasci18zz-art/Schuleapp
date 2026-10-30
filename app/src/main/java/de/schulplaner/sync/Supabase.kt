@@ -47,15 +47,25 @@ data class Session(
  * URL und öffentlicher Schlüssel kommen beim Bauen aus den GitHub-Secrets.
  */
 class Supabase(context: Context) {
-    val baseUrl = normalizeUrl(BuildConfig.SUPABASE_URL)
-    private val apiKey = BuildConfig.SUPABASE_KEY.filter { it.code in 33..126 }
+    private val prefs = context.getSharedPreferences("sync", Context.MODE_PRIVATE)
+
+    /** Im Gerät eingetragene Adresse/Schlüssel haben Vorrang vor den Werten aus GitHub. */
+    var urlOverride: String
+        get() = prefs.getString("url_override", "") ?: ""
+        set(value) = prefs.edit().putString("url_override", value.trim()).apply()
+    var keyOverride: String
+        get() = prefs.getString("key_override", "") ?: ""
+        set(value) = prefs.edit().putString("key_override", value.filter { it.code in 33..126 }).apply()
+
+    val baseUrl: String get() = normalizeUrl(urlOverride.ifBlank { BuildConfig.SUPABASE_URL })
+    private val apiKey: String get() = keyOverride.ifBlank { BuildConfig.SUPABASE_KEY.filter { it.code in 33..126 } }
 
     /** Nur der Servername (zur Anzeige in den Einstellungen). */
     val host: String get() = baseUrl.removePrefix("https://")
-    private val prefs = context.getSharedPreferences("sync", Context.MODE_PRIVATE)
+    val hasValidHost: Boolean get() = Regex("^[a-z0-9-]{6,}\\.supabase\\.(co|in)$").matches(host)
     val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
-    val configured: Boolean get() = baseUrl.startsWith("https://") && apiKey.isNotBlank()
+    val configured: Boolean get() = hasValidHost && apiKey.isNotBlank()
 
     // ---------- Sitzung ----------
 
@@ -206,7 +216,7 @@ class Supabase(context: Context) {
         val conn = try {
             URL(baseUrl + path).openConnection() as HttpURLConnection
         } catch (e: Exception) {
-            throw SupabaseException(0, "Server-Adresse ungültig ($host) – bitte das Secret SUPABASE_URL prüfen")
+            throw SupabaseException(0, "Server-Adresse ungültig ($host) – bitte unter „Server ändern“ prüfen")
         }
         conn.requestMethod = method
         conn.connectTimeout = 15_000
@@ -233,7 +243,7 @@ class Supabase(context: Context) {
             try {
                 conn.connect()
             } catch (e: IllegalArgumentException) {
-                throw SupabaseException(0, "Server-Adresse ungültig ($host) – bitte das Secret SUPABASE_URL prüfen")
+                throw SupabaseException(0, "Server-Adresse ungültig ($host) – bitte unter „Server ändern“ prüfen")
             } catch (e: java.net.UnknownHostException) {
                 throw SupabaseException(0, "Server nicht erreichbar ($host) – Internet da? Adresse richtig?")
             }

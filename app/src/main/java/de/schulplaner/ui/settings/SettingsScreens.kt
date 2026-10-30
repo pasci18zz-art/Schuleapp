@@ -578,6 +578,23 @@ private fun HolidayEditSheet(initial: Holiday, isNew: Boolean, onDismiss: () -> 
 
 /** Konto & Sync: anmelden, Status, jetzt abgleichen, abmelden. */
 @Composable
+private fun ServerEditor(sync: de.schulplaner.sync.SyncEngine, onDone: () -> Unit) {
+    val c = colors
+    var url by remember { mutableStateOf(sync.urlOverride) }
+    var key by remember { mutableStateOf(sync.keyOverride) }
+    FormGroup {
+        FormTextRow("Adresse", url, { url = it }, placeholder = "https://xxxx.supabase.co", keyboardType = androidx.compose.ui.text.input.KeyboardType.Uri, capitalization = KeyboardCapitalization.None)
+        FormTextRow("Schlüssel", key, { key = it }, placeholder = "nur falls nötig", divider = false, capitalization = KeyboardCapitalization.None)
+    }
+    if (url.isNotBlank()) {
+        Text("Wird zu: ${de.schulplaner.sync.normalizeUrl(url).removePrefix("https://")}", style = T.small, color = c.sub, modifier = Modifier.padding(top = 6.dp))
+    }
+    Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        de.schulplaner.ui.components.PrimaryButton("Speichern", { sync.setServer(url, key); onDone() }, Modifier.weight(1f))
+    }
+}
+
+@Composable
 private fun SyncCard() {
     val c = colors
     val ctx = LocalContext.current
@@ -589,13 +606,17 @@ private fun SyncCard() {
     var password by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    var rev by remember { mutableStateOf(0) }
+    var editServer by remember { mutableStateOf(false) }
+    val configured = remember(rev, account) { configured }
+    val host = remember(rev, account) { sync.host }
 
     GlassCard(padding = PaddingValues(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Icon(Ic.Cloud, null, tint = c.accent, modifier = Modifier.size(22.dp))
             Text("Konto & Sync", style = T.section, color = c.text, modifier = Modifier.weight(1f))
             when {
-                !sync.configured -> Pill("nicht eingerichtet", c.warnSoft, c.warn)
+                !configured -> Pill("nicht eingerichtet", c.warnSoft, c.warn)
                 account == null -> Pill("abgemeldet", c.line, c.sub)
                 status.running -> Pill("gleicht ab …")
                 status.error != null -> Pill("Fehler", c.warnSoft, c.warn)
@@ -603,17 +624,19 @@ private fun SyncCard() {
             }
         }
         when {
-            !sync.configured -> {
+            !configured || editServer -> {
                 Text(
-                    "In GitHub fehlen die Secrets SUPABASE_URL und SUPABASE_KEY (oder sie sind leer). Danach eine neue Version bauen lassen.",
+                    if (!configured) "Server-Adresse fehlt oder ist unvollständig (gerade: $host).\nIn Supabase: Project Settings → Data API → Project URL kopieren und hier einfügen."
+                    else "Adresse aus Supabase (Project Settings → Data API → Project URL). Leer lassen = Wert aus GitHub.",
                     style = T.small,
                     color = c.sub,
-                    modifier = Modifier.padding(top = 8.dp),
+                    modifier = Modifier.padding(top = 8.dp, bottom = 10.dp),
                 )
+                ServerEditor(sync) { editServer = false; rev++ }
             }
             account == null -> {
                 Text(
-                    "Auf beiden Geräten mit demselben Konto anmelden – dann wird alles automatisch abgeglichen.\nServer: ${sync.host}",
+                    "Auf beiden Geräten mit demselben Konto anmelden – dann wird alles automatisch abgeglichen.\nServer: $host",
                     style = T.small,
                     color = c.sub,
                     modifier = Modifier.padding(top = 8.dp, bottom = 10.dp),
@@ -665,10 +688,16 @@ private fun SyncCard() {
                     color = c.sub,
                     modifier = Modifier.padding(top = 8.dp),
                 )
+                Text(
+                    "Server ändern",
+                    style = T.label,
+                    color = c.accent,
+                    modifier = Modifier.padding(top = 6.dp).clip(RoundedCornerShape(12.dp)).clickable { editServer = true }.padding(vertical = 6.dp),
+                )
             }
             else -> {
                 Text(account ?: "", style = T.body, color = c.text, modifier = Modifier.padding(top = 10.dp))
-                Text("Server: ${sync.host}", style = T.small, color = c.sub)
+                Text("Server: $host", style = T.small, color = c.sub)
                 val last = status.lastSync
                 Text(
                     if (last > 0) {
