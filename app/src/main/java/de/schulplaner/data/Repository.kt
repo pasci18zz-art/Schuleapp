@@ -54,7 +54,7 @@ class Repository(
     ) { (s, sl, p), ov, h, st ->
         ScheduleData(
             subjects = s.associateBy { it.id },
-            slots = sl.filter { slot -> s.any { it.id == slot.subjectId } },
+            slots = sl.filter { slot -> slot.isFree || s.any { it.id == slot.subjectId } },
             periods = p,
             overrides = ov.associateBy { it.id },
             holidays = h,
@@ -62,6 +62,21 @@ class Repository(
             abReference = st[SettingKeys.AB_REFERENCE]?.toLongOrNull(),
         )
     }.stateIn(scope, SharingStarted.Eagerly, ScheduleData())
+
+    private val kindJson = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+    private val kindListSerializer = kotlinx.serialization.builtins.ListSerializer(TaskKind.serializer())
+
+    /** Aufgabenarten (eigene oder die Vorgaben). */
+    val taskKinds: StateFlow<List<TaskKind>> = settings
+        .map { st ->
+            st[SettingKeys.TASK_KINDS]
+                ?.let { runCatching { kindJson.decodeFromString(kindListSerializer, it) }.getOrNull() }
+                ?.takeIf { it.isNotEmpty() }
+                ?: TaskKind.defaults
+        }
+        .stateIn(scope, SharingStarted.Eagerly, TaskKind.defaults)
+
+    fun saveTaskKinds(kinds: List<TaskKind>) = setSetting(SettingKeys.TASK_KINDS, kindJson.encodeToString(kindListSerializer, kinds))
 
     private fun now() = System.currentTimeMillis()
     /** Wird nach jeder lokalen Änderung aufgerufen (startet den Sync). */
@@ -164,6 +179,22 @@ class Repository(
     fun saveTask(t: Task) = io {
         val created = if (t.createdAt == 0L) now() else t.createdAt
         dao.upsertTask(t.copy(createdAt = created, updatedAt = now(), dirty = true))
+    }
+
+    /** Speichert die Unterpunkte einer Aufgabe: geänderte schreiben, entfernte löschen. */
+    fun saveSteps(taskId: String, steps: List<ExamTopic>) = io {
+        val before = topics.value.filter { it.examId == taskId }
+        val keep = steps.map { it.id }.toSet()
+        before.filter { it.id !in keep }.forEach {
+            dao.upsertTopic(it.copy(deleted = true, updatedAt = now(), dirty = true))
+        }
+        steps.forEachIndexed { i, st ->
+            val old = before.firstOrNull { it.id == st.id }
+            val item = st.copy(examId = taskId, sortOrder = i)
+            if (old == null || old.text != item.text || old.done != item.done || old.sortOrder != item.sortOrder) {
+                dao.upsertTopic(item.copy(updatedAt = now(), dirty = true))
+            }
+        }
     }
 
     fun setTaskDone(t: Task, done: Boolean) = saveTask(t.copy(done = done, doneAt = if (done) now() else null))

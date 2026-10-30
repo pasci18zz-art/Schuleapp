@@ -85,6 +85,18 @@ import de.schulplaner.ui.components.rememberNow
 import de.schulplaner.ui.components.screenPadding
 import de.schulplaner.ui.components.subjectColor
 import de.schulplaner.ui.tasks.TaskDefaults
+import de.schulplaner.ui.tasks.TaskLine
+import de.schulplaner.ui.tasks.kindOf
+import de.schulplaner.ui.tasks.stepPercent
+import de.schulplaner.data.TaskKind
+import de.schulplaner.ui.components.HolidayLook
+import de.schulplaner.ui.components.LessonMark
+import de.schulplaner.ui.components.SubjectIcon
+import de.schulplaner.ui.components.SubjectIcons
+import de.schulplaner.ui.components.Sym
+import de.schulplaner.ui.components.examUrgency
+import de.schulplaner.ui.components.taskUrgency
+import de.schulplaner.ui.components.urgencyColor
 import de.schulplaner.ui.tasks.TaskEditSheet
 import de.schulplaner.ui.theme.T
 import java.time.Duration
@@ -99,12 +111,14 @@ private class TodayState(
     val next: Lesson?,
     val weekLabel: String?,
     val holidayName: String?,
+    val holiday: Holiday?,
     val openTasks: List<Task>,
     val doneVisible: List<Task>,
     val tasks: List<Task>,
     val exams: List<Exam>,
     val topics: List<ExamTopic>,
     val subjects: Map<String, Subject>,
+    val kinds: List<TaskKind>,
 )
 
 @Composable
@@ -115,6 +129,7 @@ fun TodayScreen() {
     val tasks by repo.tasks.collectAsStateWithLifecycle()
     val exams by repo.exams.collectAsStateWithLifecycle()
     val topics by repo.topics.collectAsStateWithLifecycle()
+    val kinds by repo.taskKinds.collectAsStateWithLifecycle()
     val now = rememberNow()
     val today = now.toLocalDate()
 
@@ -137,11 +152,14 @@ fun TodayScreen() {
         now = now, day = day, lessons = lessons, current = current, next = next,
         weekLabel = wt?.let { "$it-Woche" },
         holidayName = Schedule.holidayOn(today, schedule)?.name,
+        holiday = Schedule.holidayOn(today, schedule),
         openTasks = openTasks, doneVisible = doneVisible, tasks = tasks, exams = upcomingExams, topics = topics,
         subjects = schedule.subjects,
+        kinds = kinds,
     )
 
     var editTask by remember { mutableStateOf<Pair<Task, Boolean>?>(null) }
+    val onAddTask: () -> Unit = { editTask = TaskDefaults.quick(LocalDateTime.now(), schedule) to true }
     val onLessonClick: (Lesson) -> Unit = { l ->
         editTask = TaskDefaults.forSubject(l.slot.subjectId, l.date, schedule) to true
     }
@@ -185,7 +203,7 @@ fun TodayScreen() {
                         AppShortcutsRow()
                     }
                     Column(Modifier.weight(1f).fillMaxHeight().appear(3), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                        TasksTile(state, max = 8, onOpen = { nav.tab(Tabs.TASKS) }, onEdit = { editTask = it to false })
+                        TasksTile(state, max = 8, onOpen = { nav.tab(Tabs.TASKS) }, onEdit = { editTask = it to false }, onAdd = onAddTask)
                     }
                     Column(Modifier.weight(1f).appear(4), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                         ExamsListTile(state, onOpen = { nav.open(Routes.exam(it.id)) })
@@ -197,7 +215,7 @@ fun TodayScreen() {
                 Box(Modifier.appear(3)) { LessonsTile(state, onLessonClick) }
                 Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min).appear(4), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Box(Modifier.weight(1f).fillMaxHeight()) {
-                        TasksTile(state, max = 2, compact = true, onOpen = { nav.tab(Tabs.TASKS) }, onEdit = { editTask = it to false })
+                        TasksTile(state, max = 2, compact = true, onOpen = { nav.tab(Tabs.TASKS) }, onEdit = { editTask = it to false }, onAdd = onAddTask)
                     }
                     Box(Modifier.weight(1f).fillMaxHeight()) {
                         ExamTile(state, onOpen = { nav.open(Routes.exam(it.id)) }, onEmpty = { nav.tab(Tabs.EXAMS) })
@@ -223,7 +241,7 @@ private fun NowTile(s: TodayState, modifier: Modifier = Modifier) {
         when {
             s.holidayName != null && s.lessons.isEmpty() -> {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                    Icon(Ic.Palm, null, tint = white, modifier = Modifier.size(30.dp))
+                    Icon(s.holiday?.let { HolidayLook.icon(it) } ?: Ic.Palm, null, tint = white, modifier = Modifier.size(30.dp))
                     Column {
                         Text("FERIEN", style = T.overline, color = soft)
                         Text(s.holidayName, style = T.title.copy(fontSize = T.section.fontSize * 1.3f), color = white)
@@ -270,7 +288,12 @@ private fun NowTile(s: TodayState, modifier: Modifier = Modifier) {
                         contentAlignment = Alignment.Center,
                     ) {
                         Box(Modifier.size(10.dp).clip(RoundedCornerShape(5.dp)).background(subjectColor(lesson.subject?.color)).align(Alignment.TopEnd).padding(2.dp))
-                        Text(lesson.subject?.label ?: "?", style = T.label.copy(fontSize = T.body.fontSize * 1.05f), color = white, maxLines = 1)
+                        val icon = SubjectIcons.of(lesson.subject)
+                        if (icon != null) {
+                            Icon(icon, lesson.subject?.name, tint = white, modifier = Modifier.size(26.dp))
+                        } else {
+                            Text(lesson.subject?.label ?: "?", style = T.label.copy(fontSize = T.body.fontSize * 1.05f), color = white, maxLines = 1)
+                        }
                     }
                     Column(Modifier.weight(1f)) {
                         Text(lesson.subject?.name ?: "?", style = T.title.copy(fontSize = T.section.fontSize * 1.3f), color = white, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -375,7 +398,7 @@ private fun LessonsTile(s: TodayState, onLessonClick: (Lesson) -> Unit) {
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Text(l.periodLabel, style = T.smallBold, color = c.sub, modifier = Modifier.width(36.dp))
-                SubjectDot(subjectColor(l.subject?.color))
+                LessonMark(subjectColor(l.subject?.color), l.length)
                 Column(Modifier.weight(1f)) {
                     Text(
                         l.subject?.name ?: "?",
@@ -396,7 +419,7 @@ private fun LessonsTile(s: TodayState, onLessonClick: (Lesson) -> Unit) {
 }
 
 @Composable
-private fun TasksTile(s: TodayState, max: Int, compact: Boolean = false, onOpen: () -> Unit, onEdit: (Task) -> Unit) {
+private fun TasksTile(s: TodayState, max: Int, compact: Boolean = false, onOpen: () -> Unit, onEdit: (Task) -> Unit, onAdd: () -> Unit) {
     val c = colors
     val repo = LocalContext.current.app.repo
     val undo = LocalUndo.current
@@ -405,40 +428,37 @@ private fun TasksTile(s: TodayState, max: Int, compact: Boolean = false, onOpen:
     val open = (if (compact) relevant else s.openTasks).take(max)
     val done = s.doneVisible.filter { !compact || it.dueDate == null || it.dueDate <= s.day.toEpochDay() + 1 }
         .take((max - open.size).coerceAtLeast(0))
+    // Je mehr offen ist, desto wärmer/röter wird die Zahl.
+    val urgent = urgencyColor(taskUrgency(s.openTasks.size))
     GlassCard(Modifier.fillMaxSize(), padding = androidx.compose.foundation.layout.PaddingValues(14.dp)) {
-        Row(Modifier.fillMaxWidth().clickable(onClick = onOpen), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Ic.Tasks, "Aufgaben", tint = c.accent, modifier = Modifier.size(22.dp))
-            if (!compact) Text("Aufgaben", style = T.section, color = c.text, modifier = Modifier.padding(start = 10.dp))
-            Box(Modifier.weight(1f))
-            Text("${s.openTasks.size}", style = T.title.copy(fontSize = T.section.fontSize * 1.6f), color = c.text)
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).clickable(onClick = onOpen), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Ic.Tasks, "Aufgaben", tint = c.accent, modifier = Modifier.size(22.dp))
+                if (!compact) Text("Aufgaben", style = T.section, color = c.text, modifier = Modifier.padding(start = 10.dp))
+                Box(Modifier.weight(1f))
+                Text("${s.openTasks.size}", style = T.title.copy(fontSize = T.section.fontSize * 1.6f), color = if (s.openTasks.isEmpty()) c.text else urgent)
+            }
+            Box(Modifier.padding(start = 8.dp).size(28.dp).clip(CircleShape).background(c.accentSoft).clickable(onClick = onAdd), contentAlignment = Alignment.Center) {
+                Icon(Ic.Plus, "Aufgabe hinzufügen", tint = c.accent, modifier = Modifier.size(16.dp))
+            }
         }
         if (open.isEmpty() && done.isEmpty()) {
             Text("Alles erledigt", style = T.small, color = c.sub, modifier = Modifier.padding(top = 10.dp, start = 2.dp))
         }
         (open + done).forEach { t ->
-            val due = t.dueDate?.let { LocalDate.ofEpochDay(it) }
-            val overdue = !t.done && due != null && due.isBefore(today)
-            val subject = t.subjectId?.let { s.subjects[it] }
-            Row(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).clickable { onEdit(t) }.alpha(if (t.done) 0.5f else 1f),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                CheckCircle(t.done, {
+            TaskLine(
+                task = t,
+                subject = t.subjectId?.let { s.subjects[it] },
+                kind = kindOf(t.type, s.kinds),
+                percent = stepPercent(t.id, s.topics),
+                today = today,
+                onToggle = {
                     repo.setTaskDone(t, !t.done)
                     if (!t.done) undo.show("Erledigt") { repo.setTaskDone(t, false) }
-                }, ringColor = if (overdue) c.warn else c.sub, size = 20.dp)
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        t.title,
-                        style = T.label.copy(textDecoration = if (t.done) TextDecoration.LineThrough else null),
-                        color = c.text,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    val sub = listOfNotNull(subject?.label, due?.let { Fmt.due(today, it) }).joinToString(" · ")
-                    Text(sub, style = T.small.copy(fontSize = T.small.fontSize * 0.92f), color = if (overdue) c.warn else c.sub, maxLines = 1)
-                }
-            }
+                },
+                onClick = { onEdit(t) },
+                compact = compact,
+            )
         }
     }
 }
@@ -455,11 +475,12 @@ private fun FerienTile(holidays: List<Holiday>, today: LocalDate) {
     val days = if (current != null) h.endDate - t + 1 else h.startDate - t
     GlassCard(padding = androidx.compose.foundation.layout.PaddingValues(horizontal = 14.dp, vertical = 12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            val tint = HolidayLook.color(h)
             Box(
-                Modifier.size(38.dp).clip(RoundedCornerShape(12.dp)).background(if (c.isDark) Color(0xFF33291A) else Color(0xFFFFF4E5)),
+                Modifier.size(42.dp).clip(RoundedCornerShape(14.dp)).background(tint.copy(alpha = if (c.isDark) 0.22f else 0.16f)),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(Ic.Palm, null, tint = Color(0xFFC77700), modifier = Modifier.size(20.dp))
+                Icon(HolidayLook.icon(h), null, tint = tint, modifier = Modifier.size(24.dp))
             }
             Column(Modifier.weight(1f)) {
                 Text(h.name, style = T.body, color = c.text)
@@ -494,17 +515,27 @@ private fun ExamTile(s: TodayState, onOpen: (Exam) -> Unit, onEmpty: () -> Unit)
     val days = Fmt.daysUntil(s.now.toLocalDate(), LocalDate.ofEpochDay(exam.date))
     GlassCard(Modifier.fillMaxSize(), onClick = { onOpen(exam) }) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Ic.Exam, null, tint = c.accent, modifier = Modifier.size(22.dp))
+            Icon(Sym.Pen, null, tint = c.accent, modifier = Modifier.size(22.dp))
             Box(Modifier.weight(1f))
             Text(Fmt.dayMonth(LocalDate.ofEpochDay(exam.date)), style = T.smallBold, color = c.sub)
         }
+        // Wie auf dem Tablet: Tage bis zur Klausur, je näher desto röter.
+        val urgent = urgencyColor(examUrgency(days))
         Row(Modifier.padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            ProgressRing(progress, subjectColor(subject?.color), size = 58.dp, stroke = 6.dp) {
-                Text(if (ts.isEmpty()) "–" else "${(progress * 100).toInt()}%", style = T.label, color = c.text)
+            Column(
+                Modifier.size(56.dp).clip(RoundedCornerShape(18.dp)).background(urgent.copy(alpha = 0.18f)),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+            ) {
+                Text("$days", style = T.section.copy(fontSize = T.section.fontSize * 1.2f), color = urgent)
+                Text(if (days == 1L) "Tag" else "Tage", style = T.small.copy(fontSize = T.small.fontSize * 0.85f), color = c.sub)
             }
-            Column {
-                Text(subject?.label ?: "?", style = T.section.copy(fontSize = T.section.fontSize * 1.05f), color = c.text, maxLines = 1)
-                Text(Fmt.inDays(days), style = T.small, color = c.sub)
+            Column(Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                    SubjectIcon(subject, 15.dp)
+                    Text(subject?.label ?: "?", style = T.section.copy(fontSize = T.section.fontSize * 1.05f), color = c.text, maxLines = 1)
+                }
+                Text(if (ts.isEmpty()) Fmt.inDays(days) else "${(progress * 100).toInt()} % gelernt", style = T.small, color = c.sub, maxLines = 1)
             }
         }
     }
@@ -526,16 +557,18 @@ private fun ExamsListTile(s: TodayState, onOpen: (Exam) -> Unit) {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(14.dp),
             ) {
+                val urgent = urgencyColor(examUrgency(days))
                 Column(
-                    Modifier.size(52.dp).clip(RoundedCornerShape(18.dp)).background(subjectColor(subject?.color).copy(alpha = c.tint)),
+                    Modifier.size(52.dp).clip(RoundedCornerShape(18.dp)).background(urgent.copy(alpha = 0.18f)),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center,
                 ) {
-                    Text("$days", style = T.section.copy(fontSize = T.section.fontSize * 1.1f), color = c.text)
+                    Text("$days", style = T.section.copy(fontSize = T.section.fontSize * 1.1f), color = urgent)
                     Text(if (days == 1L) "Tag" else "Tage", style = T.small.copy(fontSize = T.small.fontSize * 0.85f), color = c.sub)
                 }
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Row {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        SubjectIcon(subject, 16.dp)
                         Text(subject?.name ?: "?", style = T.body, color = c.text, modifier = Modifier.weight(1f), maxLines = 1)
                         Text(Fmt.dayDate(LocalDate.ofEpochDay(e.date)), style = T.small, color = c.sub)
                     }
@@ -579,7 +612,7 @@ private fun GradesTile(onOpen: () -> Unit) {
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     Text("${i + 1}", style = T.label, color = c.sub)
-                    SubjectDot(subjectColor(r.subject.color), 9.dp)
+                    SubjectIcon(r.subject, 16.dp)
                     Text(r.subject.name, style = T.label.copy(fontSize = T.body.fontSize * 0.93f), color = c.text, modifier = Modifier.weight(1f), maxLines = 1)
                     Text(GradeCalc.format(r.value!!), style = T.label.copy(fontSize = T.body.fontSize * 0.93f), color = c.text)
                 }
@@ -595,8 +628,13 @@ fun SubjectBadge(subject: Subject?, sizeDp: Int) {
         Modifier.size(sizeDp.dp).clip(RoundedCornerShape((sizeDp * 0.34f).dp)).background(subjectColor(subject?.color).copy(alpha = c.tint)),
         contentAlignment = Alignment.Center,
     ) {
-        val label = subject?.shortName?.ifBlank { null } ?: subject?.name?.take(2) ?: "?"
-        Text(label, style = T.label.copy(fontSize = T.body.fontSize * (if (label.length > 3) 0.8f else 1.05f)), color = c.text, maxLines = 1)
+        val icon = SubjectIcons.of(subject)
+        if (icon != null) {
+            Icon(icon, subject?.name, tint = subjectColor(subject?.color), modifier = Modifier.size((sizeDp * 0.5f).dp))
+        } else {
+            val label = subject?.shortName?.ifBlank { null } ?: subject?.name?.take(2) ?: "?"
+            Text(label, style = T.label.copy(fontSize = T.body.fontSize * (if (label.length > 3) 0.8f else 1.05f)), color = c.text, maxLines = 1)
+        }
     }
 }
 

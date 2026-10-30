@@ -62,6 +62,11 @@ import de.schulplaner.domain.label
 import de.schulplaner.ui.LocalNavigator
 import de.schulplaner.ui.Routes
 import de.schulplaner.ui.components.GlassCard
+import de.schulplaner.ui.components.HolidayLook
+import de.schulplaner.ui.components.KindIcons
+import de.schulplaner.ui.components.SubjectIcon
+import de.schulplaner.ui.components.Sym
+import de.schulplaner.ui.tasks.kindOf
 import de.schulplaner.ui.components.GlassIconButton
 import de.schulplaner.ui.components.Ic
 import de.schulplaner.ui.components.ScreenHeader
@@ -226,8 +231,8 @@ fun TimetableScreen() {
 private fun Legend() {
     val c = colors
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(14.dp, 10.dp).clip(RoundedCornerShape(3.dp)).background(c.card).border(1.dp, c.cardBorder, RoundedCornerShape(3.dp)))
-        Text(" HA", style = T.smallBold, color = c.sub)
+        Box(Modifier.size(14.dp, 10.dp).freeCell(c.sub, c.line, 3.dp))
+        Text(" Frei", style = T.smallBold, color = c.sub)
         Box(Modifier.width(18.dp))
         Box(Modifier.size(14.dp, 10.dp).border(1.5.dp, c.exam, RoundedCornerShape(3.dp)))
         Text(" Klausur", style = T.smallBold, color = c.sub)
@@ -235,6 +240,23 @@ private fun Legend() {
         Box(Modifier.size(14.dp, 10.dp).clip(RoundedCornerShape(3.dp)).stripes(c.sub, 1.5.dp))
         Text(" Entfall", style = T.smallBold, color = c.sub)
     }
+}
+
+/** Freistunde: leicht grau mit gestricheltem Rand. */
+private fun Modifier.freeCell(line: Color, fill: Color, radius: Dp): Modifier = drawBehind {
+    val r = androidx.compose.ui.geometry.CornerRadius(radius.toPx())
+    drawRoundRect(fill.copy(alpha = 0.55f), cornerRadius = r)
+    val w = 1.2.dp.toPx()
+    drawRoundRect(
+        line.copy(alpha = 0.45f),
+        topLeft = Offset(w / 2, w / 2),
+        size = androidx.compose.ui.geometry.Size(size.width - w, size.height - w),
+        cornerRadius = r,
+        style = androidx.compose.ui.graphics.drawscope.Stroke(
+            width = w,
+            pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(), 3.dp.toPx())),
+        ),
+    )
 }
 
 private fun Modifier.stripes(color: Color, width: Dp): Modifier = drawBehind {
@@ -285,7 +307,7 @@ private fun WeekGrid(
             for (i in 0 until 5) {
                 val date = monday.plusDays(i.toLong())
                 val isToday = date.toEpochDay() == todayEpoch
-                val lessons = if (editMode) Schedule.plannedLessons(date, schedule) else Schedule.lessonsOn(date, schedule)
+                val lessons = if (editMode) Schedule.plannedLessons(date, schedule, withFree = true) else Schedule.lessonsOn(date, schedule, withFree = true)
                 val holiday = Schedule.holidayOn(date, schedule)
                 Column(Modifier.weight(1f).clip(RoundedCornerShape(14.dp)).background(if (isToday) c.accentSoft else Color.Transparent)) {
                     Column(Modifier.fillMaxWidth().height(HeaderH), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
@@ -296,8 +318,14 @@ private fun WeekGrid(
                     }
                     Box(Modifier.fillMaxWidth().height(bodyH)) {
                         if (holiday != null && !editMode) {
-                            Box(Modifier.fillMaxSize().clip(RoundedCornerShape(12.dp)).background(c.line).padding(4.dp), contentAlignment = Alignment.Center) {
-                                Text(holiday.name, style = T.smallBold.copy(fontSize = T.small.fontSize * 0.85f), color = c.sub, textAlign = TextAlign.Center)
+                            val tint = HolidayLook.color(holiday)
+                            Column(
+                                Modifier.fillMaxSize().clip(RoundedCornerShape(12.dp)).background(tint.copy(alpha = 0.12f)).padding(4.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center,
+                            ) {
+                                Icon(HolidayLook.icon(holiday), null, tint = tint, modifier = Modifier.size(22.dp))
+                                Text(holiday.name, style = T.smallBold.copy(fontSize = T.small.fontSize * 0.85f), color = c.sub, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 4.dp))
                             }
                         } else {
                             if (editMode) {
@@ -314,7 +342,11 @@ private fun WeekGrid(
                                 }
                             }
                             lessons.forEach { l ->
-                                LessonCell(l, editMode, wide, if (editMode) emptyList() else haFor(l), !editMode && examFor(l), { onLesson(l) }, onTask)
+                                if (l.isFree) {
+                                    FreeCell(l, editMode) { onLesson(l) }
+                                } else {
+                                    LessonCell(l, editMode, wide, if (editMode) emptyList() else haFor(l), !editMode && examFor(l), { onLesson(l) }, onTask)
+                                }
                             }
                         }
                     }
@@ -352,20 +384,36 @@ private fun LessonCell(l: Lesson, editMode: Boolean, wide: Boolean, tasks: List<
         )
         val roomText = listOfNotNull(l.room.ifBlank { null }, if (editMode && l.slot.weekType != WeekType.ALL) "nur ${l.slot.weekType}" else null).joinToString(" · ")
         if (roomText.isNotBlank()) Text(roomText, style = T.smallBold.copy(fontSize = T.small.fontSize * 0.8f), color = c.sub, maxLines = 1, overflow = TextOverflow.Clip)
-        Box(Modifier.weight(1f))
-        val maxChips = if (len >= 2) 2 else 1
-        tasks.take(maxChips).forEach { t ->
+        if (exam) Text("Klausur", style = T.smallBold.copy(fontSize = T.small.fontSize * 0.82f), color = c.exam, maxLines = 1)
+        // HA direkt als Text unter dem Fach (antippen zeigt sie an).
+        val maxTasks = if (len >= 2) 2 else 1
+        tasks.take(maxTasks).forEach { t ->
             Text(
-                t.title,
-                style = T.smallBold.copy(fontSize = T.small.fontSize * 0.8f, lineHeight = T.small.fontSize * 0.95f),
+                "• " + t.title,
+                style = T.small.copy(fontSize = T.small.fontSize * 0.82f, lineHeight = T.small.fontSize * 0.98f),
                 color = c.text,
                 maxLines = if (len >= 2 && tasks.size == 1) 3 else 2,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(c.card).clickable { onTask(t) }.padding(horizontal = 4.dp, vertical = 3.dp),
+                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(4.dp)).clickable { onTask(t) },
             )
         }
-        if (exam) Text("Klausur", style = T.smallBold.copy(fontSize = T.small.fontSize * 0.82f), color = c.exam, maxLines = 1)
     }
+}
+
+/** Freistunde im Raster: grau und gestrichelt, ohne Text. */
+@Composable
+private fun FreeCell(l: Lesson, editMode: Boolean, onClick: () -> Unit) {
+    val c = colors
+    val len = l.lastPeriod - l.firstPeriod + 1
+    Box(
+        Modifier
+            .offset(y = (RowH + Gap) * (l.firstPeriod - 1))
+            .fillMaxWidth()
+            .height(RowH * len + Gap * (len - 1))
+            .clip(RoundedCornerShape(12.dp))
+            .freeCell(c.sub, c.line, 12.dp)
+            .then(if (editMode) Modifier.clickable(onClick = onClick) else Modifier),
+    )
 }
 
 /** Monatskalender: Fächerfarben, Klausuren rot umrandet, Ferien hinterlegt. */
@@ -436,8 +484,17 @@ private fun MonthGrid(
                                 )
                             }
                             if (rich) {
-                                if (holiday != null && holiday.kind == HolidayKind.FEIERTAG) {
-                                    Text(holiday.name, style = T.small.copy(fontSize = T.small.fontSize * 0.8f), color = c.exam, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                if (holiday != null && (holiday.kind == HolidayKind.FEIERTAG || epoch == holiday.startDate)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                                        Icon(HolidayLook.icon(holiday), null, tint = HolidayLook.color(holiday), modifier = Modifier.size(13.dp))
+                                        Text(
+                                            holiday.name,
+                                            style = T.small.copy(fontSize = T.small.fontSize * 0.8f),
+                                            color = if (holiday.kind == HolidayKind.FEIERTAG) c.exam else c.sub,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                    }
                                 }
                                 val items = dayExams.map { e -> Triple(schedule.subjects[e.subjectId], "Klausur ${schedule.subjects[e.subjectId]?.label ?: ""}".trim(), true) } +
                                     dayTasks.map { t -> Triple(t.subjectId?.let { schedule.subjects[it] }, t.title, false) }
@@ -448,6 +505,9 @@ private fun MonthGrid(
                             } else {
                                 val bars = dayExams.map { schedule.subjects[it.subjectId]?.color to true } +
                                     dayTasks.map { t -> t.subjectId?.let { schedule.subjects[it] }?.color to false }
+                                if (bars.isEmpty() && holiday != null && inMonth) {
+                                    Icon(HolidayLook.icon(holiday), null, tint = HolidayLook.color(holiday).copy(alpha = 0.8f), modifier = Modifier.size(13.dp))
+                                }
                                 bars.take(3).forEach { (argb, isExam) ->
                                     Box(
                                         Modifier.fillMaxWidth().padding(horizontal = 2.dp).height(5.dp).clip(RoundedCornerShape(3.dp))
@@ -506,10 +566,14 @@ private fun DayPanel(
     val dayExams = exams.filter { it.date == epoch }
     val dayTasks = tasks.filter { it.dueDate == epoch }.sortedBy { it.done }
     val lessons = Schedule.lessonsOn(day, schedule)
+    val kinds by LocalContext.current.app.repo.taskKinds.collectAsStateWithLifecycle()
     GlassCard(modifier, padding = PaddingValues(start = 8.dp, end = 8.dp, top = 14.dp, bottom = 8.dp)) {
         Text(Fmt.full(day), style = T.section, color = c.text, modifier = Modifier.padding(start = 10.dp, bottom = 6.dp))
         if (holiday != null) {
-            Text(holiday.name, style = T.label, color = if (holiday.kind == HolidayKind.FEIERTAG) c.exam else c.sub, modifier = Modifier.padding(start = 10.dp, bottom = 6.dp))
+            Row(Modifier.padding(start = 10.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Icon(HolidayLook.icon(holiday), null, tint = HolidayLook.color(holiday), modifier = Modifier.size(18.dp))
+                Text(holiday.name, style = T.label, color = if (holiday.kind == HolidayKind.FEIERTAG) c.exam else c.sub)
+            }
         }
         dayExams.forEach { e ->
             val s = schedule.subjects[e.subjectId]
@@ -519,11 +583,12 @@ private fun DayPanel(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                SubjectDot(subjectColor(s?.color))
+                SubjectIcon(s, 18.dp)
                 Column(Modifier.weight(1f)) {
                     Text(listOfNotNull(e.type, s?.name, e.title.ifBlank { null }).joinToString(" · "), style = T.body, color = c.text, maxLines = 2)
                     e.period?.let { Text("$it. Std", style = T.small, color = c.sub) }
                 }
+                Icon(Sym.Pen, "Klausur", tint = c.exam, modifier = Modifier.size(18.dp))
             }
         }
         dayTasks.forEach { t ->
@@ -533,11 +598,13 @@ private fun DayPanel(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                SubjectDot(subjectColor(s?.color))
+                SubjectIcon(s, 18.dp)
+                val kind = kindOf(t.type, kinds)
                 Column(Modifier.weight(1f)) {
                     Text(t.title, style = T.body.copy(textDecoration = if (t.done) TextDecoration.LineThrough else null), color = c.text, maxLines = 2)
-                    Text(listOfNotNull(s?.name, "HA").joinToString(" · "), style = T.small, color = c.sub)
+                    Text(listOfNotNull(s?.name, kind.name).joinToString(" · "), style = T.small, color = c.sub)
                 }
+                Icon(KindIcons.of(kind.icon), kind.name, tint = c.sub, modifier = Modifier.size(18.dp))
             }
         }
         if (dayExams.isEmpty() && dayTasks.isEmpty()) {

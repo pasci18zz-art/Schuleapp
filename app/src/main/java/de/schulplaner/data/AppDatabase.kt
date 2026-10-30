@@ -14,7 +14,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         Task::class, Exam::class, ExamTopic::class, SubjectNote::class, Attachment::class,
         Setting::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -23,7 +23,7 @@ abstract class AppDatabase : RoomDatabase() {
     companion object {
         fun create(context: Context): AppDatabase =
             Room.databaseBuilder(context, AppDatabase::class.java, "schulplaner.db")
-                .addMigrations(MIGRATION_1_2)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                 .build()
 
         /** Version 2: Notizbuch-Link pro Fach, Art der freien Tage. Bestehende Daten bleiben erhalten. */
@@ -31,6 +31,13 @@ abstract class AppDatabase : RoomDatabase() {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE subjects ADD COLUMN notesLink TEXT NOT NULL DEFAULT ''")
                 db.execSQL("ALTER TABLE holidays ADD COLUMN kind TEXT NOT NULL DEFAULT 'FREI'")
+            }
+        }
+
+        /** Version 3: Symbol pro Fach. */
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE subjects ADD COLUMN icon TEXT NOT NULL DEFAULT ''")
             }
         }
     }

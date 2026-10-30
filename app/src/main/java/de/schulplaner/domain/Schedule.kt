@@ -40,6 +40,8 @@ data class Lesson(
     val override: LessonOverride?,
 ) {
     val periodLabel: String = if (firstPeriod == lastPeriod) "$firstPeriod." else "$firstPeriod.–$lastPeriod."
+    val isFree: Boolean get() = slot.isFree
+    val length: Int get() = lastPeriod - firstPeriod + 1
     val startDateTime: LocalDateTime? get() = start?.let { date.atTime(it) }
     val endDateTime: LocalDateTime? get() = end?.let { date.atTime(it) }
 }
@@ -64,14 +66,14 @@ object Schedule {
     fun slotMatches(slot: LessonSlot, weekType: String?): Boolean =
         slot.weekType == WeekType.ALL || weekType == null || slot.weekType == weekType
 
-    /** Stunden laut Plan für ein Datum, ohne Ferien-Prüfung. */
-    fun plannedLessons(date: LocalDate, data: ScheduleData): List<Lesson> {
+    /** Stunden laut Plan für ein Datum, ohne Ferien-Prüfung. Freistunden nur mit [withFree]. */
+    fun plannedLessons(date: LocalDate, data: ScheduleData, withFree: Boolean = false): List<Lesson> {
         val dow = date.dayOfWeek.value
         if (dow > 5) return emptyList()
         val wt = weekTypeOf(date, data)
         val epoch = date.toEpochDay()
         return data.slots
-            .filter { it.dayOfWeek == dow && slotMatches(it, wt) }
+            .filter { it.dayOfWeek == dow && slotMatches(it, wt) && (withFree || !it.isFree) }
             .sortedBy { it.period }
             .map { slot ->
                 val ov = data.overrides[LessonOverride.idFor(slot.id, epoch)]
@@ -94,8 +96,8 @@ object Schedule {
     }
 
     /** Stunden an einem Datum; leer am Wochenende und in den Ferien. */
-    fun lessonsOn(date: LocalDate, data: ScheduleData): List<Lesson> =
-        if (holidayOn(date, data) != null) emptyList() else plannedLessons(date, data)
+    fun lessonsOn(date: LocalDate, data: ScheduleData, withFree: Boolean = false): List<Lesson> =
+        if (holidayOn(date, data) != null) emptyList() else plannedLessons(date, data, withFree)
 
     fun currentLesson(now: LocalDateTime, data: ScheduleData): Lesson? =
         lessonsOn(now.toLocalDate(), data).firstOrNull { l ->
@@ -125,6 +127,18 @@ object Schedule {
             d = d.plusDays(1)
         }
         return null
+    }
+
+    /** Die nächsten [count] Stunden des Fachs nach [after] (eine pro Tag). */
+    fun nextOccurrences(subjectId: String, after: LocalDate, data: ScheduleData, count: Int, maxDays: Int = 120): List<Lesson> {
+        val out = mutableListOf<Lesson>()
+        var d = after.plusDays(1)
+        repeat(maxDays) {
+            lessonsOn(d, data).firstOrNull { it.slot.subjectId == subjectId && !it.cancelled }?.let { out += it }
+            if (out.size >= count) return out
+            d = d.plusDays(1)
+        }
+        return out
     }
 
     /** Erster Tag ab [from] (inklusive), an dem Unterricht ist. */

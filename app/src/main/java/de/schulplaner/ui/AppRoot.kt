@@ -97,6 +97,7 @@ object Routes {
     const val SET_TERMS = "settings/terms"
     const val SET_PERIODS = "settings/periods"
     const val SET_HOLIDAYS = "settings/holidays"
+    const val SET_KINDS = "settings/kinds"
 
     fun exam(id: String) = "exam/$id"
     fun subjectGrades(subjectId: String, termId: String) = "grades/$subjectId/$termId"
@@ -178,6 +179,7 @@ fun AppRoot() {
                 composable(Routes.SET_TERMS) { Centered { TermsScreen() } }
                 composable(Routes.SET_PERIODS) { Centered { PeriodsScreen() } }
                 composable(Routes.SET_HOLIDAYS) { Centered { HolidaysScreen() } }
+                composable(Routes.SET_KINDS) { Centered { de.schulplaner.ui.settings.TaskKindsScreen() } }
             }
             UndoBar(undo, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 84.dp))
             BottomNav(navigator, route, Modifier.align(Alignment.BottomCenter))

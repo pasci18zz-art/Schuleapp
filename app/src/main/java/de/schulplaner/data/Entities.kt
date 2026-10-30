@@ -30,6 +30,8 @@ data class Subject(
     val archived: Boolean = false,
     /** Früher Notizbuch-Knopf pro Fach – wird nicht mehr genutzt, bleibt aber für bestehende Datenbanken. */
     val notesLink: String = "",
+    /** Symbol des Fachs (Schlüssel aus SubjectIcons), leer = automatisch nach dem Namen. */
+    val icon: String = "",
     val updatedAt: Long = 0,
     val deleted: Boolean = false,
     @Transient val dirty: Boolean = true,
@@ -111,7 +113,10 @@ object WeekType {
     const val B = "B"
 }
 
-/** Eine Stunde im Wochenplan. length = Anzahl 45-Minuten-Blöcke (Doppelstunde = 2). */
+/**
+ * Eine Stunde im Wochenplan. length = Anzahl 45-Minuten-Blöcke (Doppelstunde = 2).
+ * Freistunden haben subjectId = [FREE].
+ */
 @Entity(tableName = "lesson_slots")
 @Serializable
 data class LessonSlot(
@@ -125,7 +130,13 @@ data class LessonSlot(
     val updatedAt: Long = 0,
     val deleted: Boolean = false,
     @Transient val dirty: Boolean = true,
-)
+) {
+    val isFree: Boolean get() = subjectId == FREE
+
+    companion object {
+        const val FREE = "__frei"
+    }
+}
 
 /** Uhrzeiten einer Stunde, Minuten seit Mitternacht. id = "p<nummer>". */
 @Entity(tableName = "period_times")
@@ -167,11 +178,24 @@ object TaskType {
     const val HOMEWORK = "HA"
     const val EXTRA = "EXTRA"
     const val OTHER = "OTHER"
+    const val TALK = "REFERAT"
+}
 
-    fun label(type: String) = when (type) {
-        HOMEWORK -> "HA"
-        EXTRA -> "Zusatz"
-        else -> "Sonst."
+/** Aufgabenart (selbst einstellbar, wird als Einstellung synchronisiert). */
+@Serializable
+data class TaskKind(
+    val id: String = newId(),
+    val name: String = "",
+    /** Schlüssel aus KindIcons. */
+    val icon: String = "dots",
+) {
+    companion object {
+        val defaults = listOf(
+            TaskKind(TaskType.HOMEWORK, "Hausaufgabe", "house"),
+            TaskKind(TaskType.TALK, "Referat", "presentation"),
+            TaskKind(TaskType.EXTRA, "Zusatz", "star"),
+            TaskKind(TaskType.OTHER, "Sonstiges", "dots"),
+        )
     }
 }
 
@@ -212,6 +236,7 @@ data class Exam(
     @Transient val dirty: Boolean = true,
 )
 
+/** Thema einer Klausur oder Unterpunkt einer Aufgabe (examId = Klausur- bzw. Aufgaben-ID). */
 @Entity(tableName = "exam_topics")
 @Serializable
 data class ExamTopic(
@@ -294,4 +319,6 @@ object SettingKeys {
     const val AB_REFERENCE = "ab_reference_monday"
     const val SEEDED = "seeded"
     const val HESSEN_HOLIDAYS = "hessen_ferien_v1"
+    /** Liste der Aufgabenarten als JSON. */
+    const val TASK_KINDS = "task_kinds"
 }

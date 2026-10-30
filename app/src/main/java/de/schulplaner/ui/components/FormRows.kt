@@ -158,16 +158,23 @@ fun FormValueRow(label: String, value: String, onClick: () -> Unit, divider: Boo
 
 /** Kleiner Segment-Umschalter für Formularzeilen. */
 @Composable
-fun <K> MiniSegmented(options: List<Pair<K, String>>, selected: K, onSelect: (K) -> Unit, modifier: Modifier = Modifier) {
+fun <K> MiniSegmented(
+    options: List<Pair<K, String>>,
+    selected: K,
+    onSelect: (K) -> Unit,
+    modifier: Modifier = Modifier,
+    icons: List<androidx.compose.ui.graphics.vector.ImageVector?>? = null,
+) {
     val c = colors
     SlidingSegments(
         options, selected, onSelect,
-        modifier.clip(RoundedCornerShape(12.dp)).background(c.line).padding(3.dp),
+        modifier.clip(RoundedCornerShape(12.dp)).background(c.line.copy(alpha = 0.5f)).padding(3.dp),
         itemHeight = 32.dp, gap = 3.dp, radius = 10.dp,
-        indicator = if (c.isDark) Color(0xFF2E323C) else Color.White,
+        indicator = if (c.isDark) Color(0xFF3A3F4B) else Color.White,
         activeText = c.text, inactiveText = c.sub,
         textStyle = T.label,
         indicatorShadow = !c.isDark,
+        icons = icons,
     )
 }
 

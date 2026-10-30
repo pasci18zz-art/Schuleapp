@@ -85,13 +85,15 @@ fun AppSheet(onDismiss: () -> Unit, content: @Composable ColumnScope.(close: () 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = state,
-        containerColor = c.sheet,
+        containerColor = c.sheetGlass,
         contentColor = c.text,
+        scrimColor = Color.Black.copy(alpha = if (c.isDark) 0.35f else 0.18f),
         shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp),
         dragHandle = {
-            Box(Modifier.padding(top = 10.dp, bottom = 6.dp).size(width = 40.dp, height = 4.dp).clip(RoundedCornerShape(50)).background(c.line))
+            Box(Modifier.padding(top = 10.dp, bottom = 6.dp).size(width = 40.dp, height = 4.dp).clip(RoundedCornerShape(50)).background(c.sub.copy(alpha = 0.35f)))
         },
     ) {
+        BlurBehind()
         Column(
             Modifier
                 .fillMaxWidth()
@@ -107,12 +109,64 @@ fun AppSheet(onDismiss: () -> Unit, content: @Composable ColumnScope.(close: () 
     }
 }
 
-/** Kopfzeile eines Sheets: Titel links, Löschen/Speichern rechts. */
+/**
+ * Frosted Glass wie bei Samsung: Alles hinter dem Fenster (Sheet, Schnell-HA) wird weichgezeichnet.
+ * Funktioniert ab Android 12, wenn das Gerät Fenster-Unschärfe unterstützt; sonst passiert einfach nichts.
+ */
 @Composable
-fun SheetHeader(title: String, onSave: (() -> Unit)?, onDelete: (() -> Unit)? = null, saveLabel: String = "Speichern") {
+fun BlurBehind(radius: androidx.compose.ui.unit.Dp = 26.dp) {
+    val view = androidx.compose.ui.platform.LocalView.current
+    val px = with(androidx.compose.ui.platform.LocalDensity.current) { radius.roundToPx() }
+    androidx.compose.runtime.DisposableEffect(view) {
+        val apply = Runnable {
+            runCatching {
+                if (android.os.Build.VERSION.SDK_INT < 31) return@runCatching
+                val wm = view.context.getSystemService(android.view.WindowManager::class.java) ?: return@runCatching
+                if (!wm.isCrossWindowBlurEnabled) return@runCatching
+                var p: android.view.ViewParent? = view.parent
+                var window: android.view.Window? = null
+                while (p != null) {
+                    if (p is androidx.compose.ui.window.DialogWindowProvider) {
+                        window = p.window
+                        break
+                    }
+                    p = p.parent
+                }
+                val flag = android.view.WindowManager.LayoutParams.FLAG_BLUR_BEHIND
+                if (window != null) {
+                    window.addFlags(flag)
+                    window.attributes = window.attributes.also { it.blurBehindRadius = px }
+                } else {
+                    val root = view.rootView
+                    val lp = root.layoutParams as? android.view.WindowManager.LayoutParams ?: return@runCatching
+                    lp.flags = lp.flags or flag
+                    lp.blurBehindRadius = px
+                    wm.updateViewLayout(root, lp)
+                }
+                Unit
+            }
+        }
+        view.post(apply)
+        onDispose { view.removeCallbacks(apply) }
+    }
+}
+
+/** Kopfzeile eines Sheets: Titel links, Löschen/Speichern rechts, davor optional weitere Knöpfe (z. B. Anhang). */
+@Composable
+fun SheetHeader(
+    title: String,
+    onSave: (() -> Unit)?,
+    onDelete: (() -> Unit)? = null,
+    saveLabel: String = "Speichern",
+    extra: (@Composable () -> Unit)? = null,
+) {
     val c = colors
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(title, style = T.title.copy(fontSize = T.section.fontSize * 1.4f), color = c.text, modifier = Modifier.weight(1f))
+        if (extra != null) {
+            extra()
+            HSpace(8.dp)
+        }
         if (onDelete != null) {
             SoftIconButton(Ic.Trash, "Löschen", onDelete, tint = c.warn, background = c.warnSoft)
             HSpace(8.dp)
@@ -218,15 +272,15 @@ fun FormLabel(text: String) {
     Text(text, style = T.label, color = colors.sub, modifier = Modifier.padding(start = 4.dp))
 }
 
-/** Fachauswahl als waagerechte Chip-Liste. */
+/** Fachauswahl als waagerechte Chip-Liste (mit Fach-Symbolen). */
 @Composable
-fun SubjectPicker(subjects: List<Subject>, selectedId: String?, onSelect: (String?) -> Unit, allowNone: Boolean = true) {
+fun SubjectPicker(subjects: List<Subject>, selectedId: String?, onSelect: (String?) -> Unit, allowNone: Boolean = true, noneLabel: String = "Ohne Fach") {
     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(horizontal = 2.dp)) {
         if (allowNone) {
-            item { ChoiceChip("Ohne Fach", selectedId == null, { onSelect(null) }) }
+            item { ChoiceChip(noneLabel, selectedId == null, { onSelect(null) }) }
         }
         items(subjects, key = { it.id }) { s ->
-            ChoiceChip(s.name, selectedId == s.id, { onSelect(s.id) }, leading = { SubjectDot(subjectColor(s.color), 9.dp) })
+            ChoiceChip(s.name, selectedId == s.id, { onSelect(s.id) }, leading = { SubjectIcon(s, 16.dp) })
         }
     }
 }
@@ -317,18 +371,15 @@ fun ConfirmDialog(title: String, text: String, confirm: String = "Löschen", onD
     )
 }
 
-/**
- * Fotos und Dateien zu einem Eintrag: anzeigen, öffnen, aufnehmen, aus Galerie/Dateien hinzufügen.
- * Langes Drücken auf ein Element löscht es.
- */
+/** Startet Kamera, Galerie oder Dateiauswahl und hängt das Ergebnis an den Eintrag. */
+class AttachmentPicker(val camera: () -> Unit, val gallery: () -> Unit, val file: () -> Unit)
+
 @Composable
-fun AttachmentStrip(ownerType: String, ownerId: String, attachments: List<Attachment>, allowFiles: Boolean = true, editable: Boolean = true) {
-    val c = colors
+fun rememberAttachmentPicker(ownerType: String, ownerId: String): AttachmentPicker {
     val ctx = LocalContext.current
     val repo = ctx.app.repo
     val appScope = ctx.app.appScope
     var pendingCamera by rememberSaveable { mutableStateOf<String?>(null) }
-    var toDelete by remember { mutableStateOf<Attachment?>(null) }
 
     val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
         val path = pendingCamera
@@ -351,6 +402,60 @@ fun AttachmentStrip(ownerType: String, ownerId: String, attachments: List<Attach
             }
         }
     }
+    return AttachmentPicker(
+        camera = {
+            val (file, uri) = repo.files.newCameraTarget()
+            pendingCamera = file.absolutePath
+            camera.launch(uri)
+        },
+        gallery = { gallery.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+        file = { document.launch(arrayOf("*/*")) },
+    )
+}
+
+/** Kleines "+" (z. B. oben rechts im Formular): Foto aufnehmen, aus der Galerie oder Datei anhängen. */
+@Composable
+fun AttachButton(ownerType: String, ownerId: String, allowFiles: Boolean = true) {
+    val c = colors
+    val picker = rememberAttachmentPicker(ownerType, ownerId)
+    var open by remember { mutableStateOf(false) }
+    Box {
+        SoftIconButton(Ic.Plus, "Anhang hinzufügen", { open = true })
+        androidx.compose.material3.DropdownMenu(
+            expanded = open,
+            onDismissRequest = { open = false },
+            shape = RoundedCornerShape(18.dp),
+            containerColor = c.sheetGlass,
+            shadowElevation = 8.dp,
+        ) {
+            MenuEntry(Ic.Camera, "Foto aufnehmen") { open = false; picker.camera() }
+            MenuEntry(Ic.ImagePlus, "Aus Galerie") { open = false; picker.gallery() }
+            if (allowFiles) MenuEntry(Ic.Clip, "Datei") { open = false; picker.file() }
+        }
+    }
+}
+
+@Composable
+fun MenuEntry(icon: ImageVector, label: String, onClick: () -> Unit) {
+    val c = colors
+    androidx.compose.material3.DropdownMenuItem(
+        text = { Text(label, style = T.body, color = c.text) },
+        leadingIcon = { Icon(icon, null, tint = c.accent, modifier = Modifier.size(19.dp)) },
+        onClick = onClick,
+    )
+}
+
+/**
+ * Fotos und Dateien zu einem Eintrag anzeigen und öffnen. Langes Drücken löscht (wenn [editable]).
+ * Hinzufügen geht über [AttachButton].
+ */
+@Composable
+fun AttachmentStrip(attachments: List<Attachment>, editable: Boolean = true) {
+    val c = colors
+    val ctx = LocalContext.current
+    val repo = ctx.app.repo
+    var toDelete by remember { mutableStateOf<Attachment?>(null) }
+    if (attachments.isEmpty()) return
 
     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         items(attachments, key = { it.id }) { a ->
@@ -373,42 +478,12 @@ fun AttachmentStrip(ownerType: String, ownerId: String, attachments: List<Attach
                 }
             }
         }
-        if (editable) item {
-            AddTile(Ic.Camera, "Foto aufnehmen") {
-                val (file, uri) = repo.files.newCameraTarget()
-                pendingCamera = file.absolutePath
-                camera.launch(uri)
-            }
-        }
-        if (editable) item {
-            AddTile(Ic.ImagePlus, "Aus Galerie wählen") {
-                gallery.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-            }
-        }
-        if (allowFiles && editable) {
-            item { AddTile(Ic.Clip, "Datei anhängen") { document.launch(arrayOf("*/*")) } }
-        }
     }
 
     toDelete?.let { a ->
         ConfirmDialog("Anhang löschen?", "\"${a.displayName}\" wird entfernt.", onDismiss = { toDelete = null }) {
             repo.deleteAttachment(a)
         }
-    }
-}
-
-@Composable
-private fun AddTile(icon: ImageVector, description: String, onClick: () -> Unit) {
-    val c = colors
-    Box(
-        Modifier
-            .size(76.dp)
-            .pressable(onClick)
-            .clip(RoundedCornerShape(18.dp))
-            .border(2.dp, c.line, RoundedCornerShape(18.dp)),
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(icon, description, tint = c.accent, modifier = Modifier.size(24.dp))
     }
 }
 

@@ -95,6 +95,7 @@ fun GradeEditSheet(initial: Grade, isNew: Boolean, subjectSelectable: Boolean, o
             } else {
                 null
             },
+            extra = { de.schulplaner.ui.components.AttachButton(OwnerType.GRADE, grade.id) },
         )
         if (subjectSelectable) {
             SubjectPicker(subjects, grade.subjectId.ifBlank { null }, { id -> if (id != null) grade = grade.copy(subjectId = id, categoryId = "") }, allowNone = false)
@@ -122,7 +123,7 @@ fun GradeEditSheet(initial: Grade, isNew: Boolean, subjectSelectable: Boolean, o
                 )
             }
         }
-        AttachmentStrip(OwnerType.GRADE, grade.id, attachments.filter { it.ownerId == grade.id })
+        AttachmentStrip(attachments.filter { it.ownerId == grade.id })
     }
 
     if (showDate) {

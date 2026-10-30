@@ -117,7 +117,7 @@ fun ExamDetailScreen(id: String) {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                Box(Modifier.size(8.dp).clip(RoundedCornerShape(4.dp)).background(color))
+                de.schulplaner.ui.components.SubjectIcon(subject, 15.dp)
                 Text(listOfNotNull(subject?.name, if (subject?.isLk == true) "LK" else null).joinToString(" · "), style = T.smallBold, color = c.text)
             }
             Text(exam.title.ifBlank { exam.type }, style = T.title.copy(fontSize = T.hero.fontSize * 0.85f), color = c.text, modifier = Modifier.padding(top = 10.dp, bottom = 6.dp))
@@ -172,9 +172,13 @@ fun ExamDetailScreen(id: String) {
         }
 
         GlassCard(padding = PaddingValues(16.dp)) {
-            Text("Themen & Fotos", style = T.section, color = c.text, modifier = Modifier.padding(bottom = 10.dp))
-            AttachmentStrip(OwnerType.EXAM, exam.id, attachments.filter { it.ownerId == exam.id }, allowFiles = true)
-            Box(Modifier.height(12.dp))
+            Row(Modifier.fillMaxWidth().padding(bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("Themen & Fotos", style = T.section, color = c.text, modifier = Modifier.weight(1f))
+                de.schulplaner.ui.components.AttachButton(OwnerType.EXAM, exam.id)
+            }
+            val files = attachments.filter { it.ownerId == exam.id }
+            AttachmentStrip(files)
+            if (files.isNotEmpty()) Box(Modifier.height(12.dp))
             Field(notes, { notes = it }, "Themen / Notizen (z. B. Buch S. 140–188)", singleLine = false, minLines = 3)
             if (notes != exam.topicsText) {
                 PrimaryButton("Speichern", { repo.saveExam(exam.copy(topicsText = notes)) }, Modifier.padding(top = 10.dp).fillMaxWidth())

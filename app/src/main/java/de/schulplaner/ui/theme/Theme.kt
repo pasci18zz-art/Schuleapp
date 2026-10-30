@@ -36,6 +36,12 @@ data class SchulColors(
     val good: Color,
     val nav: Color,
     val sheet: Color,
+    /** Durchscheinende Variante für Sheets und Menüs (Frosted Glass). */
+    val sheetGlass: Color,
+    /** Hintergrund von Umschaltern (sehr durchsichtig). */
+    val glassTrack: Color,
+    /** Heller Glanz oben auf Glasflächen. */
+    val glassShine: Color,
     val snackbar: Color,
     /** Weiche, langsam treibende Farbflächen im Hintergrund. */
     val orb1: Color,
@@ -51,8 +57,8 @@ data class SchulColors(
 val LightSchulColors = SchulColors(
     isDark = false,
     bg = Color(0xFFF4F5F9),
-    card = Color(0xE6FFFFFF),
-    cardBorder = Color(0xFFEBEDF1),
+    card = Color(0xB3FFFFFF),
+    cardBorder = Color(0xCCFFFFFF),
     shadow = Color(0x14101828),
     text = Color(0xFF111418),
     sub = Color(0xFF5B6270),
@@ -66,10 +72,13 @@ val LightSchulColors = SchulColors(
     good = Color(0xFF4E9A3E),
     nav = Color.White,
     sheet = Color.White,
+    sheetGlass = Color(0xD9FFFFFF),
+    glassTrack = Color(0x4DFFFFFF),
+    glassShine = Color(0x59FFFFFF),
     snackbar = Color(0xFF1C1F26),
-    orb1 = Color(0x4D8C9BFF),
-    orb2 = Color(0x40FFB98F),
-    orb3 = Color(0x385FD3B5),
+    orb1 = Color(0x6B8C9BFF),
+    orb2 = Color(0x5CFFB98F),
+    orb3 = Color(0x525FD3B5),
     heroStart = Color(0xFF4F5BD5),
     heroEnd = Color(0xFF8A5CE0),
     tint = 0.16f,
@@ -78,8 +87,8 @@ val LightSchulColors = SchulColors(
 val DarkSchulColors = SchulColors(
     isDark = true,
     bg = Color(0xFF0F1115),
-    card = Color(0xE6181B21),
-    cardBorder = Color(0xFF262A33),
+    card = Color(0xB3181B21),
+    cardBorder = Color(0x26FFFFFF),
     shadow = Color(0x00000000),
     text = Color(0xFFEEF0F4),
     sub = Color(0xFF9AA1AF),
@@ -93,10 +102,13 @@ val DarkSchulColors = SchulColors(
     good = Color(0xFF8BD17A),
     nav = Color(0xFF1C1F26),
     sheet = Color(0xFF181B21),
+    sheetGlass = Color(0xD9181B21),
+    glassTrack = Color(0x1FFFFFFF),
+    glassShine = Color(0x14FFFFFF),
     snackbar = Color(0xFF2A2E37),
-    orb1 = Color(0x4D3A46C8),
-    orb2 = Color(0x2EC25A2E),
-    orb3 = Color(0x2E1F9E86),
+    orb1 = Color(0x6B3A46C8),
+    orb2 = Color(0x45C25A2E),
+    orb3 = Color(0x451F9E86),
     heroStart = Color(0xFF3D47B8),
     heroEnd = Color(0xFF6A3FB8),
     tint = 0.24f,
@@ -104,17 +116,17 @@ val DarkSchulColors = SchulColors(
 
 val LocalSchulColors = staticCompositionLocalOf { LightSchulColors }
 
-val Jakarta = FontFamily(
-    Font(R.font.jakarta_regular, FontWeight.Normal),
-    Font(R.font.jakarta_medium, FontWeight.Medium),
-    Font(R.font.jakarta_semibold, FontWeight.SemiBold),
-    Font(R.font.jakarta_bold, FontWeight.Bold),
-    Font(R.font.jakarta_extrabold, FontWeight.ExtraBold),
+val AppFont = FontFamily(
+    Font(R.font.nunito_regular, FontWeight.Normal),
+    Font(R.font.nunito_medium, FontWeight.Medium),
+    Font(R.font.nunito_semibold, FontWeight.SemiBold),
+    Font(R.font.nunito_bold, FontWeight.Bold),
+    Font(R.font.nunito_extrabold, FontWeight.ExtraBold),
 )
 
 private fun typography(): Typography {
     val base = Typography()
-    fun TextStyle.j() = copy(fontFamily = Jakarta)
+    fun TextStyle.j() = copy(fontFamily = AppFont)
     return Typography(
         displayLarge = base.displayLarge.j(),
         displayMedium = base.displayMedium.j(),
@@ -136,16 +148,16 @@ private fun typography(): Typography {
 
 /** Feste Textstile der App, angelehnt an die Entwürfe. */
 object T {
-    val hero = TextStyle(fontFamily = Jakarta, fontWeight = FontWeight.ExtraBold, fontSize = 34.sp, letterSpacing = (-0.6).sp)
-    val title = TextStyle(fontFamily = Jakarta, fontWeight = FontWeight.ExtraBold, fontSize = 30.sp, letterSpacing = (-0.5).sp)
-    val section = TextStyle(fontFamily = Jakarta, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-    val bigNumber = TextStyle(fontFamily = Jakarta, fontWeight = FontWeight.ExtraBold, fontSize = 50.sp, letterSpacing = (-1.2).sp)
-    val body = TextStyle(fontFamily = Jakarta, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
-    val bodyRegular = TextStyle(fontFamily = Jakarta, fontWeight = FontWeight.Normal, fontSize = 15.sp)
-    val small = TextStyle(fontFamily = Jakarta, fontWeight = FontWeight.Medium, fontSize = 12.sp)
-    val smallBold = TextStyle(fontFamily = Jakarta, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-    val label = TextStyle(fontFamily = Jakarta, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-    val overline = TextStyle(fontFamily = Jakarta, fontWeight = FontWeight.Bold, fontSize = 12.sp, letterSpacing = 0.7.sp)
+    val hero = TextStyle(fontFamily = AppFont, fontWeight = FontWeight.ExtraBold, fontSize = 34.sp, letterSpacing = (-0.6).sp)
+    val title = TextStyle(fontFamily = AppFont, fontWeight = FontWeight.ExtraBold, fontSize = 30.sp, letterSpacing = (-0.5).sp)
+    val section = TextStyle(fontFamily = AppFont, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+    val bigNumber = TextStyle(fontFamily = AppFont, fontWeight = FontWeight.ExtraBold, fontSize = 50.sp, letterSpacing = (-1.2).sp)
+    val body = TextStyle(fontFamily = AppFont, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+    val bodyRegular = TextStyle(fontFamily = AppFont, fontWeight = FontWeight.Normal, fontSize = 15.sp)
+    val small = TextStyle(fontFamily = AppFont, fontWeight = FontWeight.Medium, fontSize = 12.sp)
+    val smallBold = TextStyle(fontFamily = AppFont, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+    val label = TextStyle(fontFamily = AppFont, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+    val overline = TextStyle(fontFamily = AppFont, fontWeight = FontWeight.Bold, fontSize = 12.sp, letterSpacing = 0.7.sp)
 }
 
 @Composable

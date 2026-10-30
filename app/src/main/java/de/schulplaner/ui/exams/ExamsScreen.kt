@@ -109,10 +109,13 @@ private fun ExamCard(e: Exam, subject: Subject?, topics: List<ExamTopic>, grade:
     val ts = topics.filter { it.examId == e.id }
     val progress = if (ts.isEmpty()) 0f else ts.count { it.done }.toFloat() / ts.size
     val color = subjectColor(subject?.color)
+    // Je näher die Klausur, desto röter die Tage-Kachel.
+    val urgent = de.schulplaner.ui.components.urgencyColor(de.schulplaner.ui.components.examUrgency(days))
+    val boxColor = if (!dim && grade == null) urgent.copy(alpha = 0.2f) else color.copy(alpha = c.tint)
     GlassCard(Modifier.fillMaxWidth().alpha(if (dim) 0.75f else 1f), padding = PaddingValues(14.dp), onClick = onClick) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             Column(
-                Modifier.size(56.dp).clip(RoundedCornerShape(19.dp)).background(color.copy(alpha = c.tint)),
+                Modifier.size(56.dp).clip(RoundedCornerShape(19.dp)).background(boxColor),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
             ) {
@@ -120,7 +123,7 @@ private fun ExamCard(e: Exam, subject: Subject?, topics: List<ExamTopic>, grade:
                     Text("${grade.points}", style = T.section.copy(fontSize = T.section.fontSize * 1.25f), color = c.text)
                     Text("P", style = T.small, color = c.sub)
                 } else if (!dim) {
-                    Text("$days", style = T.section.copy(fontSize = T.section.fontSize * 1.25f), color = c.text)
+                    Text("$days", style = T.section.copy(fontSize = T.section.fontSize * 1.25f), color = urgent)
                     Text(if (days == 1L) "Tag" else "Tage", style = T.small, color = c.sub)
                 } else {
                     Text("–", style = T.section, color = c.sub)
@@ -128,6 +131,7 @@ private fun ExamCard(e: Exam, subject: Subject?, topics: List<ExamTopic>, grade:
             }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    de.schulplaner.ui.components.SubjectIcon(subject, 17.dp)
                     Text(subject?.name ?: "?", style = T.body, color = c.text, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                     if (e.type != "Klausur") Pill(e.type, c.line, c.sub)
                 }

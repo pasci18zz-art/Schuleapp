@@ -50,7 +50,7 @@ wandert das Datum mit.
 
 ## Technik
 
-- Kotlin, Jetpack Compose, Material 3 (eigenes Farbschema), Schrift „Plus Jakarta Sans“ (OFL, in `licenses/`)
+- Kotlin, Jetpack Compose, Material 3 (eigenes Farbschema), Schrift „Nunito“ (OFL, in `licenses/`)
 - Room-Datenbank; jede Tabelle hat `id` (UUID), `updatedAt`, `deleted`, `dirty` → bereit für Sync
 - Anhänge liegen im App-Speicher, Fotos werden verkleinert (max. 2400 px, JPEG)
 - Projektstruktur: `data/` (Datenbank, Repository), `domain/` (Stundenplan- und Notenlogik), `ui/` (Screens), `quick/` (Kachel)

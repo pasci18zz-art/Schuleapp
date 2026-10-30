@@ -65,6 +65,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -147,7 +148,7 @@ private fun Modifier.combinedClickableCompat(source: MutableInteractionSource, o
         Modifier.combinedClickable(interactionSource = source, indication = null, onClick = onClick, onLongClick = onLongClick),
     )
 
-/** Kachel: weiß (bzw. dunkelgrau) mit feinem Rand. */
+/** Kachel aus mattem Glas: leicht durchsichtig, damit der Hintergrund durchschimmert. */
 @Composable
 fun GlassCard(
     modifier: Modifier = Modifier,
@@ -164,6 +165,7 @@ fun GlassCard(
             .shadow(if (c.isDark) 0.dp else 1.5.dp, shape, ambientColor = c.shadow, spotColor = c.shadow)
             .clip(shape)
             .background(c.card)
+            .background(Brush.verticalGradient(listOf(c.glassShine, Color.Transparent), endY = 260f))
             .border(1.dp, c.cardBorder, shape)
             .padding(padding),
         content = content,
@@ -314,18 +316,19 @@ fun <K> Segmented(options: List<Pair<K, String>>, selected: K, onSelect: (K) -> 
         modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(22.dp))
-            .background(c.card)
+            .background(c.glassTrack)
             .border(1.dp, c.cardBorder, RoundedCornerShape(22.dp))
             .padding(4.dp),
         itemHeight = 38.dp, gap = 4.dp, radius = 18.dp,
         indicator = c.accent, activeText = c.accentInk, inactiveText = c.sub,
         textStyle = T.label.copy(fontSize = T.body.fontSize * 0.93f),
+        indicatorShadow = true,
     )
 }
 
 /**
- * Umschalter mit gleitender Markierung (wie in der Navigationsleiste).
- * Die Markierung federt zum gewählten Eintrag, die Schriftfarbe blendet mit.
+ * Umschalter mit gleitender Glas-Markierung (wie "Liquid Glass"): Die Markierung ist zu 90 % deckend,
+ * hat oben einen hellen Glanz und dehnt sich beim Gleiten kurz wie ein Tropfen.
  */
 @Composable
 fun <K> SlidingSegments(
@@ -341,19 +344,31 @@ fun <K> SlidingSegments(
     inactiveText: Color,
     textStyle: androidx.compose.ui.text.TextStyle,
     indicatorShadow: Boolean = false,
+    icons: List<ImageVector?>? = null,
 ) {
+    val c = colors
     val index = options.indexOfFirst { it.first == selected }.coerceAtLeast(0)
-    val pos by animateFloatAsState(index.toFloat(), spring(dampingRatio = 0.72f, stiffness = 420f), label = "seg-pos")
+    val pos by animateFloatAsState(index.toFloat(), spring(dampingRatio = 0.66f, stiffness = 380f), label = "seg-pos")
+    val shape = RoundedCornerShape(radius)
+    val shine = if (c.isDark) 0.16f else 0.45f
+    val shadowColor = if (indicator.luminance() > 0.7f) Color(0x55101828) else indicator
     BoxWithConstraints(modifier) {
         val n = options.size.coerceAtLeast(1)
         val itemW = (maxWidth - gap * (n - 1)) / n
+        val travel = kotlin.math.abs(pos - index).coerceAtMost(1f)
         Box(
             Modifier
                 .offset(x = (itemW + gap) * pos)
                 .size(itemW, itemHeight)
-                .then(if (indicatorShadow) Modifier.shadow(2.dp, RoundedCornerShape(radius)) else Modifier)
-                .clip(RoundedCornerShape(radius))
-                .background(indicator),
+                .graphicsLayer {
+                    scaleX = 1f + 0.2f * travel
+                    scaleY = 1f - 0.08f * travel
+                }
+                .then(if (indicatorShadow && !c.isDark) Modifier.shadow(5.dp, shape, ambientColor = shadowColor, spotColor = shadowColor) else Modifier)
+                .clip(shape)
+                .background(indicator.copy(alpha = indicator.alpha * 0.9f))
+                .background(Brush.verticalGradient(listOf(Color.White.copy(alpha = shine), Color.Transparent, Color.White.copy(alpha = shine * 0.25f))))
+                .border(1.dp, Brush.verticalGradient(listOf(Color.White.copy(alpha = shine * 1.4f), Color.White.copy(alpha = 0.05f))), shape),
         )
         Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
             options.forEachIndexed { i, (key, label) ->
@@ -361,11 +376,17 @@ fun <K> SlidingSegments(
                 Box(
                     Modifier
                         .size(itemW, itemHeight)
-                        .clip(RoundedCornerShape(radius))
+                        .clip(shape)
                         .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { onSelect(key) },
                     contentAlignment = Alignment.Center,
                 ) {
-                    Text(label, style = textStyle, color = androidx.compose.ui.graphics.lerp(inactiveText, activeText, f), maxLines = 1)
+                    val tint = androidx.compose.ui.graphics.lerp(inactiveText, activeText, f)
+                    val icon = icons?.getOrNull(i)
+                    if (icon != null) {
+                        Icon(icon, label, tint = tint, modifier = Modifier.size(18.dp))
+                    } else {
+                        Text(label, style = textStyle, color = tint, maxLines = 1)
+                    }
                 }
             }
         }
@@ -516,3 +537,47 @@ fun HeroCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() 
         content = content,
     )
 }
+
+
+/** Symbol des Fachs in seiner Farbe (ohne Symbol: Farbpunkt). */
+@Composable
+fun SubjectIcon(subject: de.schulplaner.data.Subject?, size: Dp = 18.dp, tint: Color = subjectColor(subject?.color)) {
+    val icon = SubjectIcons.of(subject)
+    if (icon != null) {
+        Icon(icon, null, tint = tint, modifier = Modifier.size(size))
+    } else {
+        Box(Modifier.size(size), contentAlignment = Alignment.Center) { SubjectDot(tint, size * 0.55f) }
+    }
+}
+
+/** Farbmarke einer Stunde: Punkt für Einzelstunden, abgerundeter Balken für Doppelstunden. */
+@Composable
+fun LessonMark(color: Color, length: Int) {
+    if (length >= 2) {
+        Box(Modifier.size(width = 6.dp, height = 34.dp).clip(RoundedCornerShape(3.dp)).background(color))
+    } else {
+        Box(Modifier.width(6.dp), contentAlignment = Alignment.Center) { SubjectDot(color, 10.dp) }
+    }
+}
+
+/** Grün → Gelb → Orange → Rot, je dringender ([level] 0 = entspannt, 1 = sehr dringend). */
+fun urgencyColor(level: Float): Color {
+    val stops = listOf(0f to Color(0xFF3FA36B), 0.4f to Color(0xFFE0A21F), 0.7f to Color(0xFFEB6B2E), 1f to Color(0xFFE03B3B))
+    val l = level.coerceIn(0f, 1f)
+    for (i in 1 until stops.size) {
+        val (p1, c1) = stops[i - 1]
+        val (p2, c2) = stops[i]
+        if (l <= p2) return androidx.compose.ui.graphics.lerp(c1, c2, (l - p1) / (p2 - p1))
+    }
+    return stops.last().second
+}
+
+/** Klausuren: ab 3 Wochen entspannt, morgen/heute ganz rot. */
+fun examUrgency(days: Long): Float = when {
+    days <= 1 -> 1f
+    days >= 21 -> 0f
+    else -> 1f - (days - 1) / 20f
+}
+
+/** Aufgaben: je mehr offen sind, desto röter (ab 8 ganz rot). */
+fun taskUrgency(open: Int): Float = (open / 8f).coerceIn(0f, 1f)

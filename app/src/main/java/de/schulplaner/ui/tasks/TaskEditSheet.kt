@@ -2,20 +2,28 @@ package de.schulplaner.ui.tasks
 
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import de.schulplaner.app
+import de.schulplaner.data.ExamTopic
 import de.schulplaner.data.OwnerType
 import de.schulplaner.data.Task
 import de.schulplaner.data.TaskType
@@ -23,19 +31,25 @@ import de.schulplaner.domain.Fmt
 import de.schulplaner.domain.Schedule
 import de.schulplaner.domain.ScheduleData
 import de.schulplaner.ui.components.AppSheet
+import de.schulplaner.ui.components.AttachButton
 import de.schulplaner.ui.components.AttachmentStrip
+import de.schulplaner.ui.components.CheckCircle
 import de.schulplaner.ui.components.ChoiceChip
 import de.schulplaner.ui.components.DateDialog
+import de.schulplaner.ui.components.FormDivider
 import de.schulplaner.ui.components.FormGroup
+import de.schulplaner.ui.components.FormLabel
 import de.schulplaner.ui.components.FormRow
 import de.schulplaner.ui.components.FormTextRow
+import de.schulplaner.ui.components.Ic
 import de.schulplaner.ui.components.InlineTextField
+import de.schulplaner.ui.components.KindIcons
 import de.schulplaner.ui.components.LocalUndo
-import de.schulplaner.ui.components.MiniSegmented
-import de.schulplaner.ui.components.FormLabel
-import de.schulplaner.ui.components.Segmented
 import de.schulplaner.ui.components.SheetHeader
+import de.schulplaner.ui.components.SoftIconButton
 import de.schulplaner.ui.components.SubjectPicker
+import de.schulplaner.ui.components.colors
+import de.schulplaner.ui.theme.T
 import java.time.LocalDate
 import java.time.LocalDateTime
 
@@ -53,34 +67,39 @@ object TaskDefaults {
     }
 }
 
-private enum class DueMode { NEXT, TOMORROW, CUSTOM, NONE }
+private enum class DueMode { NEXT, SECOND, CUSTOM }
 
 /**
- * Aufgabe anlegen/bearbeiten. Bei neuen Aufgaben mit Fach ist "Nächste Stunde" vorausgewählt;
- * wechselt man das Fach, wandert das Datum mit.
+ * Aufgabe anlegen/bearbeiten. Fällig: nächste oder übernächste Stunde des Fachs oder ein freies Datum;
+ * wechselt man das Fach, wandert das Datum mit. Unterpunkte sind optional und zeigen den Fortschritt.
  */
 @Composable
 fun TaskEditSheet(initial: Task, isNew: Boolean, onDismiss: () -> Unit) {
+    val c = colors
     val repo = LocalContext.current.app.repo
     val subjects by repo.subjects.collectAsStateWithLifecycle()
     val schedule by repo.scheduleData.collectAsStateWithLifecycle()
     val attachments by repo.attachments.collectAsStateWithLifecycle()
+    val kinds by repo.taskKinds.collectAsStateWithLifecycle()
     val today = remember { LocalDate.now() }
 
-    fun nextDate(subjectId: String?): LocalDate? =
-        subjectId?.let { Schedule.nextOccurrence(it, today, schedule)?.date }
+    fun nextDates(subjectId: String?): List<LocalDate> =
+        subjectId?.let { id -> Schedule.nextOccurrences(id, today, schedule, 2).map { it.date } } ?: emptyList()
 
     var task by remember { mutableStateOf(initial) }
     var mode by remember {
+        val dates = nextDates(initial.subjectId).map { it.toEpochDay() }
         mutableStateOf(
             when {
-                initial.dueDate == null -> DueMode.NONE
-                isNew && initial.subjectId != null && initial.dueDate == nextDate(initial.subjectId)?.toEpochDay() -> DueMode.NEXT
-                initial.dueDate == today.plusDays(1).toEpochDay() -> DueMode.TOMORROW
+                initial.dueDate == null -> DueMode.CUSTOM
+                initial.dueDate == dates.getOrNull(0) -> DueMode.NEXT
+                initial.dueDate == dates.getOrNull(1) -> DueMode.SECOND
                 else -> DueMode.CUSTOM
             },
         )
     }
+    var steps by remember { mutableStateOf(repo.topics.value.filter { it.examId == initial.id }.sortedBy { it.sortOrder }) }
+    var newStep by remember { mutableStateOf("") }
     var showDate by remember { mutableStateOf(false) }
     val saved = remember { booleanArrayOf(false) }
 
@@ -95,6 +114,9 @@ fun TaskEditSheet(initial: Task, isNew: Boolean, onDismiss: () -> Unit) {
                 {
                     saved[0] = true
                     repo.saveTask(task.copy(title = task.title.trim()))
+                    // Ein angefangener Unterpunkt wird mitgespeichert.
+                    val all = if (newStep.isNotBlank()) steps + ExamTopic(examId = task.id, text = newStep.trim()) else steps
+                    repo.saveSteps(task.id, all)
                     close()
                 }
             } else {
@@ -111,52 +133,70 @@ fun TaskEditSheet(initial: Task, isNew: Boolean, onDismiss: () -> Unit) {
             } else {
                 null
             },
+            extra = { AttachButton(OwnerType.TASK, task.id) },
         )
         InlineTextField(task.title, { task = task.copy(title = it) }, "Was ist zu tun?", Modifier.fillMaxWidth().padding(horizontal = 4.dp), big = true)
 
         SubjectPicker(subjects, task.subjectId, { id ->
             task = task.copy(subjectId = id)
-            if (mode == DueMode.NEXT) {
-                val d = nextDate(id)
-                task = task.copy(dueDate = d?.toEpochDay())
-                if (d == null) mode = DueMode.NONE
+            val dates = nextDates(id)
+            when {
+                mode == DueMode.NEXT && dates.isNotEmpty() -> task = task.copy(dueDate = dates[0].toEpochDay())
+                mode == DueMode.SECOND && dates.size > 1 -> task = task.copy(dueDate = dates[1].toEpochDay())
+                mode != DueMode.CUSTOM -> mode = DueMode.CUSTOM
             }
         })
 
         FormGroup {
             FormRow("Art") {
-                MiniSegmented(
-                    listOf(TaskType.HOMEWORK to "HA", TaskType.EXTRA to "Zusatz", TaskType.OTHER to "Sonst."),
-                    task.type,
-                    { task = task.copy(type = it) },
-                    Modifier.weight(1f),
-                )
+                Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    kinds.forEach { k ->
+                        val selected = task.type == k.id
+                        ChoiceChip(k.name, selected, { task = task.copy(type = k.id) }, leading = {
+                            Icon(KindIcons.of(k.icon), null, tint = if (selected) c.accent else c.sub, modifier = Modifier.size(16.dp))
+                        })
+                    }
+                }
             }
             FormRow("Fällig") {
                 Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    val next = nextDate(task.subjectId)
-                    if (next != null) {
-                        ChoiceChip("Nächste Std · ${Fmt.dayDate(next)}", mode == DueMode.NEXT, {
+                    val dates = nextDates(task.subjectId)
+                    dates.getOrNull(0)?.let { d ->
+                        ChoiceChip("Nächste · ${Fmt.dayDate(d)}", mode == DueMode.NEXT, {
                             mode = DueMode.NEXT
-                            task = task.copy(dueDate = next.toEpochDay())
+                            task = task.copy(dueDate = d.toEpochDay())
                         })
                     }
-                    ChoiceChip("Morgen", mode == DueMode.TOMORROW, {
-                        mode = DueMode.TOMORROW
-                        task = task.copy(dueDate = today.plusDays(1).toEpochDay())
-                    })
+                    dates.getOrNull(1)?.let { d ->
+                        ChoiceChip("Übernächste · ${Fmt.dayDate(d)}", mode == DueMode.SECOND, {
+                            mode = DueMode.SECOND
+                            task = task.copy(dueDate = d.toEpochDay())
+                        })
+                    }
                     val customLabel = if (mode == DueMode.CUSTOM && task.dueDate != null) Fmt.dayDate(LocalDate.ofEpochDay(task.dueDate!!)) else "Datum …"
-                    ChoiceChip(customLabel, mode == DueMode.CUSTOM, { showDate = true })
-                    ChoiceChip("Ohne", mode == DueMode.NONE, {
-                        mode = DueMode.NONE
-                        task = task.copy(dueDate = null)
+                    ChoiceChip(customLabel, mode == DueMode.CUSTOM && task.dueDate != null, { showDate = true }, leading = {
+                        Icon(Ic.CalendarPlain, null, tint = c.sub, modifier = Modifier.size(15.dp))
                     })
                 }
             }
             FormTextRow("Notizen", task.description, { task = task.copy(description = it) }, placeholder = "optional", singleLine = false, divider = false)
         }
 
-        AttachmentStrip(OwnerType.TASK, task.id, attachments.filter { it.ownerId == task.id })
+        StepsEditor(
+            steps = steps,
+            newStep = newStep,
+            onNewStep = { newStep = it },
+            onAdd = {
+                if (newStep.isNotBlank()) {
+                    steps = steps + ExamTopic(examId = task.id, text = newStep.trim())
+                    newStep = ""
+                }
+            },
+            onToggle = { st -> steps = steps.map { if (it.id == st.id) it.copy(done = !it.done) else it } },
+            onRemove = { st -> steps = steps.filter { it.id != st.id } },
+        )
+
+        AttachmentStrip(attachments.filter { it.ownerId == task.id })
     }
 
     if (showDate) {
@@ -166,6 +206,47 @@ fun TaskEditSheet(initial: Task, isNew: Boolean, onDismiss: () -> Unit) {
         ) { d ->
             mode = DueMode.CUSTOM
             task = task.copy(dueDate = d.toEpochDay())
+        }
+    }
+}
+
+/** Abhakbare Unterpunkte (z. B. Kapitel eines Buchs) mit Prozentanzeige. */
+@Composable
+private fun StepsEditor(
+    steps: List<ExamTopic>,
+    newStep: String,
+    onNewStep: (String) -> Unit,
+    onAdd: () -> Unit,
+    onToggle: (ExamTopic) -> Unit,
+    onRemove: (ExamTopic) -> Unit,
+) {
+    val c = colors
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            FormLabel("Unterpunkte")
+            if (steps.isNotEmpty()) {
+                val p = steps.count { it.done } * 100 / steps.size
+                Text("  $p %", style = T.label, color = if (p == 100) c.good else c.accent)
+            }
+        }
+        FormGroup {
+            steps.forEach { st ->
+                Row(Modifier.fillMaxWidth().padding(end = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    CheckCircle(st.done, { onToggle(st) }, square = true, size = 22.dp, checkedColor = c.good)
+                    Text(
+                        st.text,
+                        style = T.body.copy(textDecoration = if (st.done) TextDecoration.LineThrough else null),
+                        color = if (st.done) c.sub else c.text,
+                        modifier = Modifier.weight(1f),
+                    )
+                    SoftIconButton(Ic.Close, "Unterpunkt entfernen", { onRemove(st) }, tint = c.sub, background = Color.Transparent)
+                }
+                FormDivider()
+            }
+            Row(Modifier.fillMaxWidth().padding(start = 14.dp, end = 6.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                InlineTextField(newStep, onNewStep, if (steps.isEmpty()) "Unterpunkt hinzufügen (optional)" else "Weiterer Punkt", Modifier.weight(1f))
+                SoftIconButton(Ic.Plus, "Unterpunkt hinzufügen", onAdd)
+            }
         }
     }
 }

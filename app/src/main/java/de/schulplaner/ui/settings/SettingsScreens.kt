@@ -43,6 +43,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import de.schulplaner.R
 import de.schulplaner.app
 import de.schulplaner.data.Holiday
+import de.schulplaner.data.TaskKind
+import de.schulplaner.ui.components.HolidayLook
+import de.schulplaner.ui.components.KindIcons
+import de.schulplaner.ui.components.SubjectIcons
+import de.schulplaner.ui.components.Sym
 import de.schulplaner.data.HolidayKind
 import de.schulplaner.reminders.Reminders
 import de.schulplaner.ui.components.ColorRow
@@ -139,6 +144,7 @@ fun SettingsScreen() {
     val terms by repo.terms.collectAsStateWithLifecycle()
     val periods by repo.periods.collectAsStateWithLifecycle()
     val holidays by repo.holidays.collectAsStateWithLifecycle()
+    val kinds by repo.taskKinds.collectAsStateWithLifecycle()
     val schedule by repo.scheduleData.collectAsStateWithLifecycle()
     val theme by prefs.theme.collectAsStateWithLifecycle("system")
     val reminderOn by prefs.reminderOn.collectAsStateWithLifecycle(true)
@@ -152,6 +158,7 @@ fun SettingsScreen() {
             NavRow(Ic.Layers, "Halbjahre", terms.joinToString(", ") { it.name }.ifBlank { "Keine" }) { nav.open(Routes.SET_TERMS) }
             NavRow(Ic.Clock, "Stundenzeiten", "${periods.size} Stunden") { nav.open(Routes.SET_PERIODS) }
             NavRow(Ic.Palm, "Ferien & freie Tage", "${holidays.size} eingetragen") { nav.open(Routes.SET_HOLIDAYS) }
+            NavRow(Sym.House, "Aufgabenarten", kinds.joinToString(", ") { it.name }) { nav.open(Routes.SET_KINDS) }
         }
 
         GlassCard(padding = PaddingValues(16.dp)) {
@@ -283,7 +290,12 @@ fun SubjectsScreen() {
                             Modifier.size(40.dp).clip(RoundedCornerShape(14.dp)).background(subjectColor(s.color).copy(alpha = c.tint)),
                             contentAlignment = Alignment.Center,
                         ) {
-                            Text(s.shortName.ifBlank { s.name.take(2) }, style = T.smallBold, color = c.text, maxLines = 1)
+                            val icon = SubjectIcons.of(s)
+                            if (icon != null) {
+                                Icon(icon, null, tint = subjectColor(s.color), modifier = Modifier.size(21.dp))
+                            } else {
+                                Text(s.shortName.ifBlank { s.name.take(2) }, style = T.smallBold, color = c.text, maxLines = 1)
+                            }
                         }
                         Column(Modifier.weight(1f)) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -330,6 +342,13 @@ private fun SubjectEditSheet(initial: Subject, isNew: Boolean, onDismiss: () -> 
                 ColorRow(s.color) { s = s.copy(color = it) }
             }
         }
+        FormLabel("Symbol")
+        IconGrid(
+            options = SubjectIcons.all,
+            selected = SubjectIcons.keyFor(s),
+            tint = subjectColor(s.color),
+            onSelect = { s = s.copy(icon = it) },
+        )
         MoreSection(initiallyOpen = !isNew && (s.teacher.isNotBlank() || s.room.isNotBlank())) {
             FormGroup {
                 FormTextRow("Lehrer/in", s.teacher, { s = s.copy(teacher = it) }, placeholder = "optional", capitalization = KeyboardCapitalization.Words)
@@ -351,6 +370,113 @@ private fun SubjectEditSheet(initial: Subject, isNew: Boolean, onDismiss: () -> 
             repo.deleteSubject(s)
             onDismiss()
         }
+    }
+}
+
+/** Auswahl aus Symbolen (8 pro Zeile). */
+@Composable
+fun IconGrid(options: List<Pair<String, ImageVector>>, selected: String?, tint: Color, onSelect: (String) -> Unit) {
+    val c = colors
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        options.chunked(8).forEach { row ->
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                row.forEach { (key, icon) ->
+                    val active = key == selected
+                    Box(
+                        Modifier
+                            .weight(1f)
+                            .aspectRatio(1f)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(if (active) tint.copy(alpha = 0.18f) else c.card)
+                            .border(if (active) 2.dp else 1.dp, if (active) tint else c.cardBorder, RoundedCornerShape(12.dp))
+                            .clickable { onSelect(key) },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(icon, key, tint = if (active) tint else c.sub, modifier = Modifier.size(20.dp))
+                    }
+                }
+                repeat(8 - row.size) { Box(Modifier.weight(1f)) }
+            }
+        }
+    }
+}
+
+// ---------------- Aufgabenarten ----------------
+
+@Composable
+fun TaskKindsScreen() {
+    val c = colors
+    val repo = LocalContext.current.app.repo
+    val kinds by repo.taskKinds.collectAsStateWithLifecycle()
+    var edit by remember { mutableStateOf<Pair<TaskKind, Boolean>?>(null) }
+
+    SettingsPage("Aufgabenarten", action = {
+        GlassIconButton(Ic.Plus, "Art hinzufügen", { edit = TaskKind(name = "", icon = "star") to true }, filled = true)
+    }) {
+        Text(
+            "Die Arten erscheinen beim Eintragen, als Filter und als Symbol rechts in jeder Aufgabe.",
+            style = T.small,
+            color = c.sub,
+            modifier = Modifier.padding(horizontal = 8.dp),
+        )
+        GlassCard(padding = PaddingValues(6.dp)) {
+            kinds.forEach { k ->
+                Row(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).clickable { edit = k to false }.padding(horizontal = 12.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Box(Modifier.size(40.dp).clip(RoundedCornerShape(14.dp)).background(c.accentSoft), contentAlignment = Alignment.Center) {
+                        Icon(KindIcons.of(k.icon), null, tint = c.accent, modifier = Modifier.size(20.dp))
+                    }
+                    Text(k.name, style = T.body, color = c.text, modifier = Modifier.weight(1f))
+                    Icon(Ic.ChevronRight, null, tint = c.sub, modifier = Modifier.size(18.dp))
+                }
+            }
+        }
+    }
+
+    edit?.let { (k, isNew) ->
+        TaskKindSheet(k, isNew, canDelete = kinds.size > 1, onDismiss = { edit = null }) { result, delete ->
+            val list = when {
+                delete -> kinds.filter { it.id != k.id }
+                isNew -> kinds + result
+                else -> kinds.map { if (it.id == k.id) result else it }
+            }
+            repo.saveTaskKinds(list)
+        }
+    }
+}
+
+@Composable
+private fun TaskKindSheet(initial: TaskKind, isNew: Boolean, canDelete: Boolean, onDismiss: () -> Unit, onDone: (TaskKind, Boolean) -> Unit) {
+    val c = colors
+    var k by remember { mutableStateOf(initial) }
+    AppSheet(onDismiss = onDismiss) { close ->
+        SheetHeader(
+            if (isNew) "Neue Art" else "Aufgabenart",
+            onSave = if (k.name.isNotBlank()) {
+                {
+                    onDone(k.copy(name = k.name.trim()), false)
+                    close()
+                }
+            } else {
+                null
+            },
+            onDelete = if (!isNew && canDelete) {
+                {
+                    onDone(k, true)
+                    close()
+                }
+            } else {
+                null
+            },
+        )
+        FormGroup {
+            FormTextRow("Name", k.name, { k = k.copy(name = it) }, placeholder = "z. B. Referat", capitalization = KeyboardCapitalization.Sentences, divider = false)
+        }
+        FormLabel("Symbol")
+        IconGrid(KindIcons.all, k.icon, c.accent) { k = k.copy(icon = it) }
     }
 }
 
@@ -521,7 +647,7 @@ fun HolidaysScreen() {
                         Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).clickable { edit = h to false }.padding(horizontal = 14.dp, vertical = 14.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        SubjectDot(if (h.kind == HolidayKind.FEIERTAG) c.exam else c.accent)
+                        Icon(HolidayLook.icon(h), null, tint = HolidayLook.color(h), modifier = Modifier.size(20.dp))
                         Text(h.name.ifBlank { "Frei" }, style = T.body, color = c.text, modifier = Modifier.weight(1f).padding(start = 12.dp))
                         val s = LocalDate.ofEpochDay(h.startDate)
                         val e = LocalDate.ofEpochDay(h.endDate)

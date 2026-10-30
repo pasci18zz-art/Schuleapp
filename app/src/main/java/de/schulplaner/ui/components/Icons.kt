@@ -12,10 +12,10 @@ import androidx.compose.ui.unit.dp
 object Ic {
     private fun n(v: Float): String = if (v == v.toInt().toFloat()) v.toInt().toString() else v.toString()
 
-    private fun circle(cx: Float, cy: Float, r: Float) =
+    internal fun circle(cx: Float, cy: Float, r: Float) =
         "M${n(cx - r)} ${n(cy)}a${n(r)} ${n(r)} 0 1 0 ${n(2 * r)} 0a${n(r)} ${n(r)} 0 1 0 ${n(-2 * r)} 0"
 
-    private fun rect(x: Float, y: Float, w: Float, h: Float, r: Float): String {
+    internal fun rect(x: Float, y: Float, w: Float, h: Float, r: Float): String {
         val iw = w - 2 * r
         val ih = h - 2 * r
         return "M${n(x + r)} ${n(y)}h${n(iw)}a${n(r)} ${n(r)} 0 0 1 ${n(r)} ${n(r)}v${n(ih)}" +
@@ -23,7 +23,7 @@ object Ic {
             "v${n(-ih)}a${n(r)} ${n(r)} 0 0 1 ${n(r)} ${n(-r)}z"
     }
 
-    private fun icon(name: String, vararg paths: String, stroke: Float = 1.9f): ImageVector =
+    internal fun icon(name: String, vararg paths: String, stroke: Float = 1.9f): ImageVector =
         ImageVector.Builder(name, 24.dp, 24.dp, 24f, 24f).apply {
             paths.forEach {
                 addPath(

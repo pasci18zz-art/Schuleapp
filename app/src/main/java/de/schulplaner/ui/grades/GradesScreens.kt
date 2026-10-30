@@ -158,7 +158,7 @@ fun GradesOverviewScreen() {
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    SubjectDot(color)
+                    de.schulplaner.ui.components.SubjectIcon(r.subject, 20.dp)
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             Text(r.subject.name, style = T.body, color = c.text, maxLines = 1, overflow = TextOverflow.Ellipsis)

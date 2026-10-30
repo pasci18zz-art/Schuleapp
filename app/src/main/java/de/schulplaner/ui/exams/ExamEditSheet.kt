@@ -1,6 +1,11 @@
 package de.schulplaner.ui.exams
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -86,18 +91,49 @@ fun ExamEditSheet(initial: Exam, isNew: Boolean, onDismiss: () -> Unit, onSaved:
             FormRow("Art") {
                 MiniSegmented(ExamType.all.map { it to (if (it == "Sonstiges") "Sonst." else it) }, exam.type, { exam = exam.copy(type = it) }, Modifier.weight(1f))
             }
-            FormTextRow("Thema", exam.title, { exam = exam.copy(title = it) }, placeholder = "z. B. Genetik")
-            FormValueRow("Datum", Fmt.dayDate(date), { showDate = true })
-            FormRow("Stunde", divider = false) {
-                Text(exam.period?.let { "$it. Std" } ?: "–", style = T.body, color = c.text, modifier = Modifier.weight(1f))
-                Stepper(
-                    exam.period?.let { "$it." } ?: "–",
-                    onMinus = { exam = exam.copy(period = ((exam.period ?: 2) - 1).coerceAtLeast(1)) },
-                    onPlus = { exam = exam.copy(period = ((exam.period ?: 0) + 1).coerceAtMost(12)) },
+            FormTextRow("Thema", exam.title, { exam = exam.copy(title = it) }, placeholder = "z. B. Genetik", divider = false)
+        }
+
+        // Termin: zuerst die nächsten Stunden des Fachs, sonst frei im Kalender.
+        val lessons = remember(exam.subjectId, schedule) {
+            Schedule.nextOccurrences(exam.subjectId, LocalDate.now().minusDays(1), schedule, 6)
+        }
+        val fromList = lessons.any { it.date.toEpochDay() == exam.date }
+        FormLabel("Termin")
+        FormGroup {
+            lessons.forEach { l ->
+                val selected = l.date.toEpochDay() == exam.date
+                FormRow(null, onClick = { exam = exam.copy(date = l.date.toEpochDay(), period = l.firstPeriod) }) {
+                    Text(Fmt.dayDate(l.date), style = T.body, color = if (selected) c.accent else c.text, modifier = Modifier.weight(1f))
+                    Text("${l.periodLabel} Std", style = T.small, color = c.sub)
+                    Box(Modifier.size(22.dp), contentAlignment = Alignment.Center) {
+                        if (selected) Icon(Ic.Check, null, tint = c.accent, modifier = Modifier.size(16.dp))
+                    }
+                }
+            }
+            FormRow(null, onClick = { showDate = true }, divider = false) {
+                Icon(Ic.CalendarPlain, null, tint = c.accent, modifier = Modifier.size(18.dp))
+                Text(
+                    if (fromList) "Anderes Datum im Kalender …" else Fmt.dayDate(date),
+                    style = T.body,
+                    color = if (!fromList) c.accent else c.text,
+                    modifier = Modifier.weight(1f),
                 )
+                if (!fromList) Icon(Ic.Check, null, tint = c.accent, modifier = Modifier.size(16.dp))
             }
         }
-        Text("Die Stunde wird aus dem Stundenplan übernommen.", style = T.small, color = c.sub)
+        if (!fromList) {
+            FormGroup {
+                FormRow("Stunde", divider = false) {
+                    Text(exam.period?.let { "$it. Std" } ?: "–", style = T.body, color = c.text, modifier = Modifier.weight(1f))
+                    Stepper(
+                        exam.period?.let { "$it." } ?: "–",
+                        onMinus = { exam = exam.copy(period = ((exam.period ?: 2) - 1).coerceAtLeast(1)) },
+                        onPlus = { exam = exam.copy(period = ((exam.period ?: 0) + 1).coerceAtMost(12)) },
+                    )
+                }
+            }
+        }
     }
 
     if (showDate) {

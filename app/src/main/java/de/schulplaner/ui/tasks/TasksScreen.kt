@@ -68,6 +68,8 @@ fun TasksScreen() {
     val tasks by repo.tasks.collectAsStateWithLifecycle()
     val subjects by repo.subjects.collectAsStateWithLifecycle()
     val schedule by repo.scheduleData.collectAsStateWithLifecycle()
+    val kinds by repo.taskKinds.collectAsStateWithLifecycle()
+    val topics by repo.topics.collectAsStateWithLifecycle()
     val today = rememberNow().toLocalDate()
 
     var status by rememberSaveable { mutableStateOf(Status.OPEN) }
@@ -79,6 +81,8 @@ fun TasksScreen() {
     val todayEpoch = today.toEpochDay()
     // Erledigte bleiben ausgegraut in "Offen", bis ihr Fälligkeitstag vorbei ist.
     fun stillVisible(t: Task) = t.done && (t.dueDate ?: (t.doneAt?.let { LocalDate.ofEpochDay(it / 86_400_000L).toEpochDay() } ?: 0L)) >= todayEpoch
+    // Gelöschte Art: Filter zurücksetzen.
+    if (type != null && kinds.none { it.id == type }) type = null
     val visible = tasks.filter { t ->
         (type == null || t.type == type) &&
             (subjectFilter == null || t.subjectId == subjectFilter) &&
@@ -109,11 +113,13 @@ fun TasksScreen() {
             }
             item {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // "Alle" plus ein Symbol pro Aufgabenart.
                     de.schulplaner.ui.components.MiniSegmented(
-                        listOf<Pair<String?, String>>(null to "Alle", TaskType.HOMEWORK to "HA", TaskType.EXTRA to "Zusatz", TaskType.OTHER to "Sonst."),
+                        listOf<Pair<String?, String>>(null to "Alle") + kinds.map { it.id to it.name },
                         type,
                         { type = it },
                         Modifier.weight(1f),
+                        icons = listOf<androidx.compose.ui.graphics.vector.ImageVector?>(null) + kinds.map { de.schulplaner.ui.components.KindIcons.of(it.icon) },
                     )
                     SubjectFilter(subjects, subjectFilter) { subjectFilter = it }
                 }
@@ -132,25 +138,17 @@ fun TasksScreen() {
                 item(key = "g_$label") {
                     GlassCard(Modifier.animateContentSize(), shape = RoundedCornerShape(24.dp), padding = PaddingValues(4.dp)) {
                         list.forEach { t ->
-                            val subject = t.subjectId?.let { subjectMap[it] }
-                            val due = t.dueDate?.let { LocalDate.ofEpochDay(it) }
-                            val overdue = due != null && due.isBefore(today) && !t.done
-                            TaskRow(
-                                title = t.title,
-                                subtitle = listOfNotNull(subject?.name ?: "Ohne Fach", due?.let { Fmt.due(today, it) }).joinToString(" · "),
-                                dotColor = subject?.let { subjectColor(it.color) },
-                                done = t.done,
-                                overdue = overdue,
+                            TaskLine(
+                                task = t,
+                                subject = t.subjectId?.let { subjectMap[it] },
+                                kind = kindOf(t.type, kinds),
+                                percent = stepPercent(t.id, topics),
+                                today = today,
                                 onToggle = {
                                     repo.setTaskDone(t, !t.done)
                                     if (!t.done) undo.show("Erledigt") { repo.setTaskDone(t, false) }
                                 },
                                 onClick = { edit = t to false },
-                                trailing = {
-                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                        Pill(TaskType.label(t.type), c.line, c.sub)
-                                    }
-                                },
                             )
                         }
                     }
@@ -158,14 +156,14 @@ fun TasksScreen() {
             }
         }
 
-        // Plus-Knopf: neue HA, Fach und Datum werden aus der aktuellen Stunde vorgeschlagen.
+        // Plus-Knopf: Fach und Datum aus der aktuellen Stunde, Art aus dem gewählten Filter.
         Box(
             Modifier
                 .align(Alignment.BottomEnd)
                 .navigationBarsPadding()
                 .padding(end = 22.dp, bottom = 88.dp)
                 .size(60.dp)
-                .pressable({ edit = TaskDefaults.quick(LocalDateTime.now(), schedule) to true })
+                .pressable({ edit = TaskDefaults.quick(LocalDateTime.now(), schedule).copy(type = type ?: TaskType.HOMEWORK) to true })
                 .shadow(12.dp, RoundedCornerShape(22.dp), ambientColor = c.accent, spotColor = c.accent)
                 .clip(RoundedCornerShape(22.dp))
                 .background(c.accent),
@@ -230,7 +228,7 @@ private fun SubjectFilter(subjects: List<de.schulplaner.data.Subject>, selectedI
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            if (selected != null) SubjectDot(subjectColor(selected.color), 9.dp)
+            if (selected != null) de.schulplaner.ui.components.SubjectIcon(selected, 16.dp)
             Text(
                 selected?.let { it.shortName.ifBlank { it.name } } ?: "Fach",
                 style = T.label,
@@ -246,13 +244,15 @@ private fun SubjectFilter(subjects: List<de.schulplaner.data.Subject>, selectedI
                 expanded = open,
                 onDismissRequest = { open = false },
                 modifier = Modifier.widthIn(min = 220.dp).heightIn(max = 420.dp),
+                containerColor = c.sheetGlass,
+                shadowElevation = 8.dp,
             ) {
                 FilterItem("Alle Fächer", null, selectedId == null) {
                     onSelect(null)
                     open = false
                 }
                 subjects.forEach { s ->
-                    FilterItem(s.name, subjectColor(s.color), selectedId == s.id) {
+                    FilterItem(s.name, subjectColor(s.color), selectedId == s.id, s) {
                         onSelect(s.id)
                         open = false
                     }
@@ -263,12 +263,16 @@ private fun SubjectFilter(subjects: List<de.schulplaner.data.Subject>, selectedI
 }
 
 @Composable
-private fun FilterItem(label: String, dot: androidx.compose.ui.graphics.Color?, selected: Boolean, onClick: () -> Unit) {
+private fun FilterItem(label: String, dot: androidx.compose.ui.graphics.Color?, selected: Boolean, subject: de.schulplaner.data.Subject? = null, onClick: () -> Unit) {
     val c = colors
     androidx.compose.material3.DropdownMenuItem(
         text = { Text(label, style = T.body, color = if (selected) c.accent else c.text) },
         leadingIcon = {
-            if (dot != null) SubjectDot(dot, 10.dp) else Icon(Ic.Layers, null, tint = c.sub, modifier = Modifier.size(16.dp))
+            when {
+                subject != null -> de.schulplaner.ui.components.SubjectIcon(subject, 18.dp)
+                dot != null -> SubjectDot(dot, 10.dp)
+                else -> Icon(Ic.Layers, null, tint = c.sub, modifier = Modifier.size(16.dp))
+            }
         },
         trailingIcon = if (selected) {
             { Icon(Ic.Check, null, tint = c.accent, modifier = Modifier.size(16.dp)) }

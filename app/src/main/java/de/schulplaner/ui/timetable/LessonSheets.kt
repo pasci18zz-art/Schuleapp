@@ -176,7 +176,7 @@ fun SlotEditSheet(initial: LessonSlot, isNew: Boolean, onDismiss: () -> Unit) {
 
     AppSheet(onDismiss = onDismiss) { close ->
         SheetHeader(
-            title = if (isNew) "Neue Stunde" else "Stunde",
+            title = if (isNew) "Neue Stunde" else if (slot.isFree) "Freistunde" else "Stunde",
             onSave = if (slot.subjectId.isNotBlank()) {
                 {
                     repo.saveSlot(slot)
@@ -198,7 +198,14 @@ fun SlotEditSheet(initial: LessonSlot, isNew: Boolean, onDismiss: () -> Unit) {
             Text("Lege zuerst Fächer in den Einstellungen an.", style = T.body, color = c.sub)
             return@AppSheet
         }
-        SubjectPicker(subjects, slot.subjectId, { id -> if (id != null) slot = slot.copy(subjectId = id) }, allowNone = false)
+        // Erste Auswahl "Freistunde": wird im Plan grau gestrichelt angezeigt.
+        SubjectPicker(
+            subjects,
+            if (slot.isFree) null else slot.subjectId,
+            { id -> slot = slot.copy(subjectId = id ?: LessonSlot.FREE) },
+            allowNone = true,
+            noneLabel = "Freistunde",
+        )
         val subject = subjects.firstOrNull { it.id == slot.subjectId }
         FormGroup {
             FormRow("Tag") {
@@ -224,7 +231,9 @@ fun SlotEditSheet(initial: LessonSlot, isNew: Boolean, onDismiss: () -> Unit) {
                     Modifier.weight(1f),
                 )
             }
-            FormTextRow("Raum", slot.room, { slot = slot.copy(room = it) }, placeholder = subject?.room?.ifBlank { null } ?: "z. B. 204", divider = false)
+            if (!slot.isFree) {
+                FormTextRow("Raum", slot.room, { slot = slot.copy(room = it) }, placeholder = subject?.room?.ifBlank { null } ?: "z. B. 204", divider = false)
+            }
         }
     }
 }
