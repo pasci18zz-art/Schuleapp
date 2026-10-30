@@ -65,10 +65,10 @@ private enum class QuickApp(
         listOf("com.samsung.android.app.notes", "com.google.android.keep"),
         Color(0xFFFF8A4C), Color(0xFFF2553D), { Ic.Note },
     ),
-    CLOUD(
-        "app_cloud", "Cloud",
-        listOf("com.microsoft.skydrive", "com.google.android.apps.docs", "com.samsung.android.scloud", "com.dropbox.android"),
-        Color(0xFF5AB2FF), Color(0xFF2F6FE0), { Ic.Cloud },
+    CLAUDE(
+        "app_claude", "Claude",
+        listOf("com.anthropic.claude"),
+        Color(0xFFE08A6A), Color(0xFFC96442), { Ic.Sparkle },
     ),
     MUSIC(
         "app_music", "Spotify",

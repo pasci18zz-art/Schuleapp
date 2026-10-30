@@ -21,7 +21,7 @@ Design-Entwürfe (klickbar): https://claude.ai/artifact/YaVbw4kmq8qm3xJXT1iN3n
 | Erledigte Aufgaben | bleiben ausgegraut/durchgestrichen stehen, bis ihr Fälligkeitstag vorbei ist, dann unter „Erledigt“; „Rückgängig“-Leiste |
 | Kalender | im Stundenplan als Umschalter Woche/Monat; Tablet: große Monatsansicht mit Tagesleiste |
 | Ferien | offizielle Hessen-Ferien + Feiertage vorinstalliert, Ferien-Countdown auf „Heute“ |
-| App-Verknüpfungen | drei Kacheln auf „Heute“: Notes (Samsung Notes), Cloud, Spotify – echte App-Symbole, lange drücken = andere App wählen; Handy in einer Zeile, Tablet unten links |
+| App-Verknüpfungen | drei Kacheln auf „Heute“: Notes (Samsung Notes), Claude, Spotify – echte App-Symbole, lange drücken = andere App wählen; Handy in einer Zeile, Tablet unten links |
 | Lebendigkeit | treibende Farbflächen und schwebende Punkte im Hintergrund, farbige „Jetzt“-Kachel mit Glanz, Konfetti beim Abhaken, Sonne/Mond oben, Kacheln gleiten herein |
 | Erinnerung | am Vorabend (Standard 18:00) an offene HA und Klausuren für morgen |
 | Nicht gewünscht | Unterkurs-Anzeige, wiederkehrende Aufgaben, Vibration, Abi-Countdown, Notizbuch-Knopf pro Fach |
