@@ -32,6 +32,12 @@ class SchulplanerApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        // Absturz merken, damit die App ihn beim nächsten Start anzeigen kann (statt nur zu schließen).
+        val previous = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, error ->
+            runCatching { java.io.File(filesDir, CRASH_FILE).writeText(android.util.Log.getStackTraceString(error)) }
+            previous?.uncaughtException(thread, error)
+        }
         val db = AppDatabase.create(this)
         repo = Repository(db, appScope, AttachmentStore(this))
         prefs = Prefs(this)
@@ -68,5 +74,7 @@ class SchulplanerApp : Application() {
         }
     }
 }
+
+const val CRASH_FILE = "last_crash.txt"
 
 val Context.app: SchulplanerApp get() = applicationContext as SchulplanerApp
