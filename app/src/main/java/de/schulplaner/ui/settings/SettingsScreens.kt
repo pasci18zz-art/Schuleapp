@@ -613,7 +613,7 @@ private fun SyncCard() {
             }
             account == null -> {
                 Text(
-                    "Auf beiden Geräten mit demselben Konto anmelden – dann wird alles automatisch abgeglichen.",
+                    "Auf beiden Geräten mit demselben Konto anmelden – dann wird alles automatisch abgeglichen.\nServer: ${sync.host}",
                     style = T.small,
                     color = c.sub,
                     modifier = Modifier.padding(top = 8.dp, bottom = 10.dp),
@@ -668,6 +668,7 @@ private fun SyncCard() {
             }
             else -> {
                 Text(account ?: "", style = T.body, color = c.text, modifier = Modifier.padding(top = 10.dp))
+                Text("Server: ${sync.host}", style = T.small, color = c.sub)
                 val last = status.lastSync
                 Text(
                     if (last > 0) {

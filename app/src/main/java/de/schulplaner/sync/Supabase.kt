@@ -18,6 +18,21 @@ import java.net.URLEncoder
 
 class SupabaseException(val code: Int, message: String) : IOException(message)
 
+/**
+ * Macht aus dem eingetragenen Wert eine saubere Adresse "https://<projekt>.supabase.co".
+ * Unsichtbare Zeichen, Leerzeichen, Pfade oder ein kopierter Dashboard-Link werden toleriert.
+ */
+internal fun normalizeUrl(raw: String): String {
+    val clean = raw.filter { it.code in 33..126 }
+    Regex("([a-z0-9-]+)\\.supabase\\.(co|in)(?![a-z])", RegexOption.IGNORE_CASE).find(clean)?.let {
+        return "https://" + it.value.lowercase()
+    }
+    Regex("project/([a-z0-9]{10,})", RegexOption.IGNORE_CASE).find(clean)?.let {
+        return "https://" + it.groupValues[1].lowercase() + ".supabase.co"
+    }
+    return clean.trimEnd('/')
+}
+
 /** Angemeldete Sitzung (wird lokal gespeichert). */
 data class Session(
     val accessToken: String,
@@ -32,8 +47,11 @@ data class Session(
  * URL und öffentlicher Schlüssel kommen beim Bauen aus den GitHub-Secrets.
  */
 class Supabase(context: Context) {
-    private val baseUrl = BuildConfig.SUPABASE_URL.trim().trimEnd('/')
-    private val apiKey = BuildConfig.SUPABASE_KEY.trim()
+    val baseUrl = normalizeUrl(BuildConfig.SUPABASE_URL)
+    private val apiKey = BuildConfig.SUPABASE_KEY.filter { it.code in 33..126 }
+
+    /** Nur der Servername (zur Anzeige in den Einstellungen). */
+    val host: String get() = baseUrl.removePrefix("https://")
     private val prefs = context.getSharedPreferences("sync", Context.MODE_PRIVATE)
     val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
@@ -185,7 +203,11 @@ class Supabase(context: Context) {
     // ---------- HTTP ----------
 
     private fun open(method: String, path: String, token: String?, headers: Map<String, String>): HttpURLConnection {
-        val conn = URL(baseUrl + path).openConnection() as HttpURLConnection
+        val conn = try {
+            URL(baseUrl + path).openConnection() as HttpURLConnection
+        } catch (e: Exception) {
+            throw SupabaseException(0, "Server-Adresse ungültig ($host) – bitte das Secret SUPABASE_URL prüfen")
+        }
         conn.requestMethod = method
         conn.connectTimeout = 15_000
         conn.readTimeout = 30_000
@@ -207,10 +229,15 @@ class Supabase(context: Context) {
         val conn = open(method, path, token, h)
         try {
             val payload = bytes ?: body?.toByteArray(Charsets.UTF_8)
-            if (payload != null) {
-                conn.doOutput = true
-                conn.outputStream.use { it.write(payload) }
+            if (payload != null) conn.doOutput = true
+            try {
+                conn.connect()
+            } catch (e: IllegalArgumentException) {
+                throw SupabaseException(0, "Server-Adresse ungültig ($host) – bitte das Secret SUPABASE_URL prüfen")
+            } catch (e: java.net.UnknownHostException) {
+                throw SupabaseException(0, "Server nicht erreichbar ($host) – Internet da? Adresse richtig?")
             }
+            if (payload != null) conn.outputStream.use { it.write(payload) }
             val code = conn.responseCode
             val stream = if (code in 200..299) conn.inputStream else conn.errorStream
             val text = stream?.bufferedReader()?.use { it.readText() } ?: ""

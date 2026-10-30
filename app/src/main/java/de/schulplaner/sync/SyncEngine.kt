@@ -67,6 +67,7 @@ class SyncEngine(
     val account: StateFlow<String?> = _account
 
     val configured get() = supabase.configured
+    val host get() = supabase.host
 
     // ---------- Konto ----------
 
