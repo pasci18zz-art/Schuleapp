@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Schulplaner</string>
+    <string name="tile_label">HA eintragen</string>
+    <string name="shortcut_ha_short">HA eintragen</string>
+    <string name="shortcut_ha_long">Hausaufgabe eintragen</string>
+</resources>
