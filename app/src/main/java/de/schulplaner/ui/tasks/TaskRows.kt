@@ -110,7 +110,7 @@ fun TaskLine(
             // Fortschritt der Unterpunkte als Balken (bei 100 % reicht das grüne "100 %").
             if (percent != null && percent < 100) {
                 Row(Modifier.padding(top = 5.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    ProgressBar(percent / 100f, subjectColor(subject?.color), Modifier.weight(1f), height = 4.dp)
+                    ProgressBar(percent / 100f, subjectColor(subject?.color), Modifier.weight(1f), height = 4.dp, track = c.sub.copy(alpha = 0.16f))
                     Text("$percent %", style = T.smallBold.copy(fontSize = T.small.fontSize * 0.9f), color = c.sub, maxLines = 1)
                 }
             }

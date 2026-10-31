@@ -53,6 +53,17 @@ object Sym {
         Ic.icon("idee", "M9 18h6M10 21h4", "M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2V16h5v-.1c0-.8.4-1.5 1-2A6 6 0 0 0 12 3z")
     }
 
+    // ---------- Noten ----------
+    /** Kopf im Profil mit drei Strichen vom Mund (mündlich). */
+    val Speak by lazy {
+        Ic.icon(
+            "speak",
+            "M14 20.5v-2.6c1.6 0 2.6-1 2.6-2.4v-1.8l1.6-.6-1.6-3.1C16.4 6.3 13.9 3.5 10.2 3.5 6.6 3.5 3.8 6.5 3.8 10.2c0 2.1.9 3.7 2.2 4.8v5.5",
+            "M19.8 9.2l2-1.1M20.3 12.2h2.2M19.8 15.2l2 1.1",
+        )
+    }
+    val Equals by lazy { Ic.icon("equals", "M5 9h14M5 15h14", stroke = 2.4f) }
+
     // ---------- Aufgabenarten ----------
     val House by lazy { Ic.icon("house", "M3 10.5 12 3l9 7.5", "M5 9.5V20a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V9.5") }
     val Presentation by lazy { Ic.icon("presentation", r(3f, 4f, 18f, 11f, 2f), "M12 15v3", "M8 21l4-3 4 3", "M7 11l3-3 2 2 4-4") }

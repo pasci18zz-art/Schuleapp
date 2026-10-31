@@ -179,13 +179,14 @@ fun TodayScreen() {
                 .padding(screenPadding(if (wide) 28 else 16)),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            ScreenHeader(
-                title = "Heute",
-                overline = Fmt.full(today),
-                chip = state.weekLabel,
-                modifier = Modifier.appear(0),
-            ) {
-                SkyBadge(now.hour)
+            // Sonne bzw. Mond oben rechts in der Ecke – nur gezeichnet, nimmt keinen Platz weg.
+            Box(Modifier.appear(0)) {
+                SkyArt(now.hour, Modifier.matchParentSize())
+                ScreenHeader(
+                    title = "Heute",
+                    overline = Fmt.full(today),
+                    chip = state.weekLabel,
+                )
             }
 
             Box(Modifier.appear(1)) { FerienTile(schedule.holidays, today) }
@@ -336,49 +337,90 @@ private fun NowTile(s: TodayState, modifier: Modifier = Modifier) {
     }
 }
 
-/** Kleines lebendiges Symbol oben rechts: Sonne am Tag, Mond mit Sternen am Abend. */
+/**
+ * Verspielte Sonne (tagsüber, mit Gesicht, Strahlen und vorbeiziehender Wolke) bzw. schlafender Mond
+ * mit funkelnden Sternen (abends) – oben rechts, mit weichem Leuchten, das in den Hintergrund übergeht.
+ */
 @Composable
-private fun SkyBadge(hour: Int) {
+private fun SkyArt(hour: Int, modifier: Modifier = Modifier) {
     val day = hour in 6..17
     val t = rememberInfiniteTransition(label = "sky")
-    val spin = t.animateFloat(0f, 360f, infiniteRepeatable(tween(24000, easing = LinearEasing)), label = "spin")
-    val twinkle = t.animateFloat(0.3f, 1f, infiniteRepeatable(tween(1600), RepeatMode.Reverse), label = "twinkle")
-    val bob = t.animateFloat(-2f, 2f, infiniteRepeatable(tween(2600), RepeatMode.Reverse), label = "bob")
-    val brush = if (day) {
-        Brush.linearGradient(listOf(Color(0xFFFFD36E), Color(0xFFFF9F43)))
-    } else {
-        Brush.linearGradient(listOf(Color(0xFF4F5BD5), Color(0xFF2B2F6B)))
-    }
-    Box(
-        Modifier.size(44.dp).clip(CircleShape).background(brush),
-        contentAlignment = Alignment.Center,
-    ) {
-        Canvas(Modifier.size(44.dp)) {
-            val cx = size.width / 2
-            val cy = size.height / 2
-            if (day) {
-                rotate(spin.value) {
-                    for (i in 0 until 8) {
-                        val ang = Math.toRadians(i * 45.0)
-                        val r1 = size.minDimension * 0.27f
-                        val r2 = size.minDimension * 0.37f
-                        drawLine(
-                            Color.White,
-                            Offset(cx + (cos(ang) * r1).toFloat(), cy + (sin(ang) * r1).toFloat()),
-                            Offset(cx + (cos(ang) * r2).toFloat(), cy + (sin(ang) * r2).toFloat()),
-                            strokeWidth = 2.2.dp.toPx(),
-                            cap = StrokeCap.Round,
-                        )
-                    }
+    val spin by t.animateFloat(0f, 360f, infiniteRepeatable(tween(30000, easing = LinearEasing)), label = "spin")
+    val pulse by t.animateFloat(0.85f, 1.1f, infiniteRepeatable(tween(2600), RepeatMode.Reverse), label = "pulse")
+    val drift by t.animateFloat(0f, 1f, infiniteRepeatable(tween(18000, easing = LinearEasing), RepeatMode.Reverse), label = "drift")
+    val twinkle by t.animateFloat(0f, 1f, infiniteRepeatable(tween(1800), RepeatMode.Reverse), label = "twinkle")
+    Canvas(modifier) {
+        val d = density
+        val cx = size.width - 46 * d
+        val cy = 34 * d
+        if (day) {
+            // Warmes Leuchten, das sanft ausläuft.
+            drawCircle(Brush.radialGradient(listOf(Color(0x80FFD36E), Color(0x00FFD36E)), Offset(cx, cy), 120 * d * pulse), 120 * d * pulse, Offset(cx, cy))
+            rotate(spin, Offset(cx, cy)) {
+                for (i in 0 until 12) {
+                    val ang = Math.toRadians(i * 30.0)
+                    val r1 = 31 * d
+                    val r2 = (if (i % 2 == 0) 46 else 39) * d
+                    drawLine(
+                        Color(0xFFFFC23D),
+                        Offset(cx + (cos(ang) * r1).toFloat(), cy + (sin(ang) * r1).toFloat()),
+                        Offset(cx + (cos(ang) * r2).toFloat(), cy + (sin(ang) * r2).toFloat()),
+                        strokeWidth = 4.5f * d,
+                        cap = StrokeCap.Round,
+                    )
                 }
-                drawCircle(Color.White, size.minDimension * 0.17f, Offset(cx, cy))
-            } else {
-                val y = cy + bob.value.dp.toPx() * 0.5f
-                drawCircle(Color(0xFFFFF3C4), size.minDimension * 0.2f, Offset(cx - 2.dp.toPx(), y))
-                drawCircle(Color(0xFF3A4090), size.minDimension * 0.18f, Offset(cx + 3.dp.toPx(), y - 3.dp.toPx()))
-                drawCircle(Color.White.copy(alpha = twinkle.value), 1.4.dp.toPx(), Offset(size.width * 0.75f, size.height * 0.3f))
-                drawCircle(Color.White.copy(alpha = 1.3f - twinkle.value), 1.1.dp.toPx(), Offset(size.width * 0.28f, size.height * 0.25f))
-                drawCircle(Color.White.copy(alpha = twinkle.value * 0.8f), 1.dp.toPx(), Offset(size.width * 0.7f, size.height * 0.75f))
+            }
+            drawCircle(Brush.radialGradient(listOf(Color(0xFFFFE9A3), Color(0xFFFFB73A)), Offset(cx - 6 * d, cy - 6 * d), 30 * d), 26 * d, Offset(cx, cy))
+            // Gesicht.
+            val face = Color(0xFF8A4B00)
+            drawArc(face, 200f, 140f, false, Offset(cx - 12 * d, cy - 7 * d), androidx.compose.ui.geometry.Size(8 * d, 7 * d), style = androidx.compose.ui.graphics.drawscope.Stroke(2.2f * d, cap = StrokeCap.Round))
+            drawArc(face, 200f, 140f, false, Offset(cx + 4 * d, cy - 7 * d), androidx.compose.ui.geometry.Size(8 * d, 7 * d), style = androidx.compose.ui.graphics.drawscope.Stroke(2.2f * d, cap = StrokeCap.Round))
+            drawArc(face, 20f, 140f, false, Offset(cx - 8 * d, cy - 1 * d), androidx.compose.ui.geometry.Size(16 * d, 11 * d), style = androidx.compose.ui.graphics.drawscope.Stroke(2.4f * d, cap = StrokeCap.Round))
+            drawCircle(Color(0x66FF8A65), 3.2f * d, Offset(cx - 14 * d, cy + 4 * d))
+            drawCircle(Color(0x66FF8A65), 3.2f * d, Offset(cx + 14 * d, cy + 4 * d))
+            // Wolke, die langsam vorbeizieht.
+            val wx = cx - 70 * d + drift * 50 * d
+            val wy = cy + 26 * d
+            val cloud = Color.White.copy(alpha = 0.92f)
+            drawCircle(cloud, 9 * d, Offset(wx, wy))
+            drawCircle(cloud, 12 * d, Offset(wx + 12 * d, wy - 5 * d))
+            drawCircle(cloud, 8 * d, Offset(wx + 25 * d, wy))
+            drawRoundRect(cloud, Offset(wx - 4 * d, wy - 2 * d), androidx.compose.ui.geometry.Size(33 * d, 10 * d), androidx.compose.ui.geometry.CornerRadius(5 * d))
+        } else {
+            drawCircle(Brush.radialGradient(listOf(Color(0x668E99FF), Color(0x008E99FF)), Offset(cx, cy), 120 * d * pulse), 120 * d * pulse, Offset(cx, cy))
+            // Sichelmond mit schlafendem Gesicht.
+            val moon = androidx.compose.ui.graphics.Path().apply {
+                addOval(androidx.compose.ui.geometry.Rect(Offset(cx, cy), 27 * d))
+            }
+            val cut = androidx.compose.ui.graphics.Path().apply {
+                addOval(androidx.compose.ui.geometry.Rect(Offset(cx + 13 * d, cy - 9 * d), 23 * d))
+            }
+            val crescent = androidx.compose.ui.graphics.Path().apply {
+                op(moon, cut, androidx.compose.ui.graphics.PathOperation.Difference)
+            }
+            rotate(-12f + drift * 8f, Offset(cx, cy)) {
+                drawPath(crescent, Brush.radialGradient(listOf(Color(0xFFFFF6CF), Color(0xFFFFD873)), Offset(cx - 8 * d, cy), 34 * d))
+                drawArc(
+                    Color(0xFF8A6A1E), 20f, 140f, false, Offset(cx - 18 * d, cy - 4 * d), androidx.compose.ui.geometry.Size(9 * d, 6 * d),
+                    style = androidx.compose.ui.graphics.drawscope.Stroke(2f * d, cap = StrokeCap.Round),
+                )
+                drawCircle(Color(0x55FF8A65), 3f * d, Offset(cx - 16 * d, cy + 8 * d))
+            }
+            // Funkelnde Sterne (vierzackig).
+            val stars = listOf(Triple(-62f, -8f, 5f), Triple(-38f, 30f, 3.5f), Triple(-80f, 22f, 3f), Triple(18f, 34f, 4f), Triple(-20f, -20f, 3f), Triple(-100f, -2f, 2.5f))
+            stars.forEachIndexed { i, (dx, dy, r) ->
+                val a = if (i % 2 == 0) twinkle else 1f - twinkle
+                val p = Offset(cx + dx * d, cy + dy * d)
+                val rr = r * d * (0.7f + a * 0.5f)
+                val star = androidx.compose.ui.graphics.Path().apply {
+                    moveTo(p.x, p.y - rr * 2)
+                    quadraticBezierTo(p.x, p.y, p.x + rr * 2, p.y)
+                    quadraticBezierTo(p.x, p.y, p.x, p.y + rr * 2)
+                    quadraticBezierTo(p.x, p.y, p.x - rr * 2, p.y)
+                    quadraticBezierTo(p.x, p.y, p.x, p.y - rr * 2)
+                    close()
+                }
+                drawPath(star, Color(0xFFFFF3C4).copy(alpha = 0.35f + 0.65f * a))
             }
         }
     }
@@ -453,7 +495,7 @@ private fun LessonsTile(s: TodayState, schedule: de.schulplaner.domain.ScheduleD
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        Text(l.periodLabel, style = T.smallBold, color = c.sub, modifier = Modifier.width(36.dp))
+                        Text(l.periodLabel, style = T.smallBold, color = c.sub, maxLines = 1, softWrap = false, modifier = Modifier.width(50.dp))
                         LessonMark(subjectColor(l.subject?.color), l.length)
                         Column(Modifier.weight(1f)) {
                             Text(

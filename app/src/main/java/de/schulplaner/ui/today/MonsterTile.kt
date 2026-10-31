@@ -20,6 +20,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -36,6 +37,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -93,6 +95,12 @@ fun MonsterTile(modifier: Modifier = Modifier) {
     val weekDays = (0 until 7).map { monday + it }
     val week = weekDays.filter { it <= today }.sumOf { countOn(it) }
 
+    // Im Dunkelmodus gedämpfte Beerentöne statt knalligem Pink.
+    val dark = de.schulplaner.ui.components.colors.isDark
+    val bg = if (dark) listOf(Color(0xFF6E3049), Color(0xFF7E1C3E), Color(0xFF5E0D27), Color(0xFF2A0611)) else listOf(Blush, Berry, Strawberry, DeepBerry)
+    val glowColor = if (dark) Color(0xFF8E1F45) else Berry
+    var editDay by remember { androidx.compose.runtime.mutableStateOf<Long?>(null) }
+
     val scope = rememberCoroutineScope()
     val slash = remember { Animatable(1f) }
     val flash = remember { Animatable(0f) }
@@ -146,10 +154,10 @@ fun MonsterTile(modifier: Modifier = Modifier) {
             .height(188.dp)
             .graphicsLayer { rotationZ = shake.value }
             .pressable({ hit(1) }, onLongClick = { if (count > 0) hit(-1) })
-            .shadow(16.dp, shape, ambientColor = Berry, spotColor = Berry)
+            .shadow(if (dark) 6.dp else 16.dp, shape, ambientColor = glowColor, spotColor = glowColor)
             .clip(shape)
-            .background(Brush.linearGradient(listOf(Blush, Berry, Strawberry, DeepBerry), start = Offset.Zero, end = Offset(900f, 700f)))
-            .drawBehind { canTexture(shimmer) }
+            .background(Brush.linearGradient(bg, start = Offset.Zero, end = Offset(900f, 700f)))
+            .drawBehind { canTexture(shimmer, if (dark) 0.45f else 1f) }
             .border(1.5.dp, Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.7f), Color.White.copy(alpha = 0.1f))), shape),
     ) {
         Row(
@@ -199,7 +207,14 @@ fun MonsterTile(modifier: Modifier = Modifier) {
                     val max = weekDays.maxOf { countOn(it) }.coerceAtLeast(3)
                     weekDays.forEach { d ->
                         val n = countOn(d)
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        // Tag antippen = Anzahl korrigieren.
+                        Column(
+                            Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .then(if (d <= today) Modifier.clickable { editDay = d } else Modifier)
+                                .padding(horizontal = 2.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
                             Box(
                                 Modifier
                                     .width(12.dp)
@@ -217,6 +232,25 @@ fun MonsterTile(modifier: Modifier = Modifier) {
                     Text("  $week diese Woche", style = T.smallBold, color = Cream, modifier = Modifier.padding(bottom = 14.dp))
                 }
             }
+        }
+        editDay?.let { d ->
+            var value by remember(d) { androidx.compose.runtime.mutableIntStateOf(countOn(d)) }
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { editDay = null },
+                title = { Text(Fmt.full(LocalDate.ofEpochDay(d))) },
+                text = {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+                        de.schulplaner.ui.components.Stepper("$value", onMinus = { value = (value - 1).coerceAtLeast(0) }, onPlus = { value++ })
+                    }
+                },
+                confirmButton = {
+                    androidx.compose.material3.TextButton(onClick = {
+                        repo.setMonster(d, value)
+                        editDay = null
+                    }) { Text("Speichern") }
+                },
+                dismissButton = { androidx.compose.material3.TextButton(onClick = { editDay = null }) { Text("Abbrechen") } },
+            )
         }
         // Funken und Erdbeer-Tropfen, die beim Tippen aus dem Logo spritzen, plus weißer Blitz.
         Canvas(Modifier.fillMaxSize()) {
@@ -237,19 +271,19 @@ fun MonsterTile(modifier: Modifier = Modifier) {
 }
 
 /** Dosen-Look: Glanzstreifen, der langsam vorbeizieht, feine Kratzer und Erdbeer-Kerne. */
-private fun DrawScope.canTexture(shimmer: Float) {
+private fun DrawScope.canTexture(shimmer: Float, strength: Float = 1f) {
     val w = size.width
     val h = size.height
     // Glanz wie auf Metall.
     val x = shimmer * w
     drawRect(
         Brush.linearGradient(
-            listOf(Color.Transparent, Color.White.copy(alpha = 0.28f), Color.Transparent),
+            listOf(Color.Transparent, Color.White.copy(alpha = 0.28f * strength), Color.Transparent),
             start = Offset(x - w * 0.25f, 0f),
             end = Offset(x + w * 0.05f, h),
         ),
     )
-    drawRect(Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.22f), Color.Transparent), endY = h * 0.45f))
+    drawRect(Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.22f * strength), Color.Transparent), endY = h * 0.45f))
     // Kratzer (wie von Krallen) rechts oben.
     val scratch = Color.White.copy(alpha = 0.12f)
     for (i in 0 until 4) {
@@ -265,41 +299,59 @@ private fun DrawScope.canTexture(shimmer: Float) {
     }
 }
 
-/** Drei kräftige, gezackte Krallen im Monster-Stil; [progress] 0→1 lässt sie von oben aufreißen. */
+/**
+ * Drei lange, ausgefranste Krallen-Kratzer (eigene Zeichnung im Monster-Stil, kein Original-Logo):
+ * oben breit mit gezackten Spitzen, Ränder unregelmäßig eingerissen, unten in dünne Fetzen auslaufend.
+ * [progress] 0→1 lässt sie von oben nach unten aufreißen.
+ */
 private fun DrawScope.drawLogo(progress: Float, glow: Float, flash: Float) {
     val w = size.width
     val h = size.height
-    val outline = DeepBerry
-    fun claw(cx: Float, top: Float, bottom: Float, angle: Float, half: Float, delay: Float) {
+    // Feste Pseudo-Zufallswerte, damit die Kratzer immer gleich aussehen.
+    fun jitter(seed: Int): Float = (((seed * 7919 + 104729) % 1000) / 1000f) * 2f - 1f
+    fun claw(index: Int, cx: Float, top: Float, bottom: Float, angle: Float, half: Float, delay: Float) {
         val p = ((progress - delay) / (1f - delay)).coerceIn(0f, 1f)
         if (p <= 0f) return
         val len = bottom - top
-        // Unregelmäßiger, nach unten spitz zulaufender Kratzer mit groben Zacken.
-        val pts = listOf(
-            -1.00f to 0.00f, -1.25f to 0.10f, -0.70f to 0.14f, -1.05f to 0.30f, -0.55f to 0.36f,
-            -0.85f to 0.52f, -0.35f to 0.58f, -0.55f to 0.74f, -0.15f to 0.80f, -0.20f to 0.93f, 0.05f to 1.00f,
-            0.30f to 0.90f, 0.30f to 0.80f, 0.70f to 0.74f, 0.50f to 0.58f, 0.95f to 0.52f,
-            0.70f to 0.36f, 1.15f to 0.30f, 0.85f to 0.14f, 1.30f to 0.10f, 1.00f to 0.00f,
-        )
-        val path = Path().apply {
-            pts.forEachIndexed { i, (dx, dy) ->
-                val px = cx + dx * half * (1f - dy * 0.35f)
-                val py = top + dy * len
-                if (i == 0) moveTo(px, py) else lineTo(px, py)
-            }
-            close()
+        val steps = 22
+        val path = Path()
+        // Obere Kante: drei kleine Zacken.
+        path.moveTo(cx - half, top + len * 0.03f)
+        path.lineTo(cx - half * 0.45f, top)
+        path.lineTo(cx - half * 0.1f, top + len * 0.035f)
+        path.lineTo(cx + half * 0.35f, top - len * 0.01f)
+        path.lineTo(cx + half, top + len * 0.04f)
+        // Rechte Kante nach unten: verjüngt, ausgefranst.
+        for (k in 1..steps) {
+            val f = k / steps.toFloat()
+            val taper = 1f - f * 0.72f
+            val rough = jitter(index * 100 + k) * half * 0.28f + (if (k % 3 == 0) half * 0.22f else 0f)
+            path.lineTo(cx + half * taper + rough, top + len * f)
         }
+        // Unten zwei dünne Fetzen.
+        path.lineTo(cx + half * 0.05f, bottom + len * 0.04f)
+        path.lineTo(cx - half * 0.12f, bottom - len * 0.05f)
+        path.lineTo(cx - half * 0.38f, bottom + len * 0.02f)
+        // Linke Kante nach oben.
+        for (k in steps downTo 1) {
+            val f = k / steps.toFloat()
+            val taper = 1f - f * 0.72f
+            val rough = jitter(index * 100 + k + 50) * half * 0.28f - (if (k % 4 == 1) half * 0.25f else 0f)
+            path.lineTo(cx - half * taper + rough, top + len * f)
+        }
+        path.close()
         rotate(angle, Offset(cx, bottom)) {
-            clipRect(top = 0f, bottom = top + len * p) {
-                // Leuchten.
-                drawPath(path, Color.White.copy(alpha = 0.25f * glow + flash * 0.4f), style = Stroke(10.dp.toPx(), join = StrokeJoin.Round))
+            clipRect(top = 0f, bottom = top + (len * 1.06f) * p) {
+                // Leuchten, Füllung, feine dunkle Kante.
+                drawPath(path, Color.White.copy(alpha = 0.22f * glow + flash * 0.4f), style = Stroke(11.dp.toPx(), join = StrokeJoin.Round))
                 drawPath(path, Brush.verticalGradient(listOf(Color.White, Cream, Blush), startY = top, endY = bottom))
-                drawPath(path, outline.copy(alpha = 0.55f), style = Stroke(1.6.dp.toPx(), join = StrokeJoin.Round))
+                drawPath(path, DeepBerry.copy(alpha = 0.5f), style = Stroke(1.4.dp.toPx(), join = StrokeJoin.Round))
             }
         }
     }
-    val half = w * 0.085f
-    claw(w * 0.2f, h * 0.10f, h * 0.98f, -9f, half, 0f)
-    claw(w * 0.5f, h * 0.0f, h * 0.92f, 0f, half * 1.05f, 0.12f)
-    claw(w * 0.8f, h * 0.10f, h * 0.98f, 9f, half, 0.24f)
+    val half = w * 0.095f
+    // Außen lang, Mitte etwas kürzer und tiefer – zusammen ein "M".
+    claw(1, w * 0.19f, h * 0.02f, h * 0.96f, -4f, half, 0f)
+    claw(2, w * 0.5f, h * 0.12f, h * 0.84f, 0f, half * 0.95f, 0.12f)
+    claw(3, w * 0.81f, h * 0.02f, h * 0.96f, 4f, half, 0.24f)
 }

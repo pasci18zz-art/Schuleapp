@@ -327,10 +327,9 @@ fun ProgressRing(progress: Float, color: Color, size: Dp = 64.dp, stroke: Dp = 7
 
 /** Fortschrittsbalken. */
 @Composable
-fun ProgressBar(progress: Float, color: Color, modifier: Modifier = Modifier, height: Dp = 6.dp) {
-    val c = colors
+fun ProgressBar(progress: Float, color: Color, modifier: Modifier = Modifier, height: Dp = 6.dp, track: Color = colors.line) {
     val animated by animateFloatAsState(progress.coerceIn(0f, 1f), tween(600), label = "bar")
-    Box(modifier.fillMaxWidth().height(height).clip(RoundedCornerShape(50)).background(c.line)) {
+    Box(modifier.fillMaxWidth().height(height).clip(RoundedCornerShape(50)).background(track)) {
         Box(Modifier.fillMaxWidth(animated).height(height).clip(RoundedCornerShape(50)).background(color))
     }
 }

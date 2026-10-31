@@ -6,6 +6,8 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -91,6 +93,7 @@ fun GradesOverviewScreen() {
 
     var termId by rememberSaveable { mutableStateOf<String?>(null) }
     var sortByPoints by rememberSaveable { mutableStateOf(false) }
+    var view by rememberSaveable { mutableStateOf(GradeView.ALL) }
     var newGrade by remember { mutableStateOf<Grade?>(null) }
     val readOnly = de.schulplaner.ui.components.LocalReadOnly.current
     val term = terms.firstOrNull { it.id == termId } ?: repo.currentTerm(terms)
@@ -120,25 +123,54 @@ fun GradesOverviewScreen() {
         val avg = TermStats.average(results)
         val withValue = results.filter { it.value != null }
 
-        GlassCard(padding = PaddingValues(start = 20.dp, end = 16.dp, top = 18.dp, bottom = 18.dp)) {
+        val written = TermStats.kindTermAverage(term.id, subjects, de.schulplaner.data.CategoryKind.WRITTEN, categories, grades)
+        val oral = TermStats.kindTermAverage(term.id, subjects, de.schulplaner.data.CategoryKind.ORAL, categories, grades)
+        GlassCard(padding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("GESAMTSCHNITT", style = T.overline, color = c.accent)
-                    if (avg != null) {
-                        val animated by animateFloatAsState(avg.toFloat(), tween(800), label = "avg")
-                        Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 6.dp)) {
-                            Text(GradeCalc.format(animated.toDouble()), style = T.bigNumber.copy(fontSize = T.bigNumber.fontSize * 1.08f), color = c.text)
-                            Text("P", style = T.body, color = c.sub, modifier = Modifier.padding(bottom = 8.dp))
-                        }
-                        Pill("≈ Note ${GradeCalc.note(avg)}", modifier = Modifier.padding(top = 8.dp))
-                    } else {
-                        Text("Noch keine Noten", style = T.body, color = c.sub, modifier = Modifier.padding(top = 10.dp))
+                Text("SCHNITT", style = T.overline, color = c.accent, modifier = Modifier.weight(1f))
+                Text("${withValue.size} Fächer · ${subjects.count { it.isLk && !it.archived }} LK", style = T.small, color = c.sub)
+            }
+            // Schriftlich | Mündlich | Gesamt – getrennt durch feine blaue Striche, die gewählte Art groß.
+            Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min).padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                val cols = listOf(
+                    Triple(GradeView.WRITTEN, "schriftlich", written),
+                    Triple(GradeView.ORAL, "mündlich", oral),
+                    Triple(GradeView.ALL, "gesamt", avg),
+                )
+                cols.forEachIndexed { i, (mode, label, value) ->
+                    if (i > 0) Box(Modifier.padding(horizontal = 8.dp).width(1.5.dp).fillMaxHeight().clip(RoundedCornerShape(1.dp)).background(c.accent.copy(alpha = 0.55f)))
+                    val active = view == mode
+                    val size by animateFloatAsState(if (active) 1f else 0.62f, tween(300), label = "avg-size")
+                    Column(
+                        Modifier.weight(if (active) 1.3f else 1f).clip(RoundedCornerShape(12.dp)).clickable { view = mode }.padding(vertical = 4.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        Text(
+                            value?.let { GradeCalc.format(it) } ?: "–",
+                            style = T.bigNumber.copy(fontSize = T.bigNumber.fontSize * size),
+                            color = if (active) c.text else c.sub,
+                            maxLines = 1,
+                        )
+                        Text(label, style = T.small, color = if (active) c.accent else c.sub)
                     }
                 }
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    StatPill("Fächer", "${withValue.size}")
-                    StatPill("LK", "${subjects.count { it.isLk && !it.archived }}")
-                }
+            }
+            val shown = when (view) {
+                GradeView.WRITTEN -> written
+                GradeView.ORAL -> oral
+                GradeView.ALL -> avg
+            }
+            Row(Modifier.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (shown != null) Pill("≈ Note ${GradeCalc.note(shown)}") else Text("Noch keine Noten", style = T.small, color = c.sub)
+                Box(Modifier.weight(1f))
+                // Umschalter mit Symbolen: Buch = schriftlich, Kopf = mündlich, = gesamt.
+                de.schulplaner.ui.components.MiniSegmented(
+                    listOf(GradeView.WRITTEN to "Schriftlich", GradeView.ORAL to "Mündlich", GradeView.ALL to "Gesamt"),
+                    view,
+                    { view = it },
+                    Modifier.width(150.dp),
+                    icons = listOf(de.schulplaner.ui.components.Sym.Deutsch, de.schulplaner.ui.components.Sym.Speak, de.schulplaner.ui.components.Sym.Equals),
+                )
             }
         }
 
@@ -147,8 +179,14 @@ fun GradesOverviewScreen() {
                 Text("Fächer", style = T.section, color = c.text, modifier = Modifier.weight(1f))
                 de.schulplaner.ui.components.MiniSegmented(listOf(false to "A–Z", true to "Punkte"), sortByPoints, { sortByPoints = it }, Modifier.width(150.dp))
             }
-            val sorted = if (sortByPoints) results.sortedByDescending { it.value ?: -1.0 } else results
+            fun valueOf(r: de.schulplaner.domain.SubjectResult): Double? = when (view) {
+                GradeView.WRITTEN -> TermStats.kindAverage(term.id, r.subject.id, de.schulplaner.data.CategoryKind.WRITTEN, categories, grades)
+                GradeView.ORAL -> TermStats.kindAverage(term.id, r.subject.id, de.schulplaner.data.CategoryKind.ORAL, categories, grades)
+                GradeView.ALL -> r.value
+            }
+            val sorted = if (sortByPoints) results.sortedByDescending { valueOf(it) ?: -1.0 } else results
             sorted.forEach { r ->
+                val v = valueOf(r)
                 val color = subjectColor(r.subject.color)
                 Row(
                     Modifier
@@ -165,9 +203,9 @@ fun GradesOverviewScreen() {
                             Text(r.subject.name, style = T.body, color = c.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             if (r.subject.isLk) Pill("LK")
                         }
-                        ProgressBar(((r.value ?: 0.0) / 15.0).toFloat(), color, height = 5.dp)
+                        ProgressBar(((v ?: 0.0) / 15.0).toFloat(), color, height = 5.dp)
                     }
-                    Text(r.value?.let { GradeCalc.format(it) } ?: "–", style = T.section, color = if ((r.value ?: 99.0) < 5.0) c.warn else c.text, modifier = Modifier.width(44.dp))
+                    Text(v?.let { GradeCalc.format(it) } ?: "–", style = T.section, color = if ((v ?: 99.0) < 5.0) c.warn else c.text, modifier = Modifier.width(44.dp))
                     Icon(Ic.ChevronRight, null, tint = c.sub, modifier = Modifier.size(16.dp))
                 }
             }
@@ -459,3 +497,6 @@ private fun Sparkline(points: List<Int>, color: Color) {
 
 @Suppress("unused")
 private fun Modifier.outlined(color: Color) = this.border(1.dp, color, RoundedCornerShape(12.dp))
+
+/** Welche Noten oben und in der Fächerliste gezeigt werden. */
+private enum class GradeView { WRITTEN, ORAL, ALL }

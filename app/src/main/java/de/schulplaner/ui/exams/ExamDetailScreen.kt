@@ -3,6 +3,7 @@ package de.schulplaner.ui.exams
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -72,6 +73,9 @@ fun ExamDetailScreen(id: String) {
     val attachments by repo.attachments.collectAsStateWithLifecycle()
     val grades by repo.grades.collectAsStateWithLifecycle()
     val schedule by repo.scheduleData.collectAsStateWithLifecycle()
+    val sessions by repo.sessions.collectAsStateWithLifecycle()
+    val settingsMap by repo.settings.collectAsStateWithLifecycle()
+    var pickPrep by remember { mutableStateOf(false) }
     val today = rememberNow().toLocalDate()
 
     val exam = exams.firstOrNull { it.id == id }
@@ -189,6 +193,55 @@ fun ExamDetailScreen(id: String) {
             }
             if (!readOnly && notes != exam.topicsText) {
                 PrimaryButton("Speichern", { repo.saveExam(exam.copy(topicsText = notes)) }, Modifier.padding(top = 10.dp).fillMaxWidth())
+            }
+        }
+
+        // Vorbereitung: reine Lernzeit (Art "Lernen") in diesem Fach vom gewählten Tag bis zur Klausur.
+        val prepKey = "prep_${exam.id}"
+        val prepFrom = settingsMap[prepKey]?.toLongOrNull() ?: (exam.date - 14)
+        val zone = java.time.ZoneId.systemDefault()
+        val fromMs = LocalDate.ofEpochDay(prepFrom).atStartOfDay(zone).toInstant().toEpochMilli()
+        val toMs = date.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
+        val prep = sessions.filter {
+            it.kind == de.schulplaner.data.StudyKind.LEARN && it.subjectId == exam.subjectId && it.startedAt in fromMs until toMs
+        }
+        val prepNow = de.schulplaner.ui.study.rememberTicker(prep.any { it.isRunning })
+        val prepTotal = prep.sumOf { it.totalMs(prepNow) }
+        GlassCard(padding = PaddingValues(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Ic.Clock, null, tint = c.accent, modifier = Modifier.size(22.dp))
+                Text("Vorbereitung", style = T.section, color = c.text, modifier = Modifier.padding(start = 10.dp).weight(1f))
+                Text(de.schulplaner.ui.study.StudyLook.short(prepTotal), style = T.section, color = c.text)
+            }
+            Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("Lernzeit in ${subject?.name ?: "diesem Fach"} ab ", style = T.small, color = c.sub)
+                Text(
+                    Fmt.dayDate(LocalDate.ofEpochDay(prepFrom)),
+                    style = T.label,
+                    color = c.accent,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .then(if (!readOnly) Modifier.clickable { pickPrep = true } else Modifier)
+                        .padding(horizontal = 4.dp, vertical = 2.dp),
+                )
+                Text(" bis zur Klausur", style = T.small, color = c.sub)
+            }
+            // Pro Tag zusammengefasst.
+            val byDay = prep.groupBy { java.time.Instant.ofEpochMilli(it.startedAt).atZone(zone).toLocalDate() }
+                .toSortedMap()
+            if (byDay.isEmpty()) {
+                Text("Noch keine Lernzeit eingetragen", style = T.small, color = c.sub, modifier = Modifier.padding(top = 8.dp))
+            }
+            byDay.forEach { (d, l) ->
+                Row(Modifier.fillMaxWidth().padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(Fmt.dayDate(d), style = T.small, color = c.sub, modifier = Modifier.weight(1f))
+                    Text(de.schulplaner.ui.study.StudyLook.short(l.sumOf { it.totalMs(prepNow) }), style = T.label, color = c.text)
+                }
+            }
+        }
+        if (pickPrep) {
+            de.schulplaner.ui.components.DateDialog(LocalDate.ofEpochDay(prepFrom), onDismiss = { pickPrep = false }) { d ->
+                repo.setSetting(prepKey, d.toEpochDay().toString())
             }
         }
 

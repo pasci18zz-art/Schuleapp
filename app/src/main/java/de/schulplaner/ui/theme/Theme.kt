@@ -111,7 +111,7 @@ val DarkSchulColors = SchulColors(
     orb3 = Color(0x451F9E86),
     heroStart = Color(0xFF3D47B8),
     heroEnd = Color(0xFF6A3FB8),
-    tint = 0.24f,
+    tint = 0.42f,
 )
 
 val LocalSchulColors = staticCompositionLocalOf { LightSchulColors }

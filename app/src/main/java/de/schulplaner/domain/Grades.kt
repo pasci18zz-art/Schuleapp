@@ -83,6 +83,19 @@ object TermStats {
         }
     }
 
+    /** Schnitt eines Fachs nur aus schriftlichen bzw. mündlichen Kategorien ([kind] = CategoryKind). */
+    fun kindAverage(termId: String, subjectId: String, kind: String, categories: List<GradeCategory>, grades: List<Grade>): Double? {
+        val cats = categories.filter { it.subjectId == subjectId && it.termId == termId && it.kind == kind }
+        val gs = grades.filter { it.subjectId == subjectId && it.termId == termId }
+        return GradeCalc.subjectAverage(cats, gs)
+    }
+
+    /** Halbjahresschnitt nur schriftlich bzw. mündlich (Fächer mit Noten in dieser Art zählen gleich). */
+    fun kindTermAverage(termId: String, subjects: List<Subject>, kind: String, categories: List<GradeCategory>, grades: List<Grade>): Double? {
+        val values = subjects.filter { !it.archived }.mapNotNull { kindAverage(termId, it.id, kind, categories, grades) }
+        return if (values.isEmpty()) null else values.average()
+    }
+
     /** Halbjahresschnitt: alle Fächer mit Ergebnis zählen gleich. */
     fun average(results: List<SubjectResult>): Double? {
         val values = results.mapNotNull { it.value }

@@ -42,6 +42,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.draw.drawWithContent
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.foundation.layout.statusBarsPadding
 import de.schulplaner.ui.components.blurWhenSheetOpen
@@ -171,6 +175,27 @@ fun AppRoot(startRoute: String? = null) {
         de.schulplaner.ui.components.LocalReadOnly provides readOnly,
     ) {
         AppBackground(Modifier.blurWhenSheetOpen(sheetBlur)) {
+            val fadeTop = androidx.compose.foundation.layout.WindowInsets.statusBars
+                .asPaddingValues().calculateTopPadding() + 18.dp
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    // Weicher Ausblend-Verlauf: Was nach oben scrollt, verschwindet unter der Statusleiste.
+                    .graphicsLayer { compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.Offscreen }
+                    .drawWithContent {
+                        drawContent()
+                        val end = fadeTop.toPx()
+                        drawRect(
+                            Brush.verticalGradient(
+                                0f to Color.Transparent,
+                                (end * 0.55f / size.height) to Color.Black.copy(alpha = 0.35f),
+                                (end / size.height) to Color.Black,
+                                1f to Color.Black,
+                            ),
+                            blendMode = androidx.compose.ui.graphics.BlendMode.DstIn,
+                        )
+                    },
+            ) {
             NavHost(
                 navController = nav,
                 startDestination = Routes.MAIN,
@@ -200,6 +225,7 @@ fun AppRoot(startRoute: String? = null) {
                 composable(Routes.SET_HOLIDAYS) { Centered { HolidaysScreen() } }
                 composable(Routes.SET_KINDS) { Centered { de.schulplaner.ui.settings.TaskKindsScreen() } }
                 composable(Routes.STUDY) { Centered { de.schulplaner.ui.study.StudyScreen() } }
+            }
             }
             if (readOnly) {
                 // Hinweis oben: Auf diesem Gerät wird nur angeschaut.

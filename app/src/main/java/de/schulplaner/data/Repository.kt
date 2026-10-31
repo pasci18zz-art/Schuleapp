@@ -474,6 +474,11 @@ class Repository(
         }
     }
 
+    /** Monster-Zähler eines beliebigen Tages direkt setzen (zum Korrigieren). */
+    fun setMonster(day: Long, value: Int) = io {
+        dao.upsertSetting(Setting(SettingKeys.MONSTER_PREFIX + day, value.coerceAtLeast(0).toString(), updatedAt = now(), dirty = true))
+    }
+
     fun toggleStudy() = io { toggleStudyNow() }
     fun stopStudy() = io { stopStudyNow() }
     fun setStudyKind(kind: String) = io { setStudyKindNow(kind) }

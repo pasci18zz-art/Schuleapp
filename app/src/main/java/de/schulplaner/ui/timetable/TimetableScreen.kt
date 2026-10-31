@@ -90,6 +90,7 @@ private val RowH = 64.dp
 private val Gap = 4.dp
 private val HeaderH = 42.dp
 private val TimeW = 32.dp
+private val KwW = 26.dp
 private const val PAGES = 2001
 private const val CENTER = 1000
 private val monthNames = listOf("Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember")
@@ -298,7 +299,11 @@ private fun WeekGrid(
     GlassCard(padding = PaddingValues(10.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(Gap)) {
             Column(Modifier.width(TimeW)) {
-                Box(Modifier.height(HeaderH))
+                // Kalenderwoche oben links.
+                Column(Modifier.height(HeaderH).width(TimeW), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                    Text("KW", style = T.smallBold.copy(fontSize = T.small.fontSize * 0.8f), color = c.accent)
+                    Text("${Fmt.weekOfYear(monday)}", style = T.label, color = c.accent)
+                }
                 Box(Modifier.height(bodyH)) {
                     for (p in 1..maxPeriod) {
                         Column(
@@ -446,6 +451,7 @@ private fun MonthGrid(
     val start = first.minusDays((first.dayOfWeek.value - 1).toLong())
     GlassCard(padding = PaddingValues(10.dp)) {
         Row(Modifier.fillMaxWidth().height(26.dp)) {
+            Text("KW", style = T.smallBold, color = c.accent, textAlign = TextAlign.Center, modifier = Modifier.width(KwW))
             listOf("Mo", "Di", "Mi", "Do", "Fr", "Sa", "So").forEachIndexed { i, d ->
                 Text(d, style = T.smallBold, color = if (i == 6) c.exam else c.sub, textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
             }
@@ -453,6 +459,15 @@ private fun MonthGrid(
         Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
             for (w in 0 until 6) {
                 Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                    // Kalenderwoche links neben jeder Zeile.
+                    Box(Modifier.width(KwW - 3.dp).height(cellH), contentAlignment = Alignment.TopCenter) {
+                        Text(
+                            "${Fmt.weekOfYear(start.plusDays((w * 7).toLong()))}",
+                            style = T.smallBold.copy(fontSize = T.small.fontSize * 0.85f),
+                            color = c.sub,
+                            modifier = Modifier.padding(top = 8.dp),
+                        )
+                    }
                     for (d in 0 until 7) {
                         val date = start.plusDays((w * 7 + d).toLong())
                         val epoch = date.toEpochDay()
