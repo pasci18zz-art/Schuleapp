@@ -22,6 +22,7 @@ class ActionReceiver : BroadcastReceiver() {
                     ACTION_STOP -> repo.stopStudyNow()
                     ACTION_KIND -> intent.getStringExtra(EXTRA_KIND)?.let { repo.setStudyKindNow(it) }
                     ACTION_TASK_DONE -> intent.getStringExtra(EXTRA_ID)?.let { repo.completeTaskNow(it) }
+                    ACTION_TASK_FILTER -> Widgets.setFilter(ctx, intent.getIntExtra(EXTRA_WIDGET, 0), intent.getStringExtra(EXTRA_KIND))
                     ACTION_REFRESH -> Unit
                 }
                 val snap = repo.snapshot()
@@ -39,6 +40,8 @@ class ActionReceiver : BroadcastReceiver() {
         const val ACTION_KIND = "de.schulplaner.action.STUDY_KIND"
         const val ACTION_TASK_DONE = "de.schulplaner.action.TASK_DONE"
         const val ACTION_REFRESH = "de.schulplaner.action.REFRESH"
+        const val ACTION_TASK_FILTER = "de.schulplaner.action.TASK_FILTER"
+        const val EXTRA_WIDGET = "widget"
         const val EXTRA_KIND = "kind"
         const val EXTRA_ID = "id"
 

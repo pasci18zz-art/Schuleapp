@@ -1,16 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Linke Hälfte des Heute-Widgets: oben die aktuelle Stunde, darunter die nächste. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical">
-
     <FrameLayout
         android:id="@+id/now_card"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1.15">
-
         <ImageView
             android:id="@+id/now_bg"
             android:layout_width="match_parent"
@@ -18,14 +15,6 @@
             android:importantForAccessibility="no"
             android:scaleType="fitXY"
             android:src="@drawable/widget_round_fill" />
-
-        <ImageView
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:importantForAccessibility="no"
-            android:scaleType="fitXY"
-            android:src="@drawable/widget_chip" />
-
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="match_parent"
@@ -33,47 +22,56 @@
             android:orientation="vertical"
             android:paddingStart="12dp"
             android:paddingEnd="10dp">
-
             <TextView
                 android:id="@+id/now_label"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:ellipsize="end"
-                android:fontFamily="sans-serif-medium"
                 android:letterSpacing="0.06"
                 android:maxLines="1"
                 android:text="JETZT · 3.–4. STD"
-                android:textColor="#D9FFFFFF"
+                android:textColor="#E6FFFFFF"
                 android:textSize="10sp"
                 android:textStyle="bold" />
-
-            <TextView
-                android:id="@+id/now_subject"
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:ellipsize="end"
-                android:fontFamily="sans-serif"
-                android:maxLines="1"
-                android:text="Mathematik"
-                android:textColor="#FFFFFFFF"
-                android:textSize="18sp"
-                android:textStyle="bold" />
-
+                android:layout_marginTop="4dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+                <ImageView
+    android:id="@+id/now_icon"
+    android:layout_width="26dp"
+    android:layout_height="26dp"
+    
+    android:importantForAccessibility="no"
+    android:padding="0dp"
+    android:src="@drawable/ic_s_mathe"
+     />
+                <TextView
+                    android:id="@+id/now_subject"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:paddingStart="8dp"
+                    android:text="Mathematik"
+                    android:textColor="#FFFFFFFF"
+                    android:textSize="18sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:gravity="center_vertical"
                 android:orientation="horizontal">
-
                 <Chronometer
                     android:id="@+id/now_timer"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:fontFamily="sans-serif-medium"
                     android:textColor="#FFFFFFFF"
                     android:textSize="13sp"
                     android:textStyle="bold" />
-
                 <TextView
                     android:id="@+id/now_info"
                     android:layout_width="match_parent"
@@ -82,84 +80,65 @@
                     android:maxLines="1"
                     android:paddingStart="8dp"
                     android:text="R 204"
-                    android:textColor="#CCFFFFFF"
+                    android:textColor="#D9FFFFFF"
                     android:textSize="12sp" />
             </LinearLayout>
         </LinearLayout>
     </FrameLayout>
-
     <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="8dp" />
-
-    <FrameLayout
+    <LinearLayout
         android:id="@+id/next_card"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1">
-
+        android:layout_weight="1"
+        android:background="@drawable/widget_tile"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="10dp"
+        android:paddingTop="8dp"
+        android:paddingEnd="10dp"
+        android:paddingBottom="8dp">
         <ImageView
-            android:layout_width="match_parent"
+            android:id="@+id/next_bar"
+            android:layout_width="5dp"
             android:layout_height="match_parent"
             android:importantForAccessibility="no"
             android:scaleType="fitXY"
-            android:src="@drawable/widget_chip" />
-
+            android:src="@drawable/widget_pill" />
         <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:gravity="center_vertical"
-            android:orientation="horizontal"
-            android:paddingStart="10dp"
-            android:paddingTop="8dp"
-            android:paddingEnd="10dp"
-            android:paddingBottom="8dp">
-
-            <ImageView
-                android:id="@+id/next_bar"
-                android:layout_width="5dp"
-                android:layout_height="match_parent"
-                android:importantForAccessibility="no"
-                android:scaleType="fitXY"
-                android:src="@drawable/widget_pill" />
-
-            <LinearLayout
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingStart="10dp">
+            <TextView
+                android:id="@+id/next_label"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:paddingStart="10dp">
-
-                <TextView
-                    android:id="@+id/next_label"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:ellipsize="end"
-                    android:fontFamily="sans-serif-medium"
-                    android:letterSpacing="0.06"
-                    android:maxLines="1"
-                    android:text="DANACH · 5. STD · 11:20"
-                    android:textColor="#B3FFFFFF"
-                    android:textSize="10sp"
-                    android:textStyle="bold" />
-
-                <TextView
-                    android:id="@+id/next_subject"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:ellipsize="end"
-                    android:maxLines="1"
-                    android:text="Englisch"
-                    android:textColor="#FFFFFFFF"
-                    android:textSize="15sp"
-                    android:textStyle="bold" />
-
-                <Chronometer
-                    android:id="@+id/next_timer"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:textColor="#CCFFFFFF"
-                    android:textSize="12sp" />
-            </LinearLayout>
+                android:ellipsize="end"
+                android:letterSpacing="0.06"
+                android:maxLines="1"
+                android:text="DANACH · 5. STD · 11:20"
+                android:textColor="#B3FFFFFF"
+                android:textSize="10sp"
+                android:textStyle="bold" />
+            <TextView
+                android:id="@+id/next_subject"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:text="Englisch"
+                android:textColor="#FFFFFFFF"
+                android:textSize="15sp"
+                android:textStyle="bold" />
+            <Chronometer
+                android:id="@+id/next_timer"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="#BFFFFFFF"
+                android:textSize="12sp" />
         </LinearLayout>
-    </FrameLayout>
+    </LinearLayout>
 </LinearLayout>

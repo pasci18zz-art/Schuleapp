@@ -145,7 +145,8 @@ object HolidayLook {
         else -> Color(0xFFC77700)
     }
 
-    private fun key(h: Holiday): String {
+    /** "tree", "sun", "leaf", "flower", "star" oder "palm" (auch für Widgets). */
+    fun key(h: Holiday): String {
         val n = h.name.lowercase()
         return when {
             "weihnacht" in n -> "tree"

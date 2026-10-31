@@ -157,6 +157,7 @@ fun AppRoot(startRoute: String? = null) {
         when (startRoute) {
             "tasks" -> navigator.tab(Tabs.TASKS)
             Routes.STUDY -> navigator.open(Routes.STUDY)
+            else -> startRoute?.let { if (it.startsWith("exam/")) navigator.open(it) }
         }
     }
 

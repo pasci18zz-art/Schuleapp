@@ -10,11 +10,14 @@ import android.os.SystemClock
 import android.util.SizeF
 import android.view.View
 import android.widget.RemoteViews
+import androidx.compose.ui.graphics.toArgb
 import de.schulplaner.MainActivity
 import de.schulplaner.R
+import de.schulplaner.data.HolidayKind
 import de.schulplaner.data.Repository
 import de.schulplaner.data.SettingKeys
 import de.schulplaner.data.StudyKind
+import de.schulplaner.data.Subject
 import de.schulplaner.data.Task
 import de.schulplaner.domain.Fmt
 import de.schulplaner.domain.Lesson
@@ -22,41 +25,80 @@ import de.schulplaner.domain.Schedule
 import de.schulplaner.domain.label
 import de.schulplaner.quick.QuickAddActivity
 import de.schulplaner.study.StudyNotifier
+import de.schulplaner.ui.components.HolidayLook
+import de.schulplaner.ui.components.SubjectIcons
+import de.schulplaner.ui.components.examUrgency
+import de.schulplaner.ui.components.urgencyColor
+import de.schulplaner.ui.tasks.kindOf
+import de.schulplaner.ui.tasks.stepPercent
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZoneId
 
-/** Baut die Widgets (RemoteViews) aus einer Momentaufnahme der Daten. */
+/**
+ * Baut alle Widgets (RemoteViews) aus einer Momentaufnahme der Daten.
+ * Look wie die Samsung-Widgets (graues Glas), dazu Elemente aus der App: Umschalter, Fachfarben, Symbole.
+ */
 object Widgets {
-    private const val ACCENT = 0xFF4F5BD5.toInt()
+    private const val RED = 0xFFFF6B6B.toInt()
+    private const val RED_TEXT = 0xFFFF9A8F.toInt()
+    private const val RING = 0x99FFFFFF.toInt()
+    private const val WHITE = 0xFFFFFFFF.toInt()
+    private const val DIM = 0xB3FFFFFF.toInt()
+    private const val ACCENT = 0xFF6F7BFF.toInt()
 
     fun render(ctx: Context, snap: Repository.Snapshot) {
         val mgr = AppWidgetManager.getInstance(ctx)
-        val todayIds = mgr.getAppWidgetIds(ComponentName(ctx, TodayWidget::class.java))
-        val studyIds = mgr.getAppWidgetIds(ComponentName(ctx, StudyWidget::class.java))
-        if (todayIds.isNotEmpty()) {
-            val views = RemoteViews(
-                mapOf(
-                    SizeF(110f, 100f) to today(ctx, snap, R.layout.widget_today_small, withTasks = false),
-                    SizeF(240f, 100f) to today(ctx, snap, R.layout.widget_today_wide, withTasks = true),
+        fun ids(cls: Class<*>) = mgr.getAppWidgetIds(ComponentName(ctx, cls))
+
+        val todayIds = ids(TodayWidget::class.java)
+        todayIds.forEach { id ->
+            mgr.updateAppWidget(
+                id,
+                RemoteViews(
+                    mapOf(
+                        SizeF(110f, 100f) to today(ctx, snap, R.layout.widget_today_small, withTasks = false),
+                        SizeF(240f, 100f) to today(ctx, snap, R.layout.widget_today_wide, withTasks = true),
+                    ),
                 ),
             )
-            todayIds.forEach { mgr.updateAppWidget(it, views) }
-            scheduleNext(ctx, snap)
         }
-        if (studyIds.isNotEmpty()) {
-            val views = RemoteViews(
-                mapOf(
-                    SizeF(100f, 40f) to study(ctx, snap, R.layout.widget_study_compact),
-                    SizeF(100f, 100f) to study(ctx, snap, R.layout.widget_study_square),
-                    SizeF(190f, 100f) to study(ctx, snap, R.layout.widget_study_full),
+        ids(TasksWidget::class.java).forEach { id -> mgr.updateAppWidget(id, tasksWidget(ctx, snap, id)) }
+        ids(StudyWidget::class.java).forEach { id ->
+            mgr.updateAppWidget(
+                id,
+                RemoteViews(
+                    mapOf(
+                        SizeF(100f, 40f) to study(ctx, snap, R.layout.widget_study_compact),
+                        SizeF(100f, 100f) to study(ctx, snap, R.layout.widget_study_square),
+                        SizeF(190f, 100f) to study(ctx, snap, R.layout.widget_study_full),
+                    ),
                 ),
             )
-            studyIds.forEach { mgr.updateAppWidget(it, views) }
         }
+        ids(ExamWidget::class.java).forEach { id -> mgr.updateAppWidget(id, exam(ctx, snap)) }
+        ids(HolidayWidget::class.java).forEach { id ->
+            mgr.updateAppWidget(
+                id,
+                RemoteViews(
+                    mapOf(
+                        SizeF(110f, 50f) to holiday(ctx, snap, R.layout.widget_holiday_wide),
+                        SizeF(110f, 110f) to holiday(ctx, snap, R.layout.widget_holiday),
+                    ),
+                ),
+            )
+        }
+        ids(QuickWidget::class.java).forEach { id -> mgr.updateAppWidget(id, quick(ctx)) }
+        if (todayIds.isNotEmpty()) scheduleNext(ctx, snap)
     }
 
-    // ---------------- Heute ----------------
+    // ---------------- Gemeinsames ----------------
+
+    private fun drawable(ctx: Context, name: String): Int = ctx.resources.getIdentifier(name, "drawable", ctx.packageName)
+
+    private fun subjectIcon(ctx: Context, s: Subject?): Int = s?.let { SubjectIcons.keyFor(it) }?.let { drawable(ctx, "ic_s_$it") } ?: 0
+
+    private fun subjectColor(s: Subject?): Int = (s?.color ?: 0xFF9AA1AF).toInt()
 
     private fun openApp(ctx: Context, code: Int, route: String? = null): PendingIntent =
         PendingIntent.getActivity(
@@ -67,6 +109,131 @@ object Widgets {
             },
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
+
+    private fun quickAdd(ctx: Context): PendingIntent =
+        PendingIntent.getActivity(
+            ctx, 23,
+            Intent(ctx, QuickAddActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+
+    /** Farbfilter auf ein weißes Bild (z. B. Fachfarbe), [alpha] 0–255. */
+    private fun tint(v: RemoteViews, id: Int, color: Int, alpha: Int = 255) {
+        v.setInt(id, "setColorFilter", color or (0xFF shl 24))
+        v.setInt(id, "setImageAlpha", alpha)
+    }
+
+    private fun urgency(open: Int): Int = when {
+        open == 0 -> WHITE
+        open <= 2 -> 0xFF7FD6A0.toInt()
+        open <= 4 -> 0xFFFFD166.toInt()
+        open <= 6 -> 0xFFFFA05C.toInt()
+        else -> 0xFFFF6B6B.toInt()
+    }
+
+    // ---------------- Aufgabenlisten ----------------
+
+    private val prefsName = "widgets"
+
+    /** Filter eines Aufgaben-Widgets (Aufgabenart oder null = alle). */
+    private fun filterFor(ctx: Context, widgetId: Int): String? =
+        ctx.getSharedPreferences(prefsName, Context.MODE_PRIVATE).getString("filter_$widgetId", null)?.ifBlank { null }
+
+    fun setFilter(ctx: Context, widgetId: Int, kind: String?) {
+        ctx.getSharedPreferences(prefsName, Context.MODE_PRIVATE).edit().putString("filter_$widgetId", kind ?: "").apply()
+    }
+
+    /**
+     * Alle offenen Aufgaben: zuerst überfällig/heute/morgen (rot), dann ein Strich, dann der Rest nach Datum.
+     * Die Liste ist im Widget scrollbar.
+     */
+    private fun fillTasks(ctx: Context, v: RemoteViews, snap: Repository.Snapshot, today: LocalDate, filter: String?) {
+        val open = snap.tasks.filter { !it.done && (filter == null || it.type == filter) }
+        val limit = today.plusDays(1).toEpochDay()
+        val urgent = open.filter { it.dueDate != null && it.dueDate <= limit }
+            .sortedWith(compareBy<Task> { it.dueDate }.thenBy { it.createdAt })
+        val rest = open.filter { it.dueDate == null || it.dueDate > limit }
+            .sortedWith(compareBy<Task> { it.dueDate ?: Long.MAX_VALUE }.thenBy { it.createdAt })
+
+        v.setTextViewText(R.id.tasks_count, "${open.size}")
+        v.setTextColor(R.id.tasks_count, urgency(open.size))
+        v.setOnClickPendingIntent(R.id.tasks_title, openApp(ctx, 22, "tasks"))
+        v.setOnClickPendingIntent(R.id.tasks_add, quickAdd(ctx))
+
+        val items = RemoteViews.RemoteCollectionItems.Builder().setHasStableIds(true).setViewTypeCount(2)
+        urgent.forEachIndexed { i, t -> items.addItem(t.id.hashCode().toLong(), row(ctx, snap, t, today, true, i == urgent.lastIndex)) }
+        if (urgent.isNotEmpty() && rest.isNotEmpty()) items.addItem(-1L, RemoteViews(ctx.packageName, R.layout.widget_task_sep))
+        rest.forEachIndexed { i, t -> items.addItem(t.id.hashCode().toLong(), row(ctx, snap, t, today, false, i == rest.lastIndex)) }
+        v.setRemoteAdapter(R.id.tasks_list, items.build())
+        v.setEmptyView(R.id.tasks_list, R.id.tasks_empty)
+        v.setPendingIntentTemplate(
+            R.id.tasks_list,
+            PendingIntent.getBroadcast(
+                ctx, 24, ActionReceiver.intent(ctx, ActionReceiver.ACTION_TASK_DONE),
+                PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+            ),
+        )
+    }
+
+    private fun row(ctx: Context, snap: Repository.Snapshot, t: Task, today: LocalDate, urgent: Boolean, last: Boolean): RemoteViews {
+        val r = RemoteViews(ctx.packageName, R.layout.widget_task_row)
+        val subject = t.subjectId?.let { snap.schedule.subjects[it] }
+        val due = t.dueDate?.let { LocalDate.ofEpochDay(it) }
+        val dueText = due?.let {
+            when {
+                it.isBefore(today) -> "überfällig"
+                it == today -> "heute"
+                it == today.plusDays(1) -> "morgen"
+                else -> "${Fmt.dayShort(it)} ${Fmt.dateShort(it)}"
+            }
+        }
+        val pct = stepPercent(t.id, snap.topics)
+        r.setTextViewText(R.id.row_title, t.title)
+        r.setTextViewText(R.id.row_meta, listOfNotNull(subject?.label ?: "Ohne Fach", dueText, pct?.let { "$it %" }).joinToString(" · "))
+        if (urgent) r.setTextColor(R.id.row_meta, RED_TEXT)
+        r.setInt(R.id.row_check, "setColorFilter", if (urgent) RED else RING)
+        r.setInt(R.id.row_dot, "setColorFilter", subjectColor(subject))
+        val kind = kindOf(t.type, snap.kinds)
+        r.setImageViewResource(R.id.row_kind, drawable(ctx, "ic_k_${kind.icon}").takeIf { it != 0 } ?: R.drawable.ic_k_dots)
+        r.setViewVisibility(R.id.row_line, if (last) View.GONE else View.VISIBLE)
+        r.setOnClickFillInIntent(R.id.row_check, Intent().putExtra(ActionReceiver.EXTRA_ID, t.id))
+        return r
+    }
+
+    private val segIds = listOf(R.id.seg_1, R.id.seg_2, R.id.seg_3, R.id.seg_4, R.id.seg_5)
+    private val segIconIds = listOf(R.id.seg_1_icon, R.id.seg_2_icon, R.id.seg_3_icon, R.id.seg_4_icon, R.id.seg_5_icon)
+
+    private fun tasksWidget(ctx: Context, snap: Repository.Snapshot, widgetId: Int): RemoteViews {
+        val v = RemoteViews(ctx.packageName, R.layout.widget_tasks)
+        val kinds = snap.kinds.take(5)
+        val filter = filterFor(ctx, widgetId)?.takeIf { f -> kinds.any { it.id == f } }
+        fun filterIntent(code: Int, kind: String?) = ActionReceiver.pending(ctx, ActionReceiver.ACTION_TASK_FILTER, 1000 + widgetId * 10 + code) {
+            putExtra(ActionReceiver.EXTRA_WIDGET, widgetId)
+            putExtra(ActionReceiver.EXTRA_KIND, kind ?: "")
+        }
+        // Umschalter wie in der App: "Alle" plus ein Symbol je Aufgabenart.
+        v.setInt(R.id.seg_0, "setBackgroundResource", if (filter == null) R.drawable.widget_seg_on else 0)
+        v.setTextColor(R.id.seg_0_label, if (filter == null) WHITE else DIM)
+        v.setOnClickPendingIntent(R.id.seg_0, filterIntent(0, null))
+        segIds.forEachIndexed { i, id ->
+            val k = kinds.getOrNull(i)
+            if (k == null) {
+                v.setViewVisibility(id, View.GONE)
+            } else {
+                val on = k.id == filter
+                v.setViewVisibility(id, View.VISIBLE)
+                v.setInt(id, "setBackgroundResource", if (on) R.drawable.widget_seg_on else 0)
+                v.setImageViewResource(segIconIds[i], drawable(ctx, "ic_k_${k.icon}").takeIf { it != 0 } ?: R.drawable.ic_k_dots)
+                v.setInt(segIconIds[i], "setImageAlpha", if (on) 255 else 170)
+                v.setOnClickPendingIntent(id, filterIntent(i + 1, k.id))
+            }
+        }
+        v.setTextViewText(R.id.tasks_title, filter?.let { f -> kinds.firstOrNull { it.id == f }?.name } ?: "Aufgaben")
+        fillTasks(ctx, v, snap, LocalDate.now(), filter)
+        return v
+    }
+
+    // ---------------- Heute ----------------
 
     private fun today(ctx: Context, snap: Repository.Snapshot, layout: Int, withTasks: Boolean): RemoteViews {
         val v = RemoteViews(ctx.packageName, layout)
@@ -81,12 +248,12 @@ object Widgets {
 
         when {
             current != null -> {
-                main(v, current, "JETZT", current.endDateTime, "noch %s")
-                second(v, upcoming.firstOrNull(), "DANACH", countdown = true, endOfDay = current)
+                main(ctx, v, current, "JETZT", current.endDateTime, "noch %s")
+                second(v, upcoming.firstOrNull(), countdown = true, endOfDay = current)
             }
             upcoming.isNotEmpty() -> {
-                main(v, upcoming[0], "ALS NÄCHSTES", upcoming[0].startDateTime, "in %s")
-                second(v, upcoming.getOrNull(1), "DANACH", countdown = false, endOfDay = upcoming[0])
+                main(ctx, v, upcoming[0], "ALS NÄCHSTES", upcoming[0].startDateTime, "in %s")
+                second(v, upcoming.getOrNull(1), countdown = false, endOfDay = upcoming[0])
             }
             else -> {
                 val holiday = Schedule.holidayOn(today, data)
@@ -94,33 +261,25 @@ object Widgets {
                 v.setTextViewText(R.id.now_subject, holiday?.name ?: if (Schedule.lessonsOn(today, data).isEmpty()) "Kein Unterricht" else "Geschafft!")
                 v.setViewVisibility(R.id.now_timer, View.GONE)
                 v.setTextViewText(R.id.now_info, "")
-                tint(v, R.id.now_bg, ACCENT, 150)
+                v.setViewVisibility(R.id.now_icon, View.GONE)
+                tint(v, R.id.now_bg, ACCENT, 200)
                 val nextDay = Schedule.nextSchoolDay(today.plusDays(1), data)
                 val first = nextDay?.let { d -> Schedule.lessonsOn(d, data).firstOrNull { !it.cancelled } }
                 if (first != null) {
                     val day = if (first.date == today.plusDays(1)) "MORGEN" else Fmt.dayShort(first.date).uppercase()
                     v.setTextViewText(R.id.next_label, "$day · ${first.periodLabel} STD · ${first.start?.let { Fmt.time(it) } ?: ""}")
                     v.setTextViewText(R.id.next_subject, first.subject?.name ?: "?")
-                    tint(v, R.id.next_bar, color(first), 255)
+                    tint(v, R.id.next_bar, subjectColor(first.subject))
                 } else {
                     v.setTextViewText(R.id.next_label, "DANACH")
                     v.setTextViewText(R.id.next_subject, "Nichts geplant")
-                    tint(v, R.id.next_bar, 0x66FFFFFF, 255)
+                    tint(v, R.id.next_bar, 0x66FFFFFF)
                 }
                 v.setViewVisibility(R.id.next_timer, View.GONE)
             }
         }
-
-        if (withTasks) tasks(ctx, v, snap, today)
+        if (withTasks) fillTasks(ctx, v, snap, today, null)
         return v
-    }
-
-    private fun color(l: Lesson?): Int = (l?.subject?.color ?: 0xFF7C8A9E).toInt()
-
-    /** Farbfilter auf eine weiße Fläche (Fachfarbe), [alpha] 0–255. */
-    private fun tint(v: RemoteViews, id: Int, color: Int, alpha: Int) {
-        v.setInt(id, "setColorFilter", color or (0xFF shl 24))
-        v.setInt(id, "setImageAlpha", alpha)
     }
 
     /** Live-Countdown bis [target] (läuft im Widget von selbst weiter). */
@@ -135,88 +294,35 @@ object Widgets {
         v.setChronometerCountDown(id, true)
     }
 
-    private fun main(v: RemoteViews, l: Lesson, label: String, target: LocalDateTime?, format: String) {
+    private fun main(ctx: Context, v: RemoteViews, l: Lesson, label: String, target: LocalDateTime?, format: String) {
         val extra = if (l.cancelled) " · ENTFALL" else ""
         v.setTextViewText(R.id.now_label, "$label · ${l.periodLabel} STD$extra")
         v.setTextViewText(R.id.now_subject, l.subject?.name ?: "?")
         v.setTextViewText(R.id.now_info, l.room.takeIf { it.isNotBlank() }?.let { "R $it" } ?: "")
-        tint(v, R.id.now_bg, color(l), 165)
+        val icon = subjectIcon(ctx, l.subject)
+        if (icon != 0) {
+            v.setViewVisibility(R.id.now_icon, View.VISIBLE)
+            v.setImageViewResource(R.id.now_icon, icon)
+        } else {
+            v.setViewVisibility(R.id.now_icon, View.GONE)
+        }
+        tint(v, R.id.now_bg, subjectColor(l.subject), 205)
         countdown(v, R.id.now_timer, target, format)
     }
 
-    private fun second(v: RemoteViews, l: Lesson?, label: String, countdown: Boolean, endOfDay: Lesson) {
+    private fun second(v: RemoteViews, l: Lesson?, countdown: Boolean, endOfDay: Lesson) {
         if (l == null) {
-            v.setTextViewText(R.id.next_label, label)
+            v.setTextViewText(R.id.next_label, "DANACH")
             v.setTextViewText(R.id.next_subject, "Schluss um ${endOfDay.end?.let { Fmt.time(it) } ?: "–"}")
-            tint(v, R.id.next_bar, 0x66FFFFFF, 255)
+            tint(v, R.id.next_bar, 0x66FFFFFF)
             v.setViewVisibility(R.id.next_timer, View.GONE)
             return
         }
         val extra = if (l.cancelled) " · ENTFALL" else ""
-        v.setTextViewText(R.id.next_label, "$label · ${l.periodLabel} STD · ${l.start?.let { Fmt.time(it) } ?: ""}$extra")
+        v.setTextViewText(R.id.next_label, "DANACH · ${l.periodLabel} STD · ${l.start?.let { Fmt.time(it) } ?: ""}$extra")
         v.setTextViewText(R.id.next_subject, l.subject?.name ?: "?")
-        tint(v, R.id.next_bar, color(l), 255)
+        tint(v, R.id.next_bar, subjectColor(l.subject))
         if (countdown) countdown(v, R.id.next_timer, l.startDateTime, "in %s") else v.setViewVisibility(R.id.next_timer, View.GONE)
-    }
-
-    private fun tasks(ctx: Context, v: RemoteViews, snap: Repository.Snapshot, today: LocalDate) {
-        val limit = today.plusDays(1).toEpochDay()
-        val open = snap.tasks
-            .filter { !it.done && (it.dueDate == null || it.dueDate <= limit) }
-            .sortedWith(compareBy<Task> { it.dueDate ?: Long.MAX_VALUE }.thenBy { it.createdAt })
-            .take(20)
-        val allOpen = snap.tasks.count { !it.done }
-        v.setTextViewText(R.id.tasks_count, "$allOpen")
-        // Je mehr offen, desto wärmer die Zahl (wie in der App).
-        v.setTextColor(R.id.tasks_count, urgency(allOpen))
-        v.setOnClickPendingIntent(R.id.tasks_title, openApp(ctx, 22, "tasks"))
-        v.setOnClickPendingIntent(
-            R.id.tasks_add,
-            PendingIntent.getActivity(
-                ctx, 23,
-                Intent(ctx, QuickAddActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-            ),
-        )
-
-        val items = RemoteViews.RemoteCollectionItems.Builder().setHasStableIds(true).setViewTypeCount(1)
-        open.forEach { t ->
-            val item = RemoteViews(ctx.packageName, R.layout.widget_task_item)
-            val subject = t.subjectId?.let { snap.schedule.subjects[it] }
-            val due = t.dueDate?.let { LocalDate.ofEpochDay(it) }
-            item.setTextViewText(R.id.item_title, t.title)
-            val dueText = due?.let {
-                when (Fmt.daysUntil(today, it)) {
-                    0L -> "heute"
-                    1L -> "morgen"
-                    else -> if (it.isBefore(today)) "überfällig" else Fmt.dayDate(it)
-                }
-            }
-            item.setTextViewText(R.id.item_meta, listOfNotNull(subject?.label ?: "Ohne Fach", dueText).joinToString(" · "))
-            if (due != null && due.isBefore(today)) item.setTextColor(R.id.item_meta, 0xFFFF9E7A.toInt())
-            val c = (subject?.color ?: 0xFF9AA1AF).toInt()
-            item.setInt(R.id.item_dot, "setColorFilter", c)
-            item.setInt(R.id.item_check, "setColorFilter", c)
-            item.setOnClickFillInIntent(R.id.item_check, Intent().putExtra(ActionReceiver.EXTRA_ID, t.id))
-            items.addItem(t.id.hashCode().toLong(), item)
-        }
-        v.setRemoteAdapter(R.id.tasks_list, items.build())
-        v.setEmptyView(R.id.tasks_list, R.id.tasks_empty)
-        v.setPendingIntentTemplate(
-            R.id.tasks_list,
-            PendingIntent.getBroadcast(
-                ctx, 24, ActionReceiver.intent(ctx, ActionReceiver.ACTION_TASK_DONE),
-                PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-            ),
-        )
-    }
-
-    private fun urgency(open: Int): Int = when {
-        open == 0 -> 0xFFFFFFFF.toInt()
-        open <= 2 -> 0xFF7FD6A0.toInt()
-        open <= 4 -> 0xFFFFD166.toInt()
-        open <= 6 -> 0xFFFFA05C.toInt()
-        else -> 0xFFFF6B6B.toInt()
     }
 
     /** Aktualisiert das Heute-Widget beim nächsten Stundenwechsel (Beginn/Ende) bzw. um Mitternacht. */
@@ -227,18 +333,23 @@ object Widgets {
         val next = (times + today.plusDays(1).atStartOfDay().plusMinutes(1)).filter { it.isAfter(now) }.minOrNull() ?: return
         val at = next.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli() + 1_000
         val am = ctx.getSystemService(AlarmManager::class.java) ?: return
-        val pi = ActionReceiver.pending(ctx, ActionReceiver.ACTION_REFRESH, 30)
         // Nicht weckend: Ist der Bildschirm aus, kommt die Aktualisierung beim Einschalten.
-        am.setWindow(AlarmManager.RTC, at, 20_000, pi)
+        am.setWindow(AlarmManager.RTC, at, 20_000, ActionReceiver.pending(ctx, ActionReceiver.ACTION_REFRESH, 30))
     }
 
-    // ---------------- Lernen ----------------
+    // ---------------- Lernzeit ----------------
 
-    private val kindIds = listOf(
-        Triple(StudyKind.HOMEWORK, R.id.kind_ha, R.drawable.ic_w_house),
-        Triple(StudyKind.TALK, R.id.kind_ref, R.drawable.ic_w_presentation),
-        Triple(StudyKind.LEARN, R.id.kind_learn, R.drawable.ic_w_pen),
+    private val kindSlots = listOf(
+        Triple(StudyKind.HOMEWORK, R.id.kind_ha, R.id.kind_ha_icon),
+        Triple(StudyKind.TALK, R.id.kind_ref, R.id.kind_ref_icon),
+        Triple(StudyKind.LEARN, R.id.kind_learn, R.id.kind_learn_icon),
     )
+
+    private fun kindIcon(kind: String) = when (kind) {
+        StudyKind.HOMEWORK -> R.drawable.ic_k_house
+        StudyKind.TALK -> R.drawable.ic_k_presentation
+        else -> R.drawable.ic_k_pen
+    }
 
     private fun study(ctx: Context, snap: Repository.Snapshot, layout: Int): RemoteViews {
         val v = RemoteViews(ctx.packageName, layout)
@@ -247,66 +358,143 @@ object Widgets {
         val now = System.currentTimeMillis()
         val total = cur?.totalMs(now) ?: 0L
         val running = cur?.isRunning == true
+        val subject = (cur?.subjectId ?: snap.settings[SettingKeys.STUDY_SUBJECT])?.let { snap.schedule.subjects[it] }
 
         v.setChronometer(R.id.study_timer, SystemClock.elapsedRealtime() - total, null, running)
+        v.setTextColor(R.id.study_timer, if (cur == null) DIM else WHITE)
         v.setImageViewResource(R.id.study_toggle, if (running) R.drawable.ic_w_pause else R.drawable.ic_w_play)
         v.setOnClickPendingIntent(R.id.study_toggle, ActionReceiver.pending(ctx, ActionReceiver.ACTION_TOGGLE, 40))
         v.setViewVisibility(R.id.study_stop, if (cur != null) View.VISIBLE else View.GONE)
         v.setOnClickPendingIntent(R.id.study_stop, ActionReceiver.pending(ctx, ActionReceiver.ACTION_STOP, 41))
         v.setOnClickPendingIntent(R.id.study_timer, openApp(ctx, 42, "study"))
+        val state = when {
+            running -> null
+            cur != null -> "pausiert"
+            else -> "bereit"
+        }
+        v.setTextViewText(R.id.study_info, listOfNotNull(StudyKind.label(kind), subject?.label, state).joinToString(" · "))
 
-        when (layout) {
-            R.layout.widget_study_compact -> {
-                // Antippen wechselt zur nächsten Art.
-                val i = kindIds.indexOfFirst { it.first == kind }.coerceAtLeast(0)
-                v.setImageViewResource(R.id.study_kind, kindIds[i].third)
-                val next = kindIds[(i + 1) % kindIds.size].first
+        if (layout == R.layout.widget_study_compact) {
+            // Antippen wechselt zur nächsten Art.
+            val i = kindSlots.indexOfFirst { it.first == kind }.coerceAtLeast(0)
+            v.setImageViewResource(R.id.study_kind, kindIcon(kind))
+            val next = kindSlots[(i + 1) % kindSlots.size].first
+            v.setOnClickPendingIntent(
+                R.id.study_kind,
+                ActionReceiver.pending(ctx, ActionReceiver.ACTION_KIND, 43) { putExtra(ActionReceiver.EXTRA_KIND, next) },
+            )
+        } else {
+            // Glas-Umschalter wie in der App: gewählte Art blau hinterlegt.
+            kindSlots.forEachIndexed { i, (k, slot, icon) ->
+                val on = k == kind
+                v.setInt(slot, "setBackgroundResource", if (on) R.drawable.widget_seg_on else 0)
+                v.setInt(icon, "setImageAlpha", if (on) 255 else 170)
                 v.setOnClickPendingIntent(
-                    R.id.study_kind,
-                    ActionReceiver.pending(ctx, ActionReceiver.ACTION_KIND, 43) { putExtra(ActionReceiver.EXTRA_KIND, next) },
+                    slot,
+                    ActionReceiver.pending(ctx, ActionReceiver.ACTION_KIND, 44 + i) { putExtra(ActionReceiver.EXTRA_KIND, k) },
                 )
-            }
-            else -> {
-                kindIds.forEachIndexed { i, (k, id, _) ->
-                    val selected = k == kind
-                    // Gewählte Art: helle Glas-Markierung, die anderen gedimmt.
-                    v.setInt(bgId(id), "setImageAlpha", if (selected) 60 else 0)
-                    v.setInt(iconId(id), "setImageAlpha", if (selected) 255 else 140)
-                    v.setOnClickPendingIntent(
-                        id,
-                        ActionReceiver.pending(ctx, ActionReceiver.ACTION_KIND, 44 + i) { putExtra(ActionReceiver.EXTRA_KIND, k) },
-                    )
-                }
             }
         }
         if (layout == R.layout.widget_study_full) {
-            val subject = (cur?.subjectId ?: snap.settings[SettingKeys.STUDY_SUBJECT])?.let { snap.schedule.subjects[it] }
-            val week = weekTotal(snap, now)
-            v.setTextViewText(
-                R.id.study_info,
-                listOfNotNull(subject?.name, "Diese Woche: ${StudyNotifier.format(week)}").joinToString(" · "),
-            )
-            v.setOnClickPendingIntent(R.id.study_info, openApp(ctx, 47, "study"))
+            v.setTextViewText(R.id.study_week, "Woche ${StudyNotifier.format(weekTotal(snap, now))}")
+            v.setOnClickPendingIntent(R.id.study_title, openApp(ctx, 47, "study"))
         }
         return v
     }
 
-    private fun bgId(id: Int) = when (id) {
-        R.id.kind_ha -> R.id.kind_ha_bg
-        R.id.kind_ref -> R.id.kind_ref_bg
-        else -> R.id.kind_learn_bg
-    }
-
-    private fun iconId(id: Int) = when (id) {
-        R.id.kind_ha -> R.id.kind_ha_icon
-        R.id.kind_ref -> R.id.kind_ref_icon
-        else -> R.id.kind_learn_icon
-    }
-
     /** Lernzeit der aktuellen Woche (Mo–So) inklusive laufender Session. */
     fun weekTotal(snap: Repository.Snapshot, now: Long): Long {
-        val zone = ZoneId.systemDefault()
-        val monday = Schedule.mondayOf(LocalDate.now()).atStartOfDay(zone).toInstant().toEpochMilli()
+        val monday = Schedule.mondayOf(LocalDate.now()).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
         return snap.sessions.filter { it.startedAt >= monday }.sumOf { it.totalMs(now) }
     }
+
+    // ---------------- Nächste Klausur ----------------
+
+    private fun exam(ctx: Context, snap: Repository.Snapshot): RemoteViews {
+        val v = RemoteViews(ctx.packageName, R.layout.widget_exam)
+        val today = LocalDate.now()
+        val e = snap.exams.filter { it.date >= today.toEpochDay() }.minByOrNull { it.date }
+        if (e == null) {
+            v.setTextViewText(R.id.exam_date, "")
+            v.setTextViewText(R.id.exam_subject, "Keine Klausur")
+            v.setTextViewText(R.id.exam_title, "Gerade nichts in Sicht")
+            v.setViewVisibility(R.id.exam_icon, View.GONE)
+            v.setTextViewText(R.id.exam_days, "–")
+            v.setTextColor(R.id.exam_days, WHITE)
+            v.setTextViewText(R.id.exam_days_label, "")
+            v.setViewVisibility(R.id.exam_progress, View.GONE)
+            v.setTextViewText(R.id.exam_info, "")
+            v.setOnClickPendingIntent(R.id.exam_subject, openApp(ctx, 50))
+            return v
+        }
+        val subject = snap.schedule.subjects[e.subjectId]
+        val date = LocalDate.ofEpochDay(e.date)
+        val days = Fmt.daysUntil(today, date)
+        v.setTextViewText(R.id.exam_date, Fmt.dayMonth(date))
+        v.setTextViewText(R.id.exam_subject, subject?.name ?: "?")
+        v.setTextViewText(R.id.exam_title, listOfNotNull(e.type, e.title.ifBlank { null }, e.period?.let { "$it. Std" }).joinToString(" · "))
+        val icon = subjectIcon(ctx, subject)
+        if (icon != 0) {
+            v.setViewVisibility(R.id.exam_icon, View.VISIBLE)
+            v.setImageViewResource(R.id.exam_icon, icon)
+            v.setInt(R.id.exam_icon, "setColorFilter", subjectColor(subject))
+        } else {
+            v.setViewVisibility(R.id.exam_icon, View.GONE)
+        }
+        // Je näher, desto röter (wie in der App).
+        v.setTextViewText(R.id.exam_days, if (days == 0L) "Heute" else "$days")
+        v.setTextColor(R.id.exam_days, urgencyColor(examUrgency(days)).toArgb())
+        v.setTextViewText(R.id.exam_days_label, when (days) { 0L -> ""; 1L -> "Tag"; else -> "Tage" })
+        val topics = snap.topics.filter { it.examId == e.id }
+        val learned = if (topics.isEmpty()) null else topics.count { it.done } * 100 / topics.size
+        v.setViewVisibility(R.id.exam_progress, if (learned != null) View.VISIBLE else View.GONE)
+        v.setProgressBar(R.id.exam_progress, 100, learned ?: 0, false)
+        val lz = stepPercent("lz_${e.id}", snap.topics)
+        v.setTextViewText(
+            R.id.exam_info,
+            listOfNotNull(learned?.let { "$it % gelernt" }, lz?.let { "Lernzettel $it %" }).joinToString(" · ").ifBlank { "Noch keine Themen" },
+        )
+        val open = openApp(ctx, 51, "exam/${e.id}")
+        v.setOnClickPendingIntent(R.id.exam_subject, open)
+        v.setOnClickPendingIntent(R.id.exam_days, open)
+        return v
+    }
+
+    // ---------------- Ferien ----------------
+
+    private fun holiday(ctx: Context, snap: Repository.Snapshot, layout: Int): RemoteViews {
+        val v = RemoteViews(ctx.packageName, layout)
+        val today = LocalDate.now()
+        val t = today.toEpochDay()
+        val ferien = snap.schedule.holidays.filter { it.kind == HolidayKind.FERIEN || it.name.contains("ferien", ignoreCase = true) }
+        val current = ferien.firstOrNull { t in it.startDate..it.endDate }
+        val h = current ?: ferien.filter { it.startDate > t }.minByOrNull { it.startDate }
+        v.setOnClickPendingIntent(R.id.hol_days, openApp(ctx, 60))
+        if (h == null) {
+            v.setTextViewText(R.id.hol_name, "Keine Ferien")
+            v.setTextViewText(R.id.hol_date, "in der App eintragen")
+            v.setTextViewText(R.id.hol_days, "–")
+            v.setTextViewText(R.id.hol_days_label, "")
+            tint(v, R.id.hol_bg, ACCENT, 90)
+            return v
+        }
+        val color = HolidayLook.color(h).toArgb()
+        tint(v, R.id.hol_bg, color, 95)
+        v.setImageViewResource(R.id.hol_icon, drawable(ctx, "ic_h_${HolidayLook.key(h)}").takeIf { it != 0 } ?: R.drawable.ic_h_palm)
+        v.setInt(R.id.hol_icon, "setColorFilter", color)
+        v.setTextViewText(R.id.hol_name, h.name)
+        val days = if (current != null) h.endDate - t + 1 else h.startDate - t
+        v.setTextViewText(
+            R.id.hol_date,
+            if (current != null) "bis ${Fmt.dayMonth(LocalDate.ofEpochDay(h.endDate))}" else "ab ${Fmt.dayMonth(LocalDate.ofEpochDay(h.startDate))}",
+        )
+        v.setTextViewText(R.id.hol_days, "$days")
+        v.setTextViewText(R.id.hol_days_label, if (current != null) "Tage frei" else if (days == 1L) "Tag" else "Tage")
+        return v
+    }
+
+    // ---------------- Schnell-HA ----------------
+
+    private fun quick(ctx: Context): RemoteViews =
+        RemoteViews(ctx.packageName, R.layout.widget_quick).apply { setOnClickPendingIntent(R.id.quick_btn, quickAdd(ctx)) }
 }

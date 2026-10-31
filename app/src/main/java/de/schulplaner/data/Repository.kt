@@ -86,6 +86,8 @@ class Repository(
         val kinds: List<TaskKind>,
         val sessions: List<StudySession>,
         val settings: Map<String, String>,
+        val exams: List<Exam> = emptyList(),
+        val topics: List<ExamTopic> = emptyList(),
     ) {
         val current: StudySession? get() = sessions.firstOrNull { !it.finished }
     }
@@ -96,7 +98,10 @@ class Repository(
             dao.subjects().first(), dao.slots().first(), dao.periods().first(),
             dao.overrides().first(), dao.holidays().first(), st,
         )
-        return Snapshot(schedule, dao.tasks().first(), parseKinds(st), dao.sessions().first(), st)
+        return Snapshot(
+            schedule, dao.tasks().first(), parseKinds(st), dao.sessions().first(), st,
+            exams = dao.exams().first(), topics = dao.topics().first(),
+        )
     }
 
     private val kindJson = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
