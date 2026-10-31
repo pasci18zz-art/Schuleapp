@@ -136,6 +136,9 @@ class SyncEngine(
 
     private fun canSync() = configured && supabase.session != null
 
+    /** Ansichtsmodus dieses Geräts. */
+    var readOnly: () -> Boolean = { false }
+
     // ---------- Abgleich ----------
 
     suspend fun syncNow() {
@@ -146,8 +149,11 @@ class SyncEngine(
                 withContext(Dispatchers.IO) {
                     val first = supabase.cursor == null
                     pullAll(first)
-                    dedupe()
-                    pushAll()
+                    // Im Ansichtsmodus nur holen, nie etwas hochladen oder zusammenführen.
+                    if (!readOnly()) {
+                        dedupe()
+                        pushAll()
+                    }
                 }
                 val now = System.currentTimeMillis()
                 supabase.lastSync = now

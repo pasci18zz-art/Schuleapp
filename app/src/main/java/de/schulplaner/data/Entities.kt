@@ -365,4 +365,7 @@ object SettingKeys {
     /** Vorauswahl der Stoppuhr (Art, Fach), wenn gerade keine Session läuft. */
     const val STUDY_KIND = "study_kind"
     const val STUDY_SUBJECT = "study_subject"
+    /** Lernzettel-Aufgabe beim Anlegen einer Klausur ("false" = aus) und ihre Aufgabenart. */
+    const val LZ_ENABLED = "lz_enabled"
+    const val LZ_KIND = "lz_kind"
 }

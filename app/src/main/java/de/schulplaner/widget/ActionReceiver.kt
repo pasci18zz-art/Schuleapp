@@ -25,7 +25,7 @@ class ActionReceiver : BroadcastReceiver() {
                     ACTION_REFRESH -> Unit
                 }
                 val snap = repo.snapshot()
-                StudyNotifier.show(ctx, snap.current, snap.schedule.subjects)
+                StudyNotifier.show(ctx, if (ctx.app.prefs.readOnly.value) null else snap.current, snap.schedule.subjects)
                 Widgets.render(ctx, snap)
             } finally {
                 pending.finish()

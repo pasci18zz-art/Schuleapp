@@ -109,6 +109,7 @@ fun StudyTile(modifier: Modifier = Modifier, onOpen: (() -> Unit)? = null) {
     val sessions by repo.sessions.collectAsStateWithLifecycle()
     val subjects by repo.subjects.collectAsStateWithLifecycle()
     val cur: StudySession? = current
+    val readOnly = de.schulplaner.ui.components.LocalReadOnly.current
     val running = cur?.isRunning == true
     val now = rememberTicker(running)
     val kind = cur?.kind ?: settings[SettingKeys.STUDY_KIND]?.takeIf { it in StudyKind.all } ?: StudyKind.LEARN
@@ -131,7 +132,7 @@ fun StudyTile(modifier: Modifier = Modifier, onOpen: (() -> Unit)? = null) {
         Segmented(
             StudyKind.all.map { it to StudyKind.label(it) },
             kind,
-            { repo.setStudyKind(it) },
+            { if (!readOnly) repo.setStudyKind(it) },
             Modifier.padding(top = 12.dp),
             icons = StudyKind.all.map { StudyLook.icon(it) },
         )
@@ -144,14 +145,14 @@ fun StudyTile(modifier: Modifier = Modifier, onOpen: (() -> Unit)? = null) {
                     maxLines = 1,
                 )
             }
-            if (cur != null) {
+            if (cur != null && !readOnly) {
                 Box(
                     Modifier.size(44.dp).pressable({ repo.stopStudy() }).clip(CircleShape).background(c.line),
                     contentAlignment = Alignment.Center,
                 ) { Icon(StopIcon, "Beenden", tint = c.text, modifier = Modifier.size(18.dp)) }
                 Box(Modifier.size(10.dp))
             }
-            Box(
+            if (!readOnly) Box(
                 Modifier
                     .size(56.dp)
                     .pressable({ repo.toggleStudy() })
@@ -163,7 +164,14 @@ fun StudyTile(modifier: Modifier = Modifier, onOpen: (() -> Unit)? = null) {
                 Icon(if (running) PauseIcon else PlayIcon, if (running) "Pause" else "Start", tint = c.accentInk, modifier = Modifier.size(24.dp))
             }
         }
-        SubjectChooser(subject, subjects, onPick = { repo.setStudySubject(it) })
+        if (!readOnly) {
+            SubjectChooser(subject, subjects, onPick = { repo.setStudySubject(it) })
+        } else if (subject != null) {
+            Row(Modifier.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                SubjectIcon(subject, 15.dp)
+                Text(subject.name, style = T.label, color = c.sub)
+            }
+        }
     }
 }
 

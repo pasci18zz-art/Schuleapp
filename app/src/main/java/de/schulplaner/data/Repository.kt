@@ -119,7 +119,11 @@ class Repository(
     /** Wird nach jeder lokalen Änderung aufgerufen (startet den Sync). */
     var onLocalChange: (() -> Unit)? = null
 
+    /** Ansichtsmodus: Dann wird lokal nichts geändert (Sync holt nur Daten). */
+    var isReadOnly: () -> Boolean = { false }
+
     private fun io(block: suspend () -> Unit) {
+        if (isReadOnly()) return
         scope.launch(Dispatchers.IO) {
             block()
             onLocalChange?.invoke()
@@ -241,17 +245,92 @@ class Repository(
     }
 
     // ---------- Klausuren ----------
-    fun saveExam(e: Exam) = io { dao.upsertExam(e.copy(updatedAt = now(), dirty = true)) }
+    fun saveExam(e: Exam) = io {
+        val isNew = dao.exam(e.id) == null
+        dao.upsertExam(e.copy(updatedAt = now(), dirty = true))
+        updateLernzettel(e, create = isNew)
+    }
+
     fun deleteExam(e: Exam) = io {
         dao.upsertExam(e.copy(deleted = true, updatedAt = now(), dirty = true))
+        dao.task(lernzettelId(e.id))?.takeIf { !it.deleted }?.let {
+            dao.upsertTask(it.copy(deleted = true, updatedAt = now(), dirty = true))
+        }
         topics.value.filter { it.examId == e.id }.forEach {
             dao.upsertTopic(it.copy(deleted = true, updatedAt = now(), dirty = true))
         }
         deleteAttachmentsOf(e.id)
     }
 
-    fun saveTopic(t: ExamTopic) = io { dao.upsertTopic(t.copy(updatedAt = now(), dirty = true)) }
-    fun deleteTopic(t: ExamTopic) = io { dao.upsertTopic(t.copy(deleted = true, updatedAt = now(), dirty = true)) }
+    fun saveTopic(t: ExamTopic) = io {
+        dao.upsertTopic(t.copy(updatedAt = now(), dirty = true))
+        if (dao.exam(t.examId) != null) mirrorTopics(t.examId)
+    }
+
+    fun deleteTopic(t: ExamTopic) = io {
+        dao.upsertTopic(t.copy(deleted = true, updatedAt = now(), dirty = true))
+        if (dao.exam(t.examId) != null) mirrorTopics(t.examId)
+    }
+
+    // ---------- Lernzettel zu Klausuren ----------
+
+    /** Aufgabe "Lernzettel" zu einer Klausur: feste ID, damit beide Geräte dieselbe meinen. */
+    fun lernzettelId(examId: String) = "lz_$examId"
+
+    /**
+     * Neue Klausur: Aufgabe "Lernzettel" (gleiches Fach, fällig am Tag davor) anlegen.
+     * Bestehende: Fach und Datum nachziehen. Eine gelöschte Lernzettel-Aufgabe bleibt gelöscht.
+     */
+    private suspend fun updateLernzettel(e: Exam, create: Boolean) {
+        val st = dao.settings().first().associate { it.id to it.value }
+        val id = lernzettelId(e.id)
+        val existing = dao.task(id)
+        val due = e.date - 1
+        if (existing == null) {
+            if (!create || st[SettingKeys.LZ_ENABLED] == "false") return
+            val kind = st[SettingKeys.LZ_KIND] ?: TaskType.EXTRA
+            dao.upsertTask(
+                Task(id = id, title = "Lernzettel", subjectId = e.subjectId, type = kind, dueDate = due, createdAt = now(), updatedAt = now(), dirty = true),
+            )
+            mirrorTopics(e.id)
+        } else if (!existing.deleted && (existing.subjectId != e.subjectId || (!existing.done && existing.dueDate != due))) {
+            dao.upsertTask(existing.copy(subjectId = e.subjectId, dueDate = if (existing.done) existing.dueDate else due, updatedAt = now(), dirty = true))
+        }
+    }
+
+    /**
+     * Themen der Klausur als Unterpunkte in die Lernzettel-Aufgabe übernehmen (gleicher Text und Reihenfolge,
+     * eigener Haken). Unterpunkte heißen "lz_<Themen-ID>"; selbst ergänzte Punkte bleiben unberührt.
+     */
+    private suspend fun mirrorTopics(examId: String) {
+        val taskId = lernzettelId(examId)
+        val task = dao.task(taskId) ?: return
+        if (task.deleted) return
+        val all = dao.allTopics()
+        val topics = all.filter { it.examId == examId && !it.deleted }
+        val steps = all.filter { it.examId == taskId }
+        topics.forEach { t ->
+            val sid = "lz_${t.id}"
+            val s = steps.firstOrNull { it.id == sid }
+            when {
+                s == null -> dao.upsertTopic(ExamTopic(id = sid, examId = taskId, text = t.text, sortOrder = t.sortOrder, updatedAt = now(), dirty = true))
+                !s.deleted && (s.text != t.text || s.sortOrder != t.sortOrder) ->
+                    dao.upsertTopic(s.copy(text = t.text, sortOrder = t.sortOrder, updatedAt = now(), dirty = true))
+            }
+        }
+        val keep = topics.map { "lz_${it.id}" }.toSet()
+        steps.filter { it.id.startsWith("lz_") && it.id !in keep && !it.deleted }.forEach {
+            dao.upsertTopic(it.copy(deleted = true, updatedAt = now(), dirty = true))
+        }
+    }
+
+    /** Für alle kommenden Klausuren ohne Lernzettel einen anlegen. */
+    fun createMissingLernzettel() = io {
+        val today = LocalDate.now().toEpochDay()
+        exams.value.filter { it.date >= today }.forEach { e ->
+            if (dao.task(lernzettelId(e.id)) == null) updateLernzettel(e, create = true)
+        }
+    }
 
     /** Trägt das Ergebnis einer Klausur als schriftliche Note ein (oder aktualisiert sie). */
     fun setExamResult(exam: Exam, points: Int?) = io {
@@ -320,6 +399,7 @@ class Repository(
     // ---------- Lernsessions (Stoppuhr) ----------
 
     private suspend fun write(block: suspend () -> Unit) {
+        if (isReadOnly()) return
         block()
         onLocalChange?.invoke()
     }

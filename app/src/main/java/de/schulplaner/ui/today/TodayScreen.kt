@@ -160,9 +160,10 @@ fun TodayScreen() {
     )
 
     var editTask by remember { mutableStateOf<Pair<Task, Boolean>?>(null) }
-    val onAddTask: () -> Unit = { editTask = TaskDefaults.quick(LocalDateTime.now(), schedule) to true }
+    val readOnly = de.schulplaner.ui.components.LocalReadOnly.current
+    val onAddTask: (() -> Unit)? = if (readOnly) null else ({ editTask = TaskDefaults.quick(LocalDateTime.now(), schedule) to true })
     val onLessonClick: (Lesson) -> Unit = { l ->
-        editTask = TaskDefaults.forSubject(l.slot.subjectId, l.date, schedule) to true
+        if (!readOnly) editTask = TaskDefaults.forSubject(l.slot.subjectId, l.date, schedule) to true
     }
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
@@ -197,14 +198,15 @@ fun TodayScreen() {
             }
 
             if (wide) {
-                Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                // Spalten oben bündig; jede Kachel so hoch wie ihr Inhalt.
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                     Column(Modifier.weight(1f).appear(2), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                         NowTile(state)
                         LessonsTile(state, onLessonClick)
                         AppShortcutsRow()
                     }
-                    Column(Modifier.weight(1f).fillMaxHeight().appear(3), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                        TasksTile(state, max = 8, onOpen = { nav.tab(Tabs.TASKS) }, onEdit = { editTask = it to false }, onAdd = onAddTask)
+                    Column(Modifier.weight(1f).appear(3), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        TasksTile(state, max = 8, onOpen = { nav.tab(Tabs.TASKS) }, onEdit = { editTask = it to false }, onAdd = onAddTask, modifier = Modifier.fillMaxWidth())
                     }
                     Column(Modifier.weight(1f).appear(4), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                         StudyTile(onOpen = { nav.open(Routes.STUDY) })
@@ -231,7 +233,11 @@ fun TodayScreen() {
     }
 
     editTask?.let { (task, isNew) ->
-        TaskEditSheet(task, isNew, onDismiss = { editTask = null })
+        if (readOnly) {
+            de.schulplaner.ui.tasks.TaskViewSheet(task, onDismiss = { editTask = null })
+        } else {
+            TaskEditSheet(task, isNew, onDismiss = { editTask = null })
+        }
     }
 }
 
@@ -422,7 +428,15 @@ private fun LessonsTile(s: TodayState, onLessonClick: (Lesson) -> Unit) {
 }
 
 @Composable
-private fun TasksTile(s: TodayState, max: Int, compact: Boolean = false, onOpen: () -> Unit, onEdit: (Task) -> Unit, onAdd: () -> Unit) {
+private fun TasksTile(
+    s: TodayState,
+    max: Int,
+    compact: Boolean = false,
+    onOpen: () -> Unit,
+    onEdit: (Task) -> Unit,
+    onAdd: (() -> Unit)?,
+    modifier: Modifier = Modifier.fillMaxSize(),
+) {
     val c = colors
     val repo = LocalContext.current.app.repo
     val undo = LocalUndo.current
@@ -433,7 +447,7 @@ private fun TasksTile(s: TodayState, max: Int, compact: Boolean = false, onOpen:
         .take((max - open.size).coerceAtLeast(0))
     // Je mehr offen ist, desto wärmer/röter wird die Zahl.
     val urgent = urgencyColor(taskUrgency(s.openTasks.size))
-    GlassCard(Modifier.fillMaxSize(), padding = androidx.compose.foundation.layout.PaddingValues(14.dp)) {
+    GlassCard(modifier, padding = androidx.compose.foundation.layout.PaddingValues(14.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Row(Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).clickable(onClick = onOpen), verticalAlignment = Alignment.CenterVertically) {
                 Icon(Ic.Tasks, "Aufgaben", tint = c.accent, modifier = Modifier.size(22.dp))
@@ -441,8 +455,10 @@ private fun TasksTile(s: TodayState, max: Int, compact: Boolean = false, onOpen:
                 Box(Modifier.weight(1f))
                 Text("${s.openTasks.size}", style = T.title.copy(fontSize = T.section.fontSize * 1.6f), color = if (s.openTasks.isEmpty()) c.text else urgent)
             }
-            Box(Modifier.padding(start = 8.dp).size(28.dp).clip(CircleShape).background(c.accentSoft).clickable(onClick = onAdd), contentAlignment = Alignment.Center) {
-                Icon(Ic.Plus, "Aufgabe hinzufügen", tint = c.accent, modifier = Modifier.size(16.dp))
+            if (onAdd != null) {
+                Box(Modifier.padding(start = 8.dp).size(28.dp).clip(CircleShape).background(c.accentSoft).clickable(onClick = onAdd), contentAlignment = Alignment.Center) {
+                    Icon(Ic.Plus, "Aufgabe hinzufügen", tint = c.accent, modifier = Modifier.size(16.dp))
+                }
             }
         }
         if (open.isEmpty() && done.isEmpty()) {

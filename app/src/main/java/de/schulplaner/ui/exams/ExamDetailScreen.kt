@@ -75,6 +75,7 @@ fun ExamDetailScreen(id: String) {
     val today = rememberNow().toLocalDate()
 
     val exam = exams.firstOrNull { it.id == id }
+    val readOnly = de.schulplaner.ui.components.LocalReadOnly.current
     var editing by remember { mutableStateOf(false) }
     var resultSheet by remember { mutableStateOf(false) }
     var newTopic by remember { mutableStateOf("") }
@@ -108,7 +109,7 @@ fun ExamDetailScreen(id: String) {
         Row(Modifier.fillMaxWidth().padding(top = 20.dp), verticalAlignment = Alignment.CenterVertically) {
             GlassIconButton(Ic.ChevronLeft, "Zurück", { nav.back() })
             Box(Modifier.weight(1f))
-            GlassIconButton(Ic.Pencil, "Bearbeiten", { editing = true })
+            if (!readOnly) GlassIconButton(Ic.Pencil, "Bearbeiten", { editing = true })
         }
 
         Column(Modifier.padding(horizontal = 6.dp)) {
@@ -176,18 +177,22 @@ fun ExamDetailScreen(id: String) {
         GlassCard(padding = PaddingValues(16.dp)) {
             Row(Modifier.fillMaxWidth().padding(bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("Themen & Fotos", style = T.section, color = c.text, modifier = Modifier.weight(1f))
-                de.schulplaner.ui.components.AttachButton(OwnerType.EXAM, exam.id)
+                if (!readOnly) de.schulplaner.ui.components.AttachButton(OwnerType.EXAM, exam.id)
             }
             val files = attachments.filter { it.ownerId == exam.id }
             AttachmentStrip(files)
             if (files.isNotEmpty()) Box(Modifier.height(12.dp))
-            Field(notes, { notes = it }, "Themen / Notizen (z. B. Buch S. 140–188)", singleLine = false, minLines = 3)
-            if (notes != exam.topicsText) {
+            if (readOnly) {
+                if (exam.topicsText.isNotBlank()) Text(exam.topicsText, style = T.bodyRegular, color = c.text)
+            } else {
+                Field(notes, { notes = it }, "Themen / Notizen (z. B. Buch S. 140–188)", singleLine = false, minLines = 3)
+            }
+            if (!readOnly && notes != exam.topicsText) {
                 PrimaryButton("Speichern", { repo.saveExam(exam.copy(topicsText = notes)) }, Modifier.padding(top = 10.dp).fillMaxWidth())
             }
         }
 
-        SecondaryButton(
+        if (!readOnly) SecondaryButton(
             if (grade == null) "Ergebnis eintragen" else "Ergebnis ändern",
             { resultSheet = true },
             Modifier.fillMaxWidth(),
@@ -195,10 +200,10 @@ fun ExamDetailScreen(id: String) {
         )
     }
 
-    if (editing) {
+    if (editing && !readOnly) {
         ExamEditSheet(exam, isNew = false, onDismiss = { editing = false }, onDeleted = { deleted = true })
     }
-    if (resultSheet) {
+    if (resultSheet && !readOnly) {
         var points by remember { mutableStateOf(grade?.points ?: 10) }
         AppSheet(onDismiss = { resultSheet = false }) { close ->
             SheetHeader("Ergebnis", onSave = {

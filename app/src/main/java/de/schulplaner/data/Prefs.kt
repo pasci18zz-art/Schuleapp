@@ -7,6 +7,8 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
@@ -52,4 +54,16 @@ class Prefs(private val context: Context) {
     }
 
     suspend fun reminderSnapshot(): Pair<Boolean, Int> = reminderOn.first() to reminderMinute.first()
+
+    // Ansichtsmodus: sofort lesbar (auch beim Start und in Widgets), daher in SharedPreferences.
+    private val instant = context.getSharedPreferences("geraet_sofort", Context.MODE_PRIVATE)
+    private val _readOnly = MutableStateFlow(instant.getBoolean("read_only", false))
+
+    /** Ansichtsmodus: Auf diesem Gerät kann nichts geändert werden (z. B. für Eltern). */
+    val readOnly: StateFlow<Boolean> = _readOnly
+
+    fun setReadOnly(on: Boolean) {
+        instant.edit().putBoolean("read_only", on).apply()
+        _readOnly.value = on
+    }
 }

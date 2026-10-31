@@ -24,6 +24,11 @@ class QuickAddActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        if (app.prefs.readOnly.value) {
+            android.widget.Toast.makeText(this, "Ansichtsmodus – hier kann nichts eingetragen werden", android.widget.Toast.LENGTH_SHORT).show()
+            finish()
+            return
+        }
         val repo = app.repo
         setContent {
             val theme by app.prefs.theme.collectAsStateWithLifecycle("system")

@@ -92,6 +92,7 @@ fun GradesOverviewScreen() {
     var termId by rememberSaveable { mutableStateOf<String?>(null) }
     var sortByPoints by rememberSaveable { mutableStateOf(false) }
     var newGrade by remember { mutableStateOf<Grade?>(null) }
+    val readOnly = de.schulplaner.ui.components.LocalReadOnly.current
     val term = terms.firstOrNull { it.id == termId } ?: repo.currentTerm(terms)
 
     Column(
@@ -99,7 +100,7 @@ fun GradesOverviewScreen() {
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         ScreenHeader(title = "Noten", overline = term?.let { "Halbjahr ${it.name}" }) {
-            if (term != null && subjects.isNotEmpty()) {
+            if (term != null && subjects.isNotEmpty() && !readOnly) {
                 GlassIconButton(Ic.Plus, "Note hinzufügen", {
                     newGrade = Grade(termId = term.id, date = LocalDate.now().toEpochDay())
                 }, filled = true)
@@ -173,7 +174,7 @@ fun GradesOverviewScreen() {
         }
     }
 
-    newGrade?.let { g ->
+    if (!readOnly) newGrade?.let { g ->
         GradeEditSheet(g, isNew = true, subjectSelectable = true, onDismiss = { newGrade = null })
     }
 }
@@ -226,6 +227,7 @@ fun SubjectGradesScreen(subjectId: String, termId: String) {
     var editGrade by remember { mutableStateOf<Pair<Grade, Boolean>?>(null) }
     var editCategory by remember { mutableStateOf<Pair<GradeCategory, Boolean>?>(null) }
     var overrideSheet by remember { mutableStateOf(false) }
+    val readOnly = de.schulplaner.ui.components.LocalReadOnly.current
     var target by rememberSaveable { mutableStateOf<Int?>(null) }
     var targetCategoryId by rememberSaveable { mutableStateOf<String?>(null) }
 
@@ -303,7 +305,7 @@ fun SubjectGradesScreen(subjectId: String, termId: String) {
                 Row(Modifier.padding(start = 12.dp, end = 6.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(cat.name, style = T.section, color = c.text, modifier = Modifier.weight(1f))
                     GradeCalc.mean(catGrades)?.let { Text("Ø ${GradeCalc.format(it)}", style = T.label, color = c.sub) }
-                    SoftIconButton(Ic.Plus, "Note in ${cat.name} hinzufügen", {
+                    if (!readOnly) SoftIconButton(Ic.Plus, "Note in ${cat.name} hinzufügen", {
                         editGrade = Grade(
                             subjectId = subjectId, termId = termId, categoryId = cat.id,
                             date = LocalDate.now().toEpochDay(),
@@ -342,7 +344,7 @@ fun SubjectGradesScreen(subjectId: String, termId: String) {
             }
         }
 
-        SecondaryButton("Kategorie", {
+        if (!readOnly) SecondaryButton("Kategorie", {
             editCategory = GradeCategory(
                 subjectId = subjectId, termId = termId, name = "", kind = CategoryKind.OTHER,
                 weight = 10.0, sortOrder = (categories.maxOfOrNull { it.sortOrder } ?: 0) + 1,
@@ -409,9 +411,9 @@ fun SubjectGradesScreen(subjectId: String, termId: String) {
         }
     }
 
-    editGrade?.let { (g, isNew) -> GradeEditSheet(g, isNew, subjectSelectable = false, onDismiss = { editGrade = null }) }
-    editCategory?.let { (cat, isNew) -> CategoryEditSheet(cat, isNew, onDismiss = { editCategory = null }) }
-    if (overrideSheet) {
+    if (!readOnly) editGrade?.let { (g, isNew) -> GradeEditSheet(g, isNew, subjectSelectable = false, onDismiss = { editGrade = null }) }
+    if (!readOnly) editCategory?.let { (cat, isNew) -> CategoryEditSheet(cat, isNew, onDismiss = { editCategory = null }) }
+    if (overrideSheet && !readOnly) {
         var points by remember { mutableStateOf(override ?: computed?.roundToInt() ?: 10) }
         AppSheet(onDismiss = { overrideSheet = false }) { close ->
             SheetHeader("Zeugnisnote", onSave = {

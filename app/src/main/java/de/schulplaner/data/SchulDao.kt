@@ -100,6 +100,9 @@ interface SchulDao {
     @Upsert
     suspend fun upsertTopic(item: ExamTopic)
 
+    @Query("SELECT * FROM exam_topics")
+    suspend fun allTopics(): List<ExamTopic>
+
     // Notizen
     @Query("SELECT * FROM subject_notes WHERE deleted = 0 ORDER BY updatedAt DESC")
     fun notes(): Flow<List<SubjectNote>>

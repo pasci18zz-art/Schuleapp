@@ -42,6 +42,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.foundation.layout.statusBarsPadding
 import de.schulplaner.ui.components.blurWhenSheetOpen
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
@@ -159,11 +161,13 @@ fun AppRoot(startRoute: String? = null) {
     }
 
     val sheetBlur = remember { de.schulplaner.ui.components.SheetBlurState() }
+    val readOnly by androidx.compose.ui.platform.LocalContext.current.app.prefs.readOnly.collectAsStateWithLifecycle()
     CompositionLocalProvider(
         LocalNavigator provides navigator,
         LocalUndo provides undo,
         LocalConfetti provides confetti,
         de.schulplaner.ui.components.LocalSheetBlur provides sheetBlur,
+        de.schulplaner.ui.components.LocalReadOnly provides readOnly,
     ) {
         AppBackground(Modifier.blurWhenSheetOpen(sheetBlur)) {
             NavHost(
@@ -195,6 +199,13 @@ fun AppRoot(startRoute: String? = null) {
                 composable(Routes.SET_HOLIDAYS) { Centered { HolidaysScreen() } }
                 composable(Routes.SET_KINDS) { Centered { de.schulplaner.ui.settings.TaskKindsScreen() } }
                 composable(Routes.STUDY) { Centered { de.schulplaner.ui.study.StudyScreen() } }
+            }
+            if (readOnly) {
+                // Hinweis oben: Auf diesem Gerät wird nur angeschaut.
+                de.schulplaner.ui.components.Pill(
+                    "Ansichtsmodus",
+                    modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 4.dp),
+                )
             }
             UndoBar(undo, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 84.dp))
             BottomNav(navigator, route, Modifier.align(Alignment.BottomCenter))

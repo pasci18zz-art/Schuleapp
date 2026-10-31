@@ -76,6 +76,7 @@ fun TasksScreen() {
     var type by rememberSaveable { mutableStateOf<String?>(null) }
     var subjectFilter by rememberSaveable { mutableStateOf<String?>(null) }
     var edit by remember { mutableStateOf<Pair<Task, Boolean>?>(null) }
+    val readOnly = de.schulplaner.ui.components.LocalReadOnly.current
 
     val subjectMap = subjects.associateBy { it.id }
     val todayEpoch = today.toEpochDay()
@@ -157,7 +158,7 @@ fun TasksScreen() {
         }
 
         // Plus-Knopf: Fach und Datum aus der aktuellen Stunde, Art aus dem gewählten Filter.
-        Box(
+        if (!readOnly) Box(
             Modifier
                 .align(Alignment.BottomEnd)
                 .navigationBarsPadding()
@@ -174,7 +175,7 @@ fun TasksScreen() {
     }
 
     edit?.let { (task, isNew) ->
-        TaskEditSheet(task, isNew, onDismiss = { edit = null })
+        if (readOnly) TaskViewSheet(task, onDismiss = { edit = null }) else TaskEditSheet(task, isNew, onDismiss = { edit = null })
     }
 }
 

@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -151,9 +152,12 @@ fun SettingsScreen() {
     val reminderMinute by prefs.reminderMinute.collectAsStateWithLifecycle(18 * 60)
     var pickTime by remember { mutableStateOf(false) }
     val today = LocalDate.now()
+    val readOnly by prefs.readOnly.collectAsStateWithLifecycle()
+    val settingsMap by repo.settings.collectAsStateWithLifecycle()
+    var confirmReadOnly by remember { mutableStateOf<Boolean?>(null) }
 
     SettingsPage("Einstellungen", root = true) {
-        GlassCard(padding = PaddingValues(6.dp)) {
+        if (!readOnly) GlassCard(padding = PaddingValues(6.dp)) {
             NavRow(Ic.Book, "Fächer", "${subjects.size} Fächer · Farben, Lehrer, Räume") { nav.open(Routes.SET_SUBJECTS) }
             NavRow(Ic.Layers, "Halbjahre", terms.joinToString(", ") { it.name }.ifBlank { "Keine" }) { nav.open(Routes.SET_TERMS) }
             NavRow(Ic.Clock, "Stundenzeiten", "${periods.size} Stunden") { nav.open(Routes.SET_PERIODS) }
@@ -161,7 +165,9 @@ fun SettingsScreen() {
             NavRow(Sym.House, "Aufgabenarten", kinds.joinToString(", ") { it.name }) { nav.open(Routes.SET_KINDS) }
         }
 
-        GlassCard(padding = PaddingValues(16.dp)) {
+        if (!readOnly) LernzettelCard(settingsMap, kinds)
+
+        if (!readOnly) GlassCard(padding = PaddingValues(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Icon(Ic.Swap, null, tint = c.accent, modifier = Modifier.size(22.dp))
                 Text("A/B-Wochen", style = T.section, color = c.text, modifier = Modifier.weight(1f))
@@ -218,7 +224,7 @@ fun SettingsScreen() {
             }
         }
 
-        GlassCard(padding = PaddingValues(16.dp)) {
+        if (!readOnly) GlassCard(padding = PaddingValues(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Icon(Ic.Bookmark, null, tint = c.accent, modifier = Modifier.size(22.dp))
                 Text("Schnell-HA", style = T.section, color = c.text)
@@ -249,7 +255,36 @@ fun SettingsScreen() {
             }
         }
 
+        // Ansichtsmodus: nur auf diesem Gerät, z. B. für Eltern – alles sehen, nichts ändern.
+        GlassCard(padding = PaddingValues(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Icon(Ic.User, null, tint = c.accent, modifier = Modifier.size(22.dp))
+                Text("Ansichtsmodus", style = T.section, color = c.text, modifier = Modifier.weight(1f))
+                MiniSegmented(listOf(true to "An", false to "Aus"), readOnly, { on ->
+                    if (on != readOnly) confirmReadOnly = on
+                }, Modifier.width(110.dp))
+            }
+            Text(
+                if (readOnly) {
+                    "Dieses Gerät kann nur anschauen: keine Aufgaben anlegen, abhaken oder ändern. Daten kommen weiter per Sync."
+                } else {
+                    "Zum Mitlesen, z. B. für Eltern: Auf diesem Gerät ist dann alles sichtbar, aber nichts änderbar. Gilt nur für dieses Gerät."
+                },
+                style = T.small,
+                color = c.sub,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+        }
+
         SyncCard()
+    }
+    confirmReadOnly?.let { on ->
+        ConfirmDialog(
+            if (on) "Ansichtsmodus einschalten?" else "Ansichtsmodus ausschalten?",
+            if (on) "Auf diesem Gerät kann dann nichts mehr geändert werden. Ausschalten geht hier jederzeit." else "Danach kann auf diesem Gerät wieder alles bearbeitet werden.",
+            confirm = if (on) "Einschalten" else "Ausschalten",
+            onDismiss = { confirmReadOnly = null },
+        ) { prefs.setReadOnly(on) }
     }
     if (pickTime) {
         TimeDialog(reminderMinute, onDismiss = { pickTime = false }) { m ->
@@ -257,6 +292,49 @@ fun SettingsScreen() {
                 prefs.setReminder(true, m)
                 Reminders.scheduleFromPrefs(ctx, replace = true)
             }
+        }
+    }
+}
+
+/** Lernzettel-Aufgabe automatisch zu jeder neuen Klausur. */
+@Composable
+private fun LernzettelCard(settings: Map<String, String>, kinds: List<TaskKind>) {
+    val c = colors
+    val ctx = LocalContext.current
+    val repo = ctx.app.repo
+    val on = settings[SettingKeys.LZ_ENABLED] != "false"
+    val kind = settings[SettingKeys.LZ_KIND] ?: de.schulplaner.data.TaskType.EXTRA
+    GlassCard(padding = PaddingValues(16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Icon(Sym.Pen, null, tint = c.accent, modifier = Modifier.size(22.dp))
+            Text("Lernzettel zu Klausuren", style = T.section, color = c.text, modifier = Modifier.weight(1f))
+            MiniSegmented(listOf(true to "An", false to "Aus"), on, { repo.setSetting(SettingKeys.LZ_ENABLED, it.toString()) }, Modifier.width(110.dp))
+        }
+        Text(
+            "Neue Klausur → Aufgabe „Lernzettel“ im selben Fach, fällig am Tag davor. Die Themen der Klausur werden dort zu Unterpunkten (eigene Haken).",
+            style = T.small,
+            color = c.sub,
+            modifier = Modifier.padding(top = 8.dp),
+        )
+        if (on) {
+            Text("Als Aufgabenart", style = T.label, color = c.sub, modifier = Modifier.padding(top = 12.dp, bottom = 6.dp))
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                kinds.forEach { k ->
+                    val selected = k.id == kind
+                    de.schulplaner.ui.components.ChoiceChip(k.name, selected, { repo.setSetting(SettingKeys.LZ_KIND, k.id) }, leading = {
+                        Icon(KindIcons.of(k.icon), null, tint = if (selected) c.accent else c.sub, modifier = Modifier.size(16.dp))
+                    })
+                }
+            }
+            Text(
+                "Für kommende Klausuren anlegen",
+                style = T.label,
+                color = c.accent,
+                modifier = Modifier.padding(top = 10.dp).clip(RoundedCornerShape(12.dp)).clickable {
+                    repo.createMissingLernzettel()
+                    Toast.makeText(ctx, "Lernzettel angelegt", Toast.LENGTH_SHORT).show()
+                }.padding(vertical = 6.dp),
+            )
         }
     }
 }

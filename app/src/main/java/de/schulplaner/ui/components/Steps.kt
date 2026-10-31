@@ -61,6 +61,7 @@ fun StepsEditor(
     framed: Boolean = true,
 ) {
     val c = colors
+    val readOnly = LocalReadOnly.current
     // Lokale Reihenfolge während des Ziehens; übernommen wird erst beim Loslassen.
     var order by remember { mutableStateOf(steps) }
     var draggingId by remember { mutableStateOf<String?>(null) }
@@ -87,7 +88,14 @@ fun StepsEditor(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     CheckCircle(st.done, { onToggle(st) }, square = true, size = 22.dp, checkedColor = c.good)
-                    if (editingId == st.id) {
+                    if (readOnly) {
+                        Text(
+                            st.text,
+                            style = T.body.copy(textDecoration = if (st.done) TextDecoration.LineThrough else null),
+                            color = if (st.done) c.sub else c.text,
+                            modifier = Modifier.weight(1f).padding(vertical = 10.dp),
+                        )
+                    } else if (editingId == st.id) {
                         val focus = remember { FocusRequester() }
                         LaunchedEffect(Unit) { focus.requestFocus() }
                         InlineTextField(
@@ -112,8 +120,8 @@ fun StepsEditor(
                             }),
                         )
                     }
-                    SoftIconButton(Ic.Close, "Entfernen", { onRemove(st) }, tint = c.sub, background = Color.Transparent)
-                    Box(
+                    if (!readOnly) SoftIconButton(Ic.Close, "Entfernen", { onRemove(st) }, tint = c.sub, background = Color.Transparent)
+                    if (!readOnly) Box(
                         Modifier
                             .size(34.dp)
                             .pointerInput(st.id) {
@@ -159,7 +167,7 @@ fun StepsEditor(
                 FormDivider()
             }
         }
-        Row(Modifier.fillMaxWidth().padding(start = 14.dp, end = 6.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+        if (!readOnly) Row(Modifier.fillMaxWidth().padding(start = 14.dp, end = 6.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
             val add = {
                 if (newText.isNotBlank()) {
                     onAdd(newText.trim())

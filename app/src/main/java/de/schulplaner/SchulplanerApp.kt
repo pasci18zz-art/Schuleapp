@@ -43,6 +43,8 @@ class SchulplanerApp : Application() {
         prefs = Prefs(this)
         sync = SyncEngine(this, db.dao(), repo.files, appScope)
         repo.onLocalChange = { sync.requestSoon() }
+        repo.isReadOnly = { prefs.readOnly.value }
+        sync.readOnly = { prefs.readOnly.value }
         sync.schedulePeriodic()
         ProcessLifecycleOwner.get().lifecycle.addObserver(
             LifecycleEventObserver { _, event ->
@@ -61,7 +63,8 @@ class SchulplanerApp : Application() {
 
         // Lern-Mitteilung folgt der aktuellen Session (auch wenn sie vom anderen Gerät kommt).
         appScope.launch {
-            combine(repo.currentStudy, repo.subjects) { s, subjects -> s to subjects.associateBy { it.id } }
+            // Im Ansichtsmodus keine Lern-Mitteilung (sie hätte Knöpfe zum Steuern).
+            combine(repo.currentStudy, repo.subjects, prefs.readOnly) { s, subjects, ro -> (if (ro) null else s) to subjects.associateBy { it.id } }
                 .collectLatest { (s, subjects) -> StudyNotifier.show(this@SchulplanerApp, s, subjects) }
         }
         // Widgets nach Änderungen neu zeichnen (gebündelt).

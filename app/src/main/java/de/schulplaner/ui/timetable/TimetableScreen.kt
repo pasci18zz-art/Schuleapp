@@ -111,6 +111,7 @@ fun TimetableScreen() {
     var editSlot by remember { mutableStateOf<Pair<LessonSlot, Boolean>?>(null) }
     var newTask by remember { mutableStateOf<Task?>(null) }
     var viewTask by remember { mutableStateOf<Task?>(null) }
+    val readOnly = de.schulplaner.ui.components.LocalReadOnly.current
 
     val weekPager = rememberPagerState(initialPage = CENTER) { PAGES }
     val monthPager = rememberPagerState(initialPage = CENTER) { PAGES }
@@ -142,7 +143,7 @@ fun TimetableScreen() {
                 ) {
                     GlassIconButton(Ic.ChevronLeft, "Vorherige Woche", { scope.launch { weekPager.animateScrollToPage(weekPager.currentPage - 1) } })
                     GlassIconButton(Ic.ChevronRight, "Nächste Woche", { scope.launch { weekPager.animateScrollToPage(weekPager.currentPage + 1) } })
-                    GlassIconButton(if (editMode) Ic.Check else Ic.Pencil, if (editMode) "Fertig" else "Stundenplan bearbeiten", { editMode = !editMode }, filled = editMode)
+                    if (!readOnly) GlassIconButton(if (editMode) Ic.Check else Ic.Pencil, if (editMode) "Fertig" else "Stundenplan bearbeiten", { editMode = !editMode }, filled = editMode)
                 }
             }
 
@@ -174,7 +175,11 @@ fun TimetableScreen() {
                         schedule = schedule,
                         haFor = haFor,
                         examFor = examFor,
-                        onLesson = { l -> if (editMode) editSlot = l.slot to false else openLesson = l },
+                        onLesson = { l ->
+                            if (!readOnly) {
+                                if (editMode) editSlot = l.slot to false else openLesson = l
+                            }
+                        },
                         onTask = { viewTask = it },
                         onEmpty = { day, period ->
                             editSlot = LessonSlot(

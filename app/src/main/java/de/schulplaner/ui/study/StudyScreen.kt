@@ -80,6 +80,7 @@ fun StudyScreen() {
     val zone = ZoneId.systemDefault()
     val running = sessions.any { it.isRunning }
     val now = rememberTicker(running)
+    val readOnly = de.schulplaner.ui.components.LocalReadOnly.current
 
     val monday = Schedule.mondayOf(LocalDate.now()).plusWeeks(weekOffset.toLong())
     fun dayOf(s: StudySession): LocalDate = Instant.ofEpochMilli(s.startedAt).atZone(zone).toLocalDate()
@@ -93,7 +94,7 @@ fun StudyScreen() {
         Row(Modifier.fillMaxWidth().padding(top = 20.dp), verticalAlignment = Alignment.CenterVertically) {
             GlassIconButton(Ic.ChevronLeft, "Zurück", { nav.back() })
             Box(Modifier.weight(1f))
-            GlassIconButton(Ic.Plus, "Session nachtragen", {
+            if (!readOnly) GlassIconButton(Ic.Plus, "Session nachtragen", {
                 val end = System.currentTimeMillis()
                 edit = StudySession(startedAt = end - 30 * 60_000, endedAt = end, elapsedMs = 30 * 60_000, finished = true) to true
             }, filled = true)
@@ -186,7 +187,7 @@ fun StudyScreen() {
         }
     }
 
-    edit?.let { (s, isNew) -> SessionSheet(s, isNew, onDismiss = { edit = null }) }
+    if (!readOnly) edit?.let { (s, isNew) -> SessionSheet(s, isNew, onDismiss = { edit = null }) }
 }
 
 @Composable

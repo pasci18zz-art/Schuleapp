@@ -89,6 +89,9 @@ val colors: SchulColors
 
 fun subjectColor(argb: Long?): Color = if (argb == null) Color(0xFF7C8A9E) else Color(argb)
 
+/** Ansichtsmodus: true = auf diesem Gerät nur anschauen, nichts ändern. */
+val LocalReadOnly = androidx.compose.runtime.staticCompositionLocalOf { false }
+
 /** Gemeinsamer Zustand für den Weichzeichner: Der Hintergrund ist die Quelle, Glas-Kacheln zeichnen ihn verschwommen. */
 val LocalHaze = androidx.compose.runtime.staticCompositionLocalOf<HazeState?> { null }
 
@@ -275,6 +278,7 @@ fun SubjectDot(color: Color, size: Dp = 10.dp) {
 @Composable
 fun CheckCircle(checked: Boolean, onToggle: () -> Unit, ringColor: Color = colors.sub, size: Dp = 26.dp, square: Boolean = false, checkedColor: Color = colors.accent) {
     val c = colors
+    val readOnly = LocalReadOnly.current
     val bg by animateColorAsState(if (checked) checkedColor else Color.Transparent, tween(180), label = "check-bg")
     val border by animateColorAsState(if (checked) checkedColor else ringColor, tween(180), label = "check-border")
     val shape = if (square) RoundedCornerShape(8.dp) else CircleShape
@@ -290,7 +294,7 @@ fun CheckCircle(checked: Boolean, onToggle: () -> Unit, ringColor: Color = color
         Modifier
             .size(size + 18.dp)
             .onGloballyPositioned { center[0] = it.boundsInRoot().center }
-            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, role = Role.Checkbox, onClick = onToggle),
+            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, role = Role.Checkbox, enabled = !readOnly, onClick = onToggle),
         contentAlignment = Alignment.Center,
     ) {
         Box(

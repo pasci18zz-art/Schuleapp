@@ -60,6 +60,7 @@ fun ExamsScreen() {
     val schedule by repo.scheduleData.collectAsStateWithLifecycle()
     val today = rememberNow().toLocalDate()
     var create by remember { mutableStateOf<Exam?>(null) }
+    val readOnly = de.schulplaner.ui.components.LocalReadOnly.current
 
     val subjectMap = subjects.associateBy { it.id }
     val gradeMap = grades.associateBy { it.id }
@@ -69,7 +70,7 @@ fun ExamsScreen() {
     LazyColumn(Modifier.fillMaxSize(), contentPadding = screenPadding(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item {
             ScreenHeader(title = "Klausuren", overline = "${upcoming.size} anstehend") {
-                GlassIconButton(Ic.Plus, "Klausur hinzufügen", {
+                if (!readOnly) GlassIconButton(Ic.Plus, "Klausur hinzufügen", {
                     val first = subjects.firstOrNull()
                     val next = first?.let { Schedule.nextOccurrence(it.id, today, schedule) }
                     create = Exam(
