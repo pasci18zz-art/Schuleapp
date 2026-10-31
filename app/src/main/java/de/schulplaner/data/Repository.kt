@@ -457,6 +457,23 @@ class Repository(
         dao.upsertSetting(Setting(key, (current + delta).coerceAtLeast(0).toString(), updatedAt = now(), dirty = true))
     }
 
+    /**
+     * Art und Fach festlegen; mit [start] wird eine neue Session gestartet (bzw. die pausierte fortgesetzt),
+     * sonst nur die laufende Session geändert.
+     */
+    fun startStudy(kind: String, subjectId: String?, start: Boolean) = io {
+        val t = now()
+        dao.upsertSetting(Setting(SettingKeys.STUDY_KIND, kind, updatedAt = t, dirty = true))
+        dao.upsertSetting(Setting(SettingKeys.STUDY_SUBJECT, subjectId ?: "", updatedAt = t, dirty = true))
+        val cur = dao.currentSession()
+        when {
+            cur == null && start -> dao.upsertSession(StudySession(kind = kind, subjectId = subjectId, startedAt = t, runningSince = t, updatedAt = t))
+            cur != null -> dao.upsertSession(
+                cur.copy(kind = kind, subjectId = subjectId, runningSince = if (start) cur.runningSince ?: t else cur.runningSince, updatedAt = t, dirty = true),
+            )
+        }
+    }
+
     fun toggleStudy() = io { toggleStudyNow() }
     fun stopStudy() = io { stopStudyNow() }
     fun setStudyKind(kind: String) = io { setStudyKindNow(kind) }

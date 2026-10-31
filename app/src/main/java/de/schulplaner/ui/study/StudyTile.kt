@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -99,7 +100,10 @@ fun rememberTicker(ticking: Boolean): Long {
 fun weekStart(date: LocalDate = LocalDate.now()): Long =
     Schedule.mondayOf(date).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
 
-/** Stoppuhr für Lernsessions: Art wählen, starten/pausieren, beenden. */
+/**
+ * Lernzeit: links die helle Klappzahlen-Uhr, rechts Start/Pause.
+ * Start öffnet die Auswahl (Art und Fach), danach läuft die Uhr.
+ */
 @Composable
 fun StudyTile(modifier: Modifier = Modifier, onOpen: (() -> Unit)? = null) {
     val c = colors
@@ -118,6 +122,8 @@ fun StudyTile(modifier: Modifier = Modifier, onOpen: (() -> Unit)? = null) {
     val total = cur?.totalMs(now) ?: 0L
     val monday = weekStart()
     val week = sessions.filter { it.startedAt >= monday }.sumOf { it.totalMs(now) }
+    // null = zu, true = neue Session starten, false = laufende ändern
+    var picker by remember { mutableStateOf<Boolean?>(null) }
 
     GlassCard(modifier.fillMaxWidth(), padding = androidx.compose.foundation.layout.PaddingValues(14.dp)) {
         Row(
@@ -129,82 +135,102 @@ fun StudyTile(modifier: Modifier = Modifier, onOpen: (() -> Unit)? = null) {
             Text("Woche ${StudyLook.short(week)}", style = T.smallBold, color = c.sub)
             if (onOpen != null) Icon(Ic.ChevronRight, null, tint = c.sub, modifier = Modifier.size(16.dp))
         }
-        Segmented(
-            StudyKind.all.map { it to StudyKind.label(it) },
-            kind,
-            { if (!readOnly) repo.setStudyKind(it) },
-            Modifier.padding(top = 12.dp),
-            icons = StudyKind.all.map { StudyLook.icon(it) },
-        )
-        Row(Modifier.fillMaxWidth().padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.weight(1f)) {
-                Text(
-                    StudyLook.clock(total),
-                    style = T.bigNumber.copy(fontSize = 40.sp, fontFeatureSettings = "tnum"),
-                    color = if (cur == null) c.sub else c.text,
-                    maxLines = 1,
-                )
-            }
-            if (cur != null && !readOnly) {
-                Box(
-                    Modifier.size(44.dp).pressable({ repo.stopStudy() }).clip(CircleShape).background(c.line),
-                    contentAlignment = Alignment.Center,
-                ) { Icon(StopIcon, "Beenden", tint = c.text, modifier = Modifier.size(18.dp)) }
-                Box(Modifier.size(10.dp))
-            }
-            if (!readOnly) Box(
-                Modifier
-                    .size(56.dp)
-                    .pressable({ repo.toggleStudy() })
-                    .shadow(10.dp, CircleShape, ambientColor = c.accent, spotColor = c.accent)
-                    .clip(CircleShape)
-                    .background(c.accent),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(if (running) PauseIcon else PlayIcon, if (running) "Pause" else "Start", tint = c.accentInk, modifier = Modifier.size(24.dp))
+        Row(Modifier.fillMaxWidth().padding(top = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+            FlipTimer(total, Modifier.weight(1f), height = 92.dp, dim = cur == null)
+            if (!readOnly) {
+                Column(Modifier.padding(start = 14.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Box(
+                        Modifier
+                            .size(62.dp)
+                            .pressable({ if (cur == null) picker = true else repo.toggleStudy() })
+                            .shadow(12.dp, CircleShape, ambientColor = c.accent, spotColor = c.accent)
+                            .clip(CircleShape)
+                            .background(c.accent),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(if (running) PauseIcon else PlayIcon, if (running) "Pause" else "Start", tint = c.accentInk, modifier = Modifier.size(26.dp))
+                    }
+                    if (cur != null) {
+                        Box(
+                            Modifier.size(40.dp).pressable({ repo.stopStudy() }).clip(CircleShape).background(c.line),
+                            contentAlignment = Alignment.Center,
+                        ) { Icon(StopIcon, "Beenden", tint = c.text, modifier = Modifier.size(16.dp)) }
+                    }
+                }
             }
         }
-        if (!readOnly) {
-            SubjectChooser(subject, subjects, onPick = { repo.setStudySubject(it) })
-        } else if (subject != null) {
-            Row(Modifier.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                SubjectIcon(subject, 15.dp)
-                Text(subject.name, style = T.label, color = c.sub)
-            }
-        }
-    }
-}
-
-@Composable
-private fun SubjectChooser(subject: de.schulplaner.data.Subject?, subjects: List<de.schulplaner.data.Subject>, onPick: (String?) -> Unit) {
-    val c = colors
-    var open by remember { mutableStateOf(false) }
-    Box(Modifier.padding(top = 8.dp)) {
+        // Was gerade läuft – antippen ändert Art oder Fach.
         Row(
-            Modifier.height(32.dp).clip(RoundedCornerShape(16.dp)).background(c.line.copy(alpha = 0.6f)).clickable { open = true }.padding(horizontal = 12.dp),
+            Modifier
+                .padding(top = 12.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .then(if (!readOnly && cur != null) Modifier.clickable { picker = false } else Modifier)
+                .background(c.line.copy(alpha = 0.5f))
+                .padding(horizontal = 12.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            if (subject != null) SubjectIcon(subject, 15.dp)
-            Text(subject?.name ?: "Fach (optional)", style = T.label, color = if (subject != null) c.text else c.sub, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 180.dp))
-            Icon(Ic.ChevronDown, null, tint = c.sub, modifier = Modifier.size(13.dp))
-        }
-        androidx.compose.material3.DropdownMenu(
-            expanded = open,
-            onDismissRequest = { open = false },
-            shape = RoundedCornerShape(18.dp),
-            containerColor = c.sheetGlass,
-            shadowElevation = 8.dp,
-        ) {
-            MenuEntry(Ic.Layers, "Ohne Fach") { open = false; onPick(null) }
-            subjects.forEach { s ->
-                androidx.compose.material3.DropdownMenuItem(
-                    text = { Text(s.name, style = T.body, color = c.text) },
-                    leadingIcon = { SubjectIcon(s, 18.dp) },
-                    onClick = { open = false; onPick(s.id) },
-                )
+            Icon(StudyLook.icon(kind), null, tint = StudyLook.color(kind), modifier = Modifier.size(16.dp))
+            Text(StudyKind.label(kind), style = T.label, color = c.text)
+            if (subject != null) {
+                Text("·", style = T.label, color = c.sub)
+                SubjectIcon(subject, 14.dp)
+                Text(subject.name, style = T.label, color = c.text, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 160.dp))
             }
+            Text(
+                when {
+                    running -> "· läuft"
+                    cur != null -> "· pausiert"
+                    else -> "· bereit"
+                },
+                style = T.small,
+                color = c.sub,
+            )
         }
+    }
+
+    picker?.let { start ->
+        StartSheet(
+            initialKind = kind,
+            initialSubject = subjectId,
+            subjects = subjects,
+            start = start,
+            onDismiss = { picker = null },
+        ) { k, s -> repo.startStudy(k, s, start) }
+    }
+}
+
+/** Auswahl vor dem Start: was du machst (Hausaufgaben, Referat, Lernen) und in welchem Fach. */
+@Composable
+private fun StartSheet(
+    initialKind: String,
+    initialSubject: String?,
+    subjects: List<de.schulplaner.data.Subject>,
+    start: Boolean,
+    onDismiss: () -> Unit,
+    onConfirm: (String, String?) -> Unit,
+) {
+    var kind by remember { mutableStateOf(initialKind) }
+    var subjectId by remember { mutableStateOf(initialSubject) }
+    de.schulplaner.ui.components.AppSheet(onDismiss = onDismiss) { close ->
+        Text(if (start) "Lernsession starten" else "Session ändern", style = T.title.copy(fontSize = T.section.fontSize * 1.4f), color = colors.text)
+        Segmented(
+            StudyKind.all.map { it to StudyKind.label(it) },
+            kind,
+            { kind = it },
+            icons = StudyKind.all.map { StudyLook.icon(it) },
+        )
+        Text(StudyKind.label(kind), style = T.label, color = colors.sub, modifier = Modifier.padding(start = 4.dp))
+        de.schulplaner.ui.components.SubjectPicker(subjects, subjectId, { subjectId = it })
+        de.schulplaner.ui.components.PrimaryButton(
+            if (start) "Start" else "Übernehmen",
+            {
+                onConfirm(kind, subjectId)
+                close()
+            },
+            Modifier.fillMaxWidth().height(52.dp),
+            icon = if (start) PlayIcon else null,
+        )
     }
 }
 

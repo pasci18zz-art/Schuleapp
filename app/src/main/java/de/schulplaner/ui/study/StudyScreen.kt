@@ -2,6 +2,7 @@ package de.schulplaner.ui.study
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -67,7 +68,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 
-/** Übersicht der Lernzeit: Wochenbalken, Aufteilung nach Art und Fach, alle Sessions zum Bearbeiten. */
+/** Übersicht der Lernzeit: Wochenbalken (Tag antippen zeigt dessen Sessions), Aufteilung nach Art und Fach. */
 @Composable
 fun StudyScreen() {
     val c = colors
@@ -77,6 +78,7 @@ fun StudyScreen() {
     val subjects by repo.subjects.collectAsStateWithLifecycle()
     val subjectMap = subjects.associateBy { it.id }
     var weekOffset by rememberSaveable { mutableIntStateOf(0) }
+    var selectedDay by rememberSaveable { mutableStateOf<Long?>(null) }
     var edit by remember { mutableStateOf<Pair<StudySession, Boolean>?>(null) }
     val zone = ZoneId.systemDefault()
     val running = sessions.any { it.isRunning }
@@ -101,8 +103,16 @@ fun StudyScreen() {
             }, filled = true)
         }
         ScreenHeader(title = "Lernzeit", overline = if (weekOffset == 0) "Diese Woche" else Fmt.weekRange(monday)) {
-            GlassIconButton(Ic.ChevronLeft, "Vorherige Woche", { weekOffset-- })
-            GlassIconButton(Ic.ChevronRight, "Nächste Woche", { if (weekOffset < 0) weekOffset++ })
+            GlassIconButton(Ic.ChevronLeft, "Vorherige Woche", {
+                weekOffset--
+                selectedDay = null
+            })
+            GlassIconButton(Ic.ChevronRight, "Nächste Woche", {
+                if (weekOffset < 0) {
+                    weekOffset++
+                    selectedDay = null
+                }
+            })
         }
 
         if (weekOffset == 0) StudyTile()
@@ -112,7 +122,65 @@ fun StudyScreen() {
                 Text(StudyLook.short(total), style = T.bigNumber.copy(fontSize = T.bigNumber.fontSize * 0.8f), color = c.text)
                 Text("in ${week.size} Sessions", style = T.body, color = c.sub, modifier = Modifier.padding(bottom = 6.dp))
             }
-            WeekBars(monday, week, now, Modifier.padding(top = 12.dp))
+            WeekBars(
+                monday, week, now, Modifier.padding(top = 12.dp),
+                selected = selectedDay?.let { LocalDate.ofEpochDay(it) },
+                onSelect = { d -> selectedDay = if (selectedDay == d.toEpochDay()) null else d.toEpochDay() },
+            )
+            if (selectedDay == null && week.isNotEmpty()) {
+                Text("Tag antippen, um die Sessions zu sehen", style = T.small, color = c.sub, modifier = Modifier.padding(top = 8.dp))
+            }
+        }
+
+        // Sessions des gewählten Tages.
+        selectedDay?.let { epoch ->
+            val day = LocalDate.ofEpochDay(epoch)
+            val list = week.filter { dayOf(it) == day }.sortedBy { it.startedAt }
+            GlassCard(padding = PaddingValues(start = 6.dp, end = 6.dp, top = 14.dp, bottom = 6.dp)) {
+                Row(Modifier.padding(start = 12.dp, end = 12.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(Fmt.full(day), style = T.section, color = c.text, modifier = Modifier.weight(1f))
+                    Text(StudyLook.short(list.sumOf { it.totalMs(now) }), style = T.label, color = c.sub)
+                }
+                if (list.isEmpty()) {
+                    Text("An diesem Tag keine Sessions", style = T.small, color = c.sub, modifier = Modifier.padding(start = 12.dp, bottom = 10.dp))
+                }
+                list.forEach { s ->
+                    val start = Instant.ofEpochMilli(s.startedAt).atZone(zone)
+                    val endMs = if (s.finished) s.endedAt ?: (s.startedAt + s.elapsedMs) else null
+                    val time = buildString {
+                        append(Fmt.time(start.toLocalTime()))
+                        if (endMs != null) append(" – " + Fmt.time(Instant.ofEpochMilli(endMs).atZone(zone).toLocalTime()))
+                        if (!s.finished) append(if (s.isRunning) " · läuft" else " · pausiert")
+                    }
+                    val subject = s.subjectId?.let { subjectMap[it] }
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(16.dp))
+                            .then(if (!readOnly) Modifier.clickable { edit = s to false } else Modifier)
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        val col = subject?.let { de.schulplaner.ui.components.subjectColor(it.color) } ?: StudyLook.color(s.kind)
+                        Box(
+                            Modifier.size(38.dp).clip(RoundedCornerShape(13.dp)).background(col.copy(alpha = 0.16f)),
+                            contentAlignment = Alignment.Center,
+                        ) { Icon(StudyLook.icon(s.kind), null, tint = col, modifier = Modifier.size(19.dp)) }
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                listOfNotNull(subject?.name, StudyKind.label(s.kind)).joinToString(" · "),
+                                style = T.body,
+                                color = c.text,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(time, style = T.small, color = c.sub, maxLines = 1)
+                        }
+                        Text(StudyLook.short(s.totalMs(now)), style = T.label, color = c.text)
+                    }
+                }
+            }
         }
 
         if (total > 0) {
@@ -144,45 +212,6 @@ fun StudyScreen() {
                             color = de.schulplaner.ui.components.subjectColor(s?.color),
                         )
                     }
-                }
-            }
-        }
-
-        GlassCard(padding = PaddingValues(start = 6.dp, end = 6.dp, top = 14.dp, bottom = 6.dp)) {
-            Text("Sessions", style = T.section, color = c.text, modifier = Modifier.padding(start = 12.dp, bottom = 6.dp))
-            if (week.isEmpty()) {
-                Text("Keine Sessions in dieser Woche", style = T.small, color = c.sub, modifier = Modifier.padding(start = 12.dp, bottom = 10.dp))
-            }
-            week.sortedByDescending { it.startedAt }.forEach { s ->
-                val start = Instant.ofEpochMilli(s.startedAt).atZone(zone)
-                val endMs = if (s.finished) s.endedAt ?: (s.startedAt + s.elapsedMs) else null
-                val time = buildString {
-                    append(Fmt.dayDate(start.toLocalDate()))
-                    append(" · ")
-                    append(Fmt.time(start.toLocalTime()))
-                    if (endMs != null) append("–" + Fmt.time(Instant.ofEpochMilli(endMs).atZone(zone).toLocalTime()))
-                    if (!s.finished) append(if (s.isRunning) " · läuft" else " · pausiert")
-                }
-                Row(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).clickable { edit = s to false }.padding(horizontal = 12.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    Box(
-                        Modifier.size(38.dp).clip(RoundedCornerShape(13.dp)).background(StudyLook.color(s.kind).copy(alpha = 0.16f)),
-                        contentAlignment = Alignment.Center,
-                    ) { Icon(StudyLook.icon(s.kind), null, tint = StudyLook.color(s.kind), modifier = Modifier.size(19.dp)) }
-                    Column(Modifier.weight(1f)) {
-                        Text(
-                            listOfNotNull(StudyKind.label(s.kind), s.subjectId?.let { subjectMap[it]?.name }).joinToString(" · "),
-                            style = T.body,
-                            color = c.text,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        Text(time, style = T.small, color = c.sub, maxLines = 1)
-                    }
-                    Text(StudyLook.short(s.totalMs(now)), style = T.label, color = c.text)
                 }
             }
         }
@@ -254,7 +283,14 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.patternRect(
 
 /** Balken Mo–So: Fachfarbe, Muster je Art (gestapelt nach Fach und Art). */
 @Composable
-private fun WeekBars(monday: LocalDate, week: List<StudySession>, now: Long, modifier: Modifier = Modifier) {
+private fun WeekBars(
+    monday: LocalDate,
+    week: List<StudySession>,
+    now: Long,
+    modifier: Modifier = Modifier,
+    selected: LocalDate? = null,
+    onSelect: (LocalDate) -> Unit = {},
+) {
     val c = colors
     val zone = ZoneId.systemDefault()
     val repo = LocalContext.current.app.repo
@@ -286,9 +322,18 @@ private fun WeekBars(monday: LocalDate, week: List<StudySession>, now: Long, mod
             }
         }
         Row(Modifier.fillMaxWidth().height(120.dp).padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            perDay.forEach { day ->
-                Canvas(Modifier.weight(1f).fillMaxSize().clip(RoundedCornerShape(6.dp))) {
-                    drawRect(c.line.copy(alpha = 0.6f))
+            perDay.forEachIndexed { i, day ->
+                val d = monday.plusDays(i.toLong())
+                val isSel = d == selected
+                Canvas(
+                    Modifier
+                        .weight(1f)
+                        .fillMaxSize()
+                        .clip(RoundedCornerShape(6.dp))
+                        .then(if (isSel) Modifier.border(2.dp, c.accent, RoundedCornerShape(6.dp)) else Modifier)
+                        .clickable { onSelect(d) },
+                ) {
+                    drawRect(c.line.copy(alpha = if (isSel) 0.9f else 0.6f))
                     var bottom = size.height
                     day.forEach { (subjectId, kind, ms) ->
                         val h = size.height * (ms.toFloat() / max)
@@ -305,9 +350,13 @@ private fun WeekBars(monday: LocalDate, week: List<StudySession>, now: Long, mod
                 Text(
                     Fmt.dayShort(d),
                     style = T.smallBold,
-                    color = if (d == today) c.accent else c.sub,
+                    color = if (d == selected) c.accentInk else if (d == today) c.accent else c.sub,
                     textAlign = TextAlign.Center,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (d == selected) c.accent else androidx.compose.ui.graphics.Color.Transparent)
+                        .clickable { onSelect(d) },
                 )
             }
         }

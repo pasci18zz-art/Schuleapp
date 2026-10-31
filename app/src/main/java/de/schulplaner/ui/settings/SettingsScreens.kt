@@ -279,12 +279,17 @@ fun SettingsScreen() {
         SyncCard()
     }
     confirmReadOnly?.let { on ->
-        ConfirmDialog(
-            if (on) "Ansichtsmodus einschalten?" else "Ansichtsmodus ausschalten?",
-            if (on) "Auf diesem Gerät kann dann nichts mehr geändert werden. Ausschalten geht hier jederzeit." else "Danach kann auf diesem Gerät wieder alles bearbeitet werden.",
-            confirm = if (on) "Einschalten" else "Ausschalten",
-            onDismiss = { confirmReadOnly = null },
-        ) { prefs.setReadOnly(on) }
+        if (on) {
+            ConfirmDialog(
+                "Ansichtsmodus einschalten?",
+                "Auf diesem Gerät kann dann nichts mehr geändert werden. Zum Ausschalten braucht man den Code.",
+                confirm = "Einschalten",
+                onDismiss = { confirmReadOnly = null },
+            ) { prefs.setReadOnly(true) }
+        } else {
+            // Ausschalten nur mit Code.
+            UnlockDialog(onDismiss = { confirmReadOnly = null }) { prefs.setReadOnly(false) }
+        }
     }
     if (pickTime) {
         TimeDialog(reminderMinute, onDismiss = { pickTime = false }) { m ->
@@ -294,6 +299,53 @@ fun SettingsScreen() {
             }
         }
     }
+}
+
+/** Code, mit dem der Ansichtsmodus ausgeschaltet wird. */
+private const val UNLOCK_CODE = "2505"
+
+@Composable
+private fun UnlockDialog(onDismiss: () -> Unit, onUnlock: () -> Unit) {
+    val c = colors
+    var code by remember { mutableStateOf("") }
+    var wrong by remember { mutableStateOf(false) }
+    fun check() {
+        if (code == UNLOCK_CODE) {
+            onUnlock()
+            onDismiss()
+        } else {
+            wrong = true
+            code = ""
+        }
+    }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Ansichtsmodus ausschalten") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("Code eingeben:", style = T.body, color = c.sub)
+                androidx.compose.material3.OutlinedTextField(
+                    value = code,
+                    onValueChange = { v ->
+                        code = v.filter { it.isDigit() }.take(8)
+                        wrong = false
+                    },
+                    singleLine = true,
+                    isError = wrong,
+                    visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                        keyboardType = androidx.compose.ui.text.input.KeyboardType.NumberPassword,
+                        imeAction = androidx.compose.ui.text.input.ImeAction.Done,
+                    ),
+                    keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { check() }),
+                    shape = RoundedCornerShape(14.dp),
+                )
+                if (wrong) Text("Falscher Code", style = T.small, color = c.warn)
+            }
+        },
+        confirmButton = { androidx.compose.material3.TextButton(onClick = { check() }) { Text("Ausschalten") } },
+        dismissButton = { androidx.compose.material3.TextButton(onClick = onDismiss) { Text("Abbrechen") } },
+    )
 }
 
 /** Lernzettel-Aufgabe automatisch zu jeder neuen Klausur. */

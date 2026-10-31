@@ -205,7 +205,7 @@ fun TodayScreen() {
                 // Spalten oben bündig; jede Kachel so hoch wie ihr Inhalt.
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                     Column(Modifier.weight(1f).appear(2), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                        TopStack(state, schedule, tasks, exams)
+                        NowTile(state)
                         LessonsTile(state, schedule, onLessonClick)
                         if (!readOnly) MonsterTile()
                         AppShortcutsRow()
@@ -220,7 +220,7 @@ fun TodayScreen() {
                     }
                 }
             } else {
-                TopStack(state, schedule, tasks, exams, Modifier.appear(2))
+                NowTile(state, Modifier.appear(2))
                 Box(Modifier.appear(3)) { LessonsTile(state, schedule, onLessonClick) }
                 Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min).appear(4), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Box(Modifier.weight(1f).fillMaxHeight()) {
@@ -244,69 +244,6 @@ fun TodayScreen() {
             de.schulplaner.ui.tasks.TaskViewSheet(task, onDismiss = { editTask = null })
         } else {
             TaskEditSheet(task, isNew, onDismiss = { editTask = null })
-        }
-    }
-}
-
-/**
- * Oberer Block wie ein iOS-Stapel: senkrecht wischen wechselt zwischen
- * Wochenübersicht (Standard), Flip-Uhr und Jetzt-Karte.
- */
-@Composable
-private fun TopStack(
-    s: TodayState,
-    schedule: de.schulplaner.domain.ScheduleData,
-    tasks: List<Task>,
-    exams: List<Exam>,
-    modifier: Modifier = Modifier,
-) {
-    val c = colors
-    val pager = androidx.compose.foundation.pager.rememberPagerState { 3 }
-    val lesson = s.current ?: s.next
-    val subtitle = when {
-        s.holidayName != null && s.lessons.isEmpty() -> s.holidayName ?: ""
-        s.current != null && lesson?.endDateTime != null ->
-            "${lesson.subject?.name ?: "?"} · noch ${Duration.between(s.now, lesson.endDateTime).toMinutes() + 1} min"
-        lesson != null -> "Als Nächstes: ${lesson.subject?.name ?: "?"} um ${lesson.start?.let { Fmt.time(it) } ?: ""}"
-        else -> Fmt.full(s.now.toLocalDate())
-    }
-    Box(modifier.fillMaxWidth().height(236.dp)) {
-        androidx.compose.foundation.pager.VerticalPager(
-            pager,
-            Modifier.fillMaxSize(),
-            pageSpacing = 12.dp,
-            key = { it },
-        ) { page ->
-            when (page) {
-                0 -> WeekOverview(s.now, schedule, tasks, exams)
-                1 -> FlipClockCard(subtitle)
-                else -> NowTile(s, Modifier.fillMaxSize())
-            }
-        }
-        // Punkte am Rand zeigen, welche Seite gerade sichtbar ist.
-        Column(
-            Modifier.align(Alignment.CenterEnd).padding(end = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(5.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            val light = pager.currentPage != 0
-            repeat(3) { i ->
-                val active = pager.currentPage == i
-                val h by androidx.compose.animation.core.animateDpAsState(if (active) 14.dp else 5.dp, label = "dot")
-                Box(
-                    Modifier
-                        .size(width = 5.dp, height = h)
-                        .clip(RoundedCornerShape(3.dp))
-                        .background(
-                            when {
-                                light && active -> Color.White
-                                light -> Color.White.copy(alpha = 0.4f)
-                                active -> c.accent
-                                else -> c.sub.copy(alpha = 0.4f)
-                            },
-                        ),
-                )
-            }
         }
     }
 }
@@ -356,9 +293,9 @@ private fun NowTile(s: TodayState, modifier: Modifier = Modifier) {
                     Text(label.uppercase(), style = T.overline, color = soft, modifier = Modifier.weight(1f))
                     Text(
                         right,
-                        style = T.title.copy(fontSize = 20.sp),
+                        style = T.smallBold,
                         color = white,
-                        modifier = Modifier.clip(RoundedCornerShape(50)).background(Color.White.copy(alpha = 0.18f)).padding(horizontal = 12.dp, vertical = 4.dp),
+                        modifier = Modifier.clip(RoundedCornerShape(50)).background(Color.White.copy(alpha = 0.18f)).padding(horizontal = 10.dp, vertical = 4.dp),
                     )
                 }
                 Row(Modifier.padding(top = 14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
