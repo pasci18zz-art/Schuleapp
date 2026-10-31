@@ -29,6 +29,8 @@ import de.schulplaner.data.TaskKind
 import de.schulplaner.domain.Fmt
 import de.schulplaner.domain.label
 import de.schulplaner.ui.components.CheckCircle
+import de.schulplaner.ui.components.ProgressBar
+import de.schulplaner.ui.components.subjectColor
 import de.schulplaner.ui.components.KindIcons
 import de.schulplaner.ui.components.SubjectIcon
 import de.schulplaner.ui.components.colors
@@ -102,8 +104,15 @@ fun TaskLine(
                 val name = if (compact) subject?.label else subject?.name
                 val small = if (compact) T.small.copy(fontSize = T.small.fontSize * 0.92f) else T.small
                 Text(name ?: "Ohne Fach", style = small, color = c.sub, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
-                if (percent != null) Text("· $percent %", style = small.copy(fontWeight = T.smallBold.fontWeight), color = if (percent == 100) c.good else c.accent, maxLines = 1)
+                if (percent == 100) Text("· 100 %", style = small.copy(fontWeight = T.smallBold.fontWeight), color = c.good, maxLines = 1)
                 if (compact && due != null) Text("· ${dueLabel(today, due)}", style = small, color = dueColor, maxLines = 1)
+            }
+            // Fortschritt der Unterpunkte als Balken (bei 100 % reicht das grüne "100 %").
+            if (percent != null && percent < 100) {
+                Row(Modifier.padding(top = 5.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    ProgressBar(percent / 100f, subjectColor(subject?.color), Modifier.weight(1f), height = 4.dp)
+                    Text("$percent %", style = T.smallBold.copy(fontSize = T.small.fontSize * 0.9f), color = c.sub, maxLines = 1)
+                }
             }
         }
         if (!compact && due != null) {

@@ -22,7 +22,7 @@ class ActionReceiver : BroadcastReceiver() {
                     ACTION_STOP -> repo.stopStudyNow()
                     ACTION_KIND -> intent.getStringExtra(EXTRA_KIND)?.let { repo.setStudyKindNow(it) }
                     ACTION_TASK_DONE -> intent.getStringExtra(EXTRA_ID)?.let { repo.completeTaskNow(it) }
-                    ACTION_TASK_FILTER -> Widgets.setFilter(ctx, intent.getIntExtra(EXTRA_WIDGET, 0), intent.getStringExtra(EXTRA_KIND))
+                    ACTION_TASK_FILTER -> Widgets.switchTaskFilter(ctx, repo.snapshot(), intent.getIntExtra(EXTRA_WIDGET, 0), intent.getStringExtra(EXTRA_KIND))
                     ACTION_REFRESH -> Unit
                 }
                 val snap = repo.snapshot()

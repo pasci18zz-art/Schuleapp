@@ -282,19 +282,17 @@ fun CheckCircle(checked: Boolean, onToggle: () -> Unit, ringColor: Color = color
     val bg by animateColorAsState(if (checked) checkedColor else Color.Transparent, tween(180), label = "check-bg")
     val border by animateColorAsState(if (checked) checkedColor else ringColor, tween(180), label = "check-border")
     val shape = if (square) RoundedCornerShape(8.dp) else CircleShape
-    // Konfetti beim Abhaken – wird in einer Ebene über der ganzen App gezeichnet, damit nichts abgeschnitten wird.
+    // Konfetti nur beim echten Antippen (nicht beim Filterwechsel oder Sync) – in einer Ebene über der ganzen App.
     val confetti = LocalConfetti.current
     val center = remember { arrayOf(Offset.Unspecified) }
-    var previous by remember { mutableStateOf(checked) }
-    LaunchedEffect(checked) {
-        if (checked && !previous && center[0] != Offset.Unspecified) confetti.pop(center[0])
-        previous = checked
-    }
     Box(
         Modifier
             .size(size + 18.dp)
             .onGloballyPositioned { center[0] = it.boundsInRoot().center }
-            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, role = Role.Checkbox, enabled = !readOnly, onClick = onToggle),
+            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, role = Role.Checkbox, enabled = !readOnly) {
+                if (!checked && center[0] != Offset.Unspecified) confetti.pop(center[0])
+                onToggle()
+            },
         contentAlignment = Alignment.Center,
     ) {
         Box(

@@ -141,6 +141,36 @@ object Schedule {
         return out
     }
 
+    /**
+     * Welche Woche der Stundenplan zeigt: ab Unterrichtsende am Freitag (ohne Unterricht ab 13 Uhr)
+     * und am Wochenende schon die nächste.
+     */
+    fun weekToShow(now: LocalDateTime, data: ScheduleData): LocalDate {
+        val today = now.toLocalDate()
+        val monday = mondayOf(today)
+        val dow = today.dayOfWeek.value
+        if (dow >= 6) return monday.plusWeeks(1)
+        if (dow == 5) {
+            val end = lessonsOn(today, data).mapNotNull { it.endDateTime }.maxOrNull() ?: today.atTime(13, 0)
+            if (!now.isBefore(end)) return monday.plusWeeks(1)
+        }
+        return monday
+    }
+
+    /** Schultag [offset] Schultage von [from] entfernt (Tage ohne Unterricht werden übersprungen). */
+    fun schoolDayAt(from: LocalDate, offset: Int, data: ScheduleData): LocalDate {
+        var d = from
+        var left = kotlin.math.abs(offset)
+        val step = if (offset >= 0) 1L else -1L
+        var guard = 0
+        while (left > 0 && guard < 400) {
+            d = d.plusDays(step)
+            guard++
+            if (lessonsOn(d, data).isNotEmpty()) left--
+        }
+        return d
+    }
+
     /** Erster Tag ab [from] (inklusive), an dem Unterricht ist. */
     fun nextSchoolDay(from: LocalDate, data: ScheduleData, maxDays: Int = 60): LocalDate? {
         var d = from

@@ -51,14 +51,34 @@
     android:scaleType="fitXY" />
                 <TextView
                     android:id="@+id/row_meta"
-                    android:layout_width="match_parent"
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
+                    android:layout_weight="1"
                     android:ellipsize="end"
                     android:maxLines="1"
                     android:paddingStart="5dp"
                     android:textColor="#A6FFFFFF"
                     android:textSize="12sp" />
+                <TextView
+                    android:id="@+id/row_pct"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:paddingStart="6dp"
+                    android:text="100 %"
+                    android:textColor="#FF7FD6A0"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    android:visibility="gone" />
             </LinearLayout>
+            <ProgressBar
+                android:id="@+id/row_progress"
+                style="@android:style/Widget.ProgressBar.Horizontal"
+                android:layout_width="match_parent"
+                android:layout_height="4dp"
+                android:layout_marginTop="5dp"
+                android:max="100"
+                android:progressDrawable="@drawable/widget_progress"
+                android:visibility="gone" />
         </LinearLayout>
         <ImageView
     android:id="@+id/row_kind"

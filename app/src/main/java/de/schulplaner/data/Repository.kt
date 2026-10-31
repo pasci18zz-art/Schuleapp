@@ -450,6 +450,13 @@ class Repository(
         if (!t.done) dao.upsertTask(t.copy(done = true, doneAt = now(), updatedAt = now(), dirty = true))
     }
 
+    /** Monster-Zähler für heute um [delta] ändern (nie unter 0). */
+    fun addMonster(delta: Int) = io {
+        val key = SettingKeys.MONSTER_PREFIX + LocalDate.now().toEpochDay()
+        val current = dao.setting(key)?.takeIf { !it.deleted }?.value?.toIntOrNull() ?: 0
+        dao.upsertSetting(Setting(key, (current + delta).coerceAtLeast(0).toString(), updatedAt = now(), dirty = true))
+    }
+
     fun toggleStudy() = io { toggleStudyNow() }
     fun stopStudy() = io { stopStudyNow() }
     fun setStudyKind(kind: String) = io { setStudyKindNow(kind) }

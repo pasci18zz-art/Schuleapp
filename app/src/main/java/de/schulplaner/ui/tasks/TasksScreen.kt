@@ -139,6 +139,7 @@ fun TasksScreen() {
                 item(key = "g_$label") {
                     GlassCard(Modifier.animateContentSize(), shape = RoundedCornerShape(24.dp), padding = PaddingValues(4.dp)) {
                         list.forEach { t ->
+                            androidx.compose.runtime.key(t.id) {
                             TaskLine(
                                 task = t,
                                 subject = t.subjectId?.let { subjectMap[it] },
@@ -151,6 +152,7 @@ fun TasksScreen() {
                                 },
                                 onClick = { edit = t to false },
                             )
+                            }
                         }
                     }
                 }

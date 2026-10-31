@@ -147,7 +147,7 @@ object Widgets {
      * Alle offenen Aufgaben: zuerst überfällig/heute/morgen (rot), dann ein Strich, dann der Rest nach Datum.
      * Die Liste ist im Widget scrollbar.
      */
-    private fun fillTasks(ctx: Context, v: RemoteViews, snap: Repository.Snapshot, today: LocalDate, filter: String?) {
+    private fun fillTasks(ctx: Context, v: RemoteViews, snap: Repository.Snapshot, today: LocalDate, filter: String?, header: Boolean) {
         val open = snap.tasks.filter { !it.done && (filter == null || it.type == filter) }
         val limit = today.plusDays(1).toEpochDay()
         val urgent = open.filter { it.dueDate != null && it.dueDate <= limit }
@@ -155,9 +155,11 @@ object Widgets {
         val rest = open.filter { it.dueDate == null || it.dueDate > limit }
             .sortedWith(compareBy<Task> { it.dueDate ?: Long.MAX_VALUE }.thenBy { it.createdAt })
 
-        v.setTextViewText(R.id.tasks_count, "${open.size}")
-        v.setTextColor(R.id.tasks_count, urgency(open.size))
-        v.setOnClickPendingIntent(R.id.tasks_title, openApp(ctx, 22, "tasks"))
+        if (header) {
+            v.setTextViewText(R.id.tasks_count, "${open.size}")
+            v.setTextColor(R.id.tasks_count, urgency(open.size))
+            v.setOnClickPendingIntent(R.id.tasks_title, openApp(ctx, 22, "tasks"))
+        }
         v.setOnClickPendingIntent(R.id.tasks_add, quickAdd(ctx))
 
         val items = RemoteViews.RemoteCollectionItems.Builder().setHasStableIds(true).setViewTypeCount(2)
@@ -189,7 +191,19 @@ object Widgets {
         }
         val pct = stepPercent(t.id, snap.topics)
         r.setTextViewText(R.id.row_title, t.title)
-        r.setTextViewText(R.id.row_meta, listOfNotNull(subject?.label ?: "Ohne Fach", dueText, pct?.let { "$it %" }).joinToString(" · "))
+        r.setTextViewText(R.id.row_meta, listOfNotNull(subject?.label ?: "Ohne Fach", dueText).joinToString(" · "))
+        // Unterpunkte: Balken mit Fortschritt, bei 100 % nur ein grünes "100 %".
+        when {
+            pct == null -> Unit
+            pct >= 100 -> r.setViewVisibility(R.id.row_pct, View.VISIBLE)
+            else -> {
+                r.setViewVisibility(R.id.row_pct, View.VISIBLE)
+                r.setTextViewText(R.id.row_pct, "$pct %")
+                r.setTextColor(R.id.row_pct, DIM)
+                r.setViewVisibility(R.id.row_progress, View.VISIBLE)
+                r.setProgressBar(R.id.row_progress, 100, pct, false)
+            }
+        }
         if (urgent) r.setTextColor(R.id.row_meta, RED_TEXT)
         r.setInt(R.id.row_check, "setColorFilter", if (urgent) RED else RING)
         r.setInt(R.id.row_dot, "setColorFilter", subjectColor(subject))
@@ -228,9 +242,46 @@ object Widgets {
                 v.setOnClickPendingIntent(id, filterIntent(i + 1, k.id))
             }
         }
-        v.setTextViewText(R.id.tasks_title, filter?.let { f -> kinds.firstOrNull { it.id == f }?.name } ?: "Aufgaben")
-        fillTasks(ctx, v, snap, LocalDate.now(), filter)
+        val openCount = snap.tasks.count { !it.done }
+        v.setTextViewText(R.id.seg_0_label, if (openCount > 0) "Alle $openCount" else "Alle")
+        fillTasks(ctx, v, snap, LocalDate.now(), filter, header = false)
         return v
+    }
+
+    private val allSegIds = listOf(R.id.seg_0) + segIds
+
+    /**
+     * Filter wechseln mit Gleit-Effekt: Widgets können nicht selbst animieren, deshalb wandert die
+     * blaue Markierung in ein paar schnellen Zwischenbildern (wie die Leiste in der App) zum neuen Eintrag.
+     */
+    suspend fun switchTaskFilter(ctx: Context, snap: Repository.Snapshot, widgetId: Int, kind: String?) {
+        val kinds = snap.kinds.take(5)
+        fun indexOf(k: String?) = if (k == null) 0 else kinds.indexOfFirst { it.id == k }.let { if (it < 0) 0 else it + 1 }
+        val from = indexOf(filterFor(ctx, widgetId)?.takeIf { f -> kinds.any { it.id == f } })
+        val to = indexOf(kind?.ifBlank { null })
+        setFilter(ctx, widgetId, kind)
+        if (from == to) return
+        val mgr = AppWidgetManager.getInstance(ctx)
+        val frames = 7
+        for (f in 1..frames) {
+            val t = f / frames.toFloat()
+            val eased = 1f - (1f - t) * (1f - t) * (1f - t)
+            val pos = from + (to - from) * eased
+            val rv = RemoteViews(ctx.packageName, R.layout.widget_tasks)
+            allSegIds.forEachIndexed { i, id ->
+                val a = (1f - kotlin.math.abs(pos - i)).coerceIn(0f, 1f)
+                val bg = when {
+                    a < 0.17f -> 0
+                    a < 0.5f -> R.drawable.widget_seg_on_33
+                    a < 0.83f -> R.drawable.widget_seg_on_66
+                    else -> R.drawable.widget_seg_on
+                }
+                rv.setInt(id, "setBackgroundResource", bg)
+            }
+            rv.setTextColor(R.id.seg_0_label, if (pos < 0.5f) WHITE else DIM)
+            mgr.partiallyUpdateAppWidget(widgetId, rv)
+            kotlinx.coroutines.delay(38)
+        }
     }
 
     // ---------------- Heute ----------------
@@ -278,7 +329,7 @@ object Widgets {
                 v.setViewVisibility(R.id.next_timer, View.GONE)
             }
         }
-        if (withTasks) fillTasks(ctx, v, snap, today, null)
+        if (withTasks) fillTasks(ctx, v, snap, today, null, header = true)
         return v
     }
 
@@ -372,7 +423,8 @@ object Widgets {
             cur != null -> "pausiert"
             else -> "bereit"
         }
-        v.setTextViewText(R.id.study_info, listOfNotNull(StudyKind.label(kind), subject?.label, state).joinToString(" · "))
+        val week = if (layout == R.layout.widget_study_full) "Woche ${StudyNotifier.format(weekTotal(snap, now))}" else null
+        v.setTextViewText(R.id.study_info, listOfNotNull(StudyKind.label(kind), subject?.label, state, week).joinToString(" · "))
 
         if (layout == R.layout.widget_study_compact) {
             // Antippen wechselt zur nächsten Art.
@@ -395,10 +447,7 @@ object Widgets {
                 )
             }
         }
-        if (layout == R.layout.widget_study_full) {
-            v.setTextViewText(R.id.study_week, "Woche ${StudyNotifier.format(weekTotal(snap, now))}")
-            v.setOnClickPendingIntent(R.id.study_title, openApp(ctx, 47, "study"))
-        }
+        if (layout == R.layout.widget_study_full) v.setOnClickPendingIntent(R.id.study_info, openApp(ctx, 47, "study"))
         return v
     }
 

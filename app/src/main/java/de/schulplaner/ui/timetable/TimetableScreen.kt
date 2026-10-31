@@ -67,6 +67,7 @@ import de.schulplaner.ui.components.HolidayLook
 import de.schulplaner.ui.components.KindIcons
 import de.schulplaner.ui.components.SubjectIcon
 import de.schulplaner.ui.components.Sym
+import de.schulplaner.ui.components.WordSafeText
 import de.schulplaner.ui.tasks.kindOf
 import de.schulplaner.ui.components.GlassIconButton
 import de.schulplaner.ui.components.Ic
@@ -115,7 +116,8 @@ fun TimetableScreen() {
 
     val weekPager = rememberPagerState(initialPage = CENTER) { PAGES }
     val monthPager = rememberPagerState(initialPage = CENTER) { PAGES }
-    val baseMonday = Schedule.mondayOf(today)
+    // Ab Freitag nach Unterrichtsende (und am Wochenende) startet die Wochenansicht mit der nächsten Woche.
+    val baseMonday = Schedule.weekToShow(rememberNow(), schedule)
     val baseMonth = YearMonth.from(today)
     val monday = baseMonday.plusWeeks((weekPager.currentPage - CENTER).toLong())
     val month = baseMonth.plusMonths((monthPager.currentPage - CENTER).toLong())
@@ -391,19 +393,21 @@ private fun LessonCell(l: Lesson, editMode: Boolean, wide: Boolean, tasks: List<
         val roomText = listOfNotNull(l.room.ifBlank { null }, if (editMode && l.slot.weekType != WeekType.ALL) "nur ${l.slot.weekType}" else null).joinToString(" · ")
         if (roomText.isNotBlank()) Text(roomText, style = T.smallBold.copy(fontSize = T.small.fontSize * 0.8f), color = c.sub, maxLines = 1, overflow = TextOverflow.Clip)
         if (exam) Text("Klausur", style = T.smallBold.copy(fontSize = T.small.fontSize * 0.82f), color = c.exam, maxLines = 1)
-        // HA direkt als Text unter dem Fach (antippen zeigt sie an) – überall gleich groß, zu langer Text endet mit "…".
-        val taskStyle = T.label.copy(fontSize = 11.5.sp, lineHeight = 13.5.sp)
-        val linesLeft = if (len >= 2) 5 else if (roomText.isBlank() && !exam) 2 else 1
-        val shown = tasks.take(if (len >= 2) 3 else 1)
-        shown.forEach { t ->
-            Text(
-                t.title,
-                style = taskStyle,
-                color = c.text,
-                maxLines = (linesLeft / shown.size).coerceAtLeast(1),
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(4.dp)).clickable { onTask(t) },
-            )
+        // HA unter einem feinen Strich, überall gleich groß; Umbruch nur zwischen Wörtern.
+        if (tasks.isNotEmpty()) {
+            Box(Modifier.padding(vertical = 2.dp).fillMaxWidth().height(1.dp).background(c.text.copy(alpha = 0.22f)))
+            val taskStyle = T.label.copy(fontSize = 11.5.sp, lineHeight = 13.5.sp)
+            val linesLeft = if (len >= 2) 4 else if (roomText.isBlank() && !exam) 2 else 1
+            val shown = tasks.take(if (len >= 2) 3 else 1)
+            shown.forEach { t ->
+                WordSafeText(
+                    t.title,
+                    style = taskStyle,
+                    color = c.text,
+                    maxLines = (linesLeft / shown.size).coerceAtLeast(1),
+                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(4.dp)).clickable { onTask(t) },
+                )
+            }
         }
     }
 }

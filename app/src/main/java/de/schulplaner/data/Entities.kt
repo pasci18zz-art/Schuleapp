@@ -368,4 +368,6 @@ object SettingKeys {
     /** Lernzettel-Aufgabe beim Anlegen einer Klausur ("false" = aus) und ihre Aufgabenart. */
     const val LZ_ENABLED = "lz_enabled"
     const val LZ_KIND = "lz_kind"
+    /** Monster-Zähler: ein Eintrag pro Tag, "monster_<epochDay>" = Anzahl. */
+    const val MONSTER_PREFIX = "monster_"
 }

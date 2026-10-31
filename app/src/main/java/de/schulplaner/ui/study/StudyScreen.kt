@@ -31,6 +31,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -205,22 +206,75 @@ private fun BreakdownRow(icon: @Composable () -> Unit, label: String, ms: Long, 
     }
 }
 
-/** Balken Mo–So, gestapelt nach Art. */
+/** Farbe für Sessions ohne Fach. */
+private val NoSubject = androidx.compose.ui.graphics.Color(0xFF7C8CB0)
+
+/** Fläche im Muster der Lern-Art: Hausaufgaben voll, Lernen schräg gestrichelt, Referat kariert. */
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.patternRect(
+    kind: String,
+    color: androidx.compose.ui.graphics.Color,
+    topLeft: Offset,
+    size: Size,
+) {
+    when (kind) {
+        StudyKind.HOMEWORK -> drawRect(color, topLeft, size)
+        StudyKind.LEARN -> {
+            drawRect(color.copy(alpha = 0.28f), topLeft, size)
+            clipRect(topLeft.x, topLeft.y, topLeft.x + size.width, topLeft.y + size.height) {
+                val step = 5.dp.toPx()
+                val w = 2.dp.toPx()
+                var x = topLeft.x - size.height
+                while (x < topLeft.x + size.width) {
+                    drawLine(color, Offset(x, topLeft.y + size.height), Offset(x + size.height, topLeft.y), strokeWidth = w)
+                    x += step
+                }
+            }
+        }
+        else -> {
+            drawRect(color.copy(alpha = 0.28f), topLeft, size)
+            clipRect(topLeft.x, topLeft.y, topLeft.x + size.width, topLeft.y + size.height) {
+                val cell = 4.dp.toPx()
+                var row = 0
+                var y = topLeft.y + size.height - cell
+                while (y > topLeft.y - cell) {
+                    var col = 0
+                    var x = topLeft.x
+                    while (x < topLeft.x + size.width) {
+                        if ((row + col) % 2 == 0) drawRect(color, Offset(x, y), Size(cell, cell))
+                        x += cell
+                        col++
+                    }
+                    y -= cell
+                    row++
+                }
+            }
+        }
+    }
+}
+
+/** Balken Mo–So: Fachfarbe, Muster je Art (gestapelt nach Fach und Art). */
 @Composable
 private fun WeekBars(monday: LocalDate, week: List<StudySession>, now: Long, modifier: Modifier = Modifier) {
     val c = colors
     val zone = ZoneId.systemDefault()
+    val repo = LocalContext.current.app.repo
+    val subjects by repo.subjects.collectAsStateWithLifecycle()
+    val colorOf = subjects.associate { it.id to de.schulplaner.ui.components.subjectColor(it.color) }
+    // Pro Tag: Abschnitte (Fach, Art, Dauer), sortiert nach Fach, damit gleiche Fächer zusammenstehen.
     val perDay = (0 until 7).map { i ->
         val d = monday.plusDays(i.toLong())
-        val list = week.filter { Instant.ofEpochMilli(it.startedAt).atZone(zone).toLocalDate() == d }
-        StudyKind.all.map { k -> k to list.filter { it.kind == k }.sumOf { it.totalMs(now) } }
+        week.filter { Instant.ofEpochMilli(it.startedAt).atZone(zone).toLocalDate() == d }
+            .groupBy { it.subjectId to it.kind }
+            .map { (key, list) -> Triple(key.first, key.second, list.sumOf { it.totalMs(now) }) }
+            .filter { it.third > 0 }
+            .sortedWith(compareBy({ it.first ?: "~" }, { StudyKind.all.indexOf(it.second) }))
     }
-    val max = perDay.maxOf { day -> day.sumOf { it.second } }.coerceAtLeast(30 * 60_000L)
+    val max = perDay.maxOf { day -> day.sumOf { it.third } }.coerceAtLeast(30 * 60_000L)
     val today = LocalDate.now()
     Column(modifier) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             perDay.forEach { day ->
-                val sum = day.sumOf { it.second }
+                val sum = day.sumOf { it.third }
                 Text(
                     if (sum >= 60_000) StudyLook.short(sum).removeSuffix(" min").removeSuffix(" h") else "",
                     style = T.small.copy(fontSize = T.small.fontSize * 0.85f),
@@ -233,14 +287,13 @@ private fun WeekBars(monday: LocalDate, week: List<StudySession>, now: Long, mod
         }
         Row(Modifier.fillMaxWidth().height(120.dp).padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             perDay.forEach { day ->
-                Canvas(Modifier.weight(1f).fillMaxSize()) {
-                    val radius = CornerRadius(6.dp.toPx())
-                    drawRoundRect(c.line.copy(alpha = 0.6f), cornerRadius = radius)
+                Canvas(Modifier.weight(1f).fillMaxSize().clip(RoundedCornerShape(6.dp))) {
+                    drawRect(c.line.copy(alpha = 0.6f))
                     var bottom = size.height
-                    day.forEach { (k, ms) ->
-                        if (ms <= 0) return@forEach
+                    day.forEach { (subjectId, kind, ms) ->
                         val h = size.height * (ms.toFloat() / max)
-                        drawRoundRect(StudyLook.color(k), topLeft = Offset(0f, bottom - h), size = Size(size.width, h), cornerRadius = radius)
+                        val col = subjectId?.let { colorOf[it] } ?: NoSubject
+                        patternRect(kind, col, Offset(0f, bottom - h), Size(size.width, h))
                         bottom -= h
                     }
                 }
@@ -258,14 +311,16 @@ private fun WeekBars(monday: LocalDate, week: List<StudySession>, now: Long, mod
                 )
             }
         }
+        // Legende: Muster je Art (Farbe = Fach).
         Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             StudyKind.all.forEach { k ->
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                    Box(Modifier.size(9.dp).clip(RoundedCornerShape(3.dp)).background(StudyLook.color(k)))
+                    Canvas(Modifier.size(14.dp).clip(RoundedCornerShape(3.dp))) { patternRect(k, c.sub, Offset.Zero, size) }
                     Text(StudyKind.label(k), style = T.small, color = c.sub)
                 }
             }
         }
+        Text("Farbe = Fach", style = T.small.copy(fontSize = T.small.fontSize * 0.9f), color = c.sub.copy(alpha = 0.8f), modifier = Modifier.padding(top = 4.dp))
     }
 }
 

@@ -1,6 +1,9 @@
 package de.schulplaner.ui.today
 
 import androidx.compose.foundation.background
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -51,6 +54,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import de.schulplaner.app
 import de.schulplaner.data.Exam
@@ -201,8 +205,9 @@ fun TodayScreen() {
                 // Spalten oben bündig; jede Kachel so hoch wie ihr Inhalt.
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                     Column(Modifier.weight(1f).appear(2), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                        NowTile(state)
-                        LessonsTile(state, onLessonClick)
+                        TopStack(state, schedule, tasks, exams)
+                        LessonsTile(state, schedule, onLessonClick)
+                        if (!readOnly) MonsterTile()
                         AppShortcutsRow()
                     }
                     Column(Modifier.weight(1f).appear(3), verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -215,8 +220,8 @@ fun TodayScreen() {
                     }
                 }
             } else {
-                NowTile(state, Modifier.appear(2))
-                Box(Modifier.appear(3)) { LessonsTile(state, onLessonClick) }
+                TopStack(state, schedule, tasks, exams, Modifier.appear(2))
+                Box(Modifier.appear(3)) { LessonsTile(state, schedule, onLessonClick) }
                 Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min).appear(4), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Box(Modifier.weight(1f).fillMaxHeight()) {
                         TasksTile(state, max = 2, compact = true, onOpen = { nav.tab(Tabs.TASKS) }, onEdit = { editTask = it to false }, onAdd = onAddTask)
@@ -226,6 +231,8 @@ fun TodayScreen() {
                     }
                 }
                 StudyTile(Modifier.appear(5), onOpen = { nav.open(Routes.STUDY) })
+                // Im Ansichtsmodus ausgeblendet.
+                if (!readOnly) MonsterTile(Modifier.appear(5))
                 AppShortcutsRow(Modifier.appear(6))
                 Box(Modifier.appear(7)) { GradesTile(onOpen = { nav.tab(Tabs.GRADES) }) }
             }
@@ -237,6 +244,69 @@ fun TodayScreen() {
             de.schulplaner.ui.tasks.TaskViewSheet(task, onDismiss = { editTask = null })
         } else {
             TaskEditSheet(task, isNew, onDismiss = { editTask = null })
+        }
+    }
+}
+
+/**
+ * Oberer Block wie ein iOS-Stapel: senkrecht wischen wechselt zwischen
+ * Wochenübersicht (Standard), Flip-Uhr und Jetzt-Karte.
+ */
+@Composable
+private fun TopStack(
+    s: TodayState,
+    schedule: de.schulplaner.domain.ScheduleData,
+    tasks: List<Task>,
+    exams: List<Exam>,
+    modifier: Modifier = Modifier,
+) {
+    val c = colors
+    val pager = androidx.compose.foundation.pager.rememberPagerState { 3 }
+    val lesson = s.current ?: s.next
+    val subtitle = when {
+        s.holidayName != null && s.lessons.isEmpty() -> s.holidayName ?: ""
+        s.current != null && lesson?.endDateTime != null ->
+            "${lesson.subject?.name ?: "?"} · noch ${Duration.between(s.now, lesson.endDateTime).toMinutes() + 1} min"
+        lesson != null -> "Als Nächstes: ${lesson.subject?.name ?: "?"} um ${lesson.start?.let { Fmt.time(it) } ?: ""}"
+        else -> Fmt.full(s.now.toLocalDate())
+    }
+    Box(modifier.fillMaxWidth().height(236.dp)) {
+        androidx.compose.foundation.pager.VerticalPager(
+            pager,
+            Modifier.fillMaxSize(),
+            pageSpacing = 12.dp,
+            key = { it },
+        ) { page ->
+            when (page) {
+                0 -> WeekOverview(s.now, schedule, tasks, exams)
+                1 -> FlipClockCard(subtitle)
+                else -> NowTile(s, Modifier.fillMaxSize())
+            }
+        }
+        // Punkte am Rand zeigen, welche Seite gerade sichtbar ist.
+        Column(
+            Modifier.align(Alignment.CenterEnd).padding(end = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(5.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            val light = pager.currentPage != 0
+            repeat(3) { i ->
+                val active = pager.currentPage == i
+                val h by androidx.compose.animation.core.animateDpAsState(if (active) 14.dp else 5.dp, label = "dot")
+                Box(
+                    Modifier
+                        .size(width = 5.dp, height = h)
+                        .clip(RoundedCornerShape(3.dp))
+                        .background(
+                            when {
+                                light && active -> Color.White
+                                light -> Color.White.copy(alpha = 0.4f)
+                                active -> c.accent
+                                else -> c.sub.copy(alpha = 0.4f)
+                            },
+                        ),
+                )
+            }
         }
     }
 }
@@ -286,9 +356,9 @@ private fun NowTile(s: TodayState, modifier: Modifier = Modifier) {
                     Text(label.uppercase(), style = T.overline, color = soft, modifier = Modifier.weight(1f))
                     Text(
                         right,
-                        style = T.smallBold,
+                        style = T.title.copy(fontSize = 20.sp),
                         color = white,
-                        modifier = Modifier.clip(RoundedCornerShape(50)).background(Color.White.copy(alpha = 0.18f)).padding(horizontal = 10.dp, vertical = 4.dp),
+                        modifier = Modifier.clip(RoundedCornerShape(50)).background(Color.White.copy(alpha = 0.18f)).padding(horizontal = 12.dp, vertical = 4.dp),
                     )
                 }
                 Row(Modifier.padding(top = 14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -377,51 +447,93 @@ private fun SkyBadge(hour: Int) {
     }
 }
 
+/** Tagesplan: von rechts nach links wischen = nächster Schultag (Wochenenden/Ferien werden übersprungen). */
 @Composable
-private fun LessonsTile(s: TodayState, onLessonClick: (Lesson) -> Unit) {
+private fun LessonsTile(s: TodayState, schedule: de.schulplaner.domain.ScheduleData, onLessonClick: (Lesson) -> Unit) {
     val c = colors
-    if (s.lessons.isEmpty()) return
-    val isToday = s.day == s.now.toLocalDate()
-    val title = when {
-        isToday -> "Stunden"
-        s.day == s.now.toLocalDate().plusDays(1) -> "Morgen"
-        else -> Fmt.dayMonth(s.day)
+    if (schedule.slots.isEmpty()) return
+    val center = 500
+    val pager = androidx.compose.foundation.pager.rememberPagerState(initialPage = center) { 1000 }
+    val scope = rememberCoroutineScope()
+    val shownDay = Schedule.schoolDayAt(s.day, pager.currentPage - center, schedule)
+    val todayDate = s.now.toLocalDate()
+    val title = when (shownDay) {
+        todayDate -> "Stunden heute"
+        todayDate.plusDays(1) -> "Morgen"
+        else -> Fmt.dayMonth(shownDay)
     }
-    GlassCard(padding = androidx.compose.foundation.layout.PaddingValues(start = 10.dp, end = 10.dp, top = 14.dp, bottom = 8.dp)) {
-        Text(title, style = T.section, color = c.text, modifier = Modifier.padding(start = 8.dp, bottom = 6.dp))
-        s.lessons.forEach { l ->
-            val past = isToday && l.endDateTime?.let { !s.now.isBefore(it) } == true
-            val now = s.current?.slot?.id == l.slot.id
-            val dayEpoch = l.date.toEpochDay()
-            val ha = s.tasks.any { !it.done && it.dueDate == dayEpoch && it.subjectId == l.slot.subjectId }
-            val exam = s.exams.any { it.date == dayEpoch && it.subjectId == l.slot.subjectId }
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(18.dp))
-                    .background(if (now) c.accentSoft else Color.Transparent)
-                    .clickable { onLessonClick(l) }
-                    .alpha(if (past) 0.5f else 1f)
-                    .padding(horizontal = 10.dp, vertical = 9.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Text(l.periodLabel, style = T.smallBold, color = c.sub, modifier = Modifier.width(36.dp))
-                LessonMark(subjectColor(l.subject?.color), l.length)
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        l.subject?.name ?: "?",
-                        style = T.body.copy(textDecoration = if (l.cancelled) TextDecoration.LineThrough else null),
-                        color = c.text,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    val time = listOfNotNull(l.start?.let { Fmt.time(it) }, l.end?.let { Fmt.time(it) }).joinToString(" – ")
-                    Text(listOf(time, l.room.takeIf { it.isNotBlank() }?.let { "R $it" }).filterNotNull().filter { it.isNotBlank() }.joinToString(" · "), style = T.small, color = c.sub)
+    GlassCard(
+        Modifier.animateContentSize(),
+        padding = androidx.compose.foundation.layout.PaddingValues(start = 10.dp, end = 10.dp, top = 10.dp, bottom = 8.dp),
+    ) {
+        Row(Modifier.fillMaxWidth().padding(start = 8.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(title, style = T.section, color = c.text, modifier = Modifier.weight(1f))
+            if (pager.currentPage != center) {
+                Text(
+                    "Heute",
+                    style = T.label,
+                    color = c.accent,
+                    modifier = Modifier.clip(RoundedCornerShape(10.dp)).clickable { scope.launch { pager.animateScrollToPage(center) } }.padding(horizontal = 8.dp, vertical = 4.dp),
+                )
+            }
+            Icon(
+                Ic.ChevronLeft, "Vorheriger Tag", tint = c.sub,
+                modifier = Modifier.size(30.dp).clip(CircleShape).clickable { scope.launch { pager.animateScrollToPage(pager.currentPage - 1) } }.padding(6.dp),
+            )
+            Icon(
+                Ic.ChevronRight, "Nächster Tag", tint = c.sub,
+                modifier = Modifier.size(30.dp).clip(CircleShape).clickable { scope.launch { pager.animateScrollToPage(pager.currentPage + 1) } }.padding(6.dp),
+            )
+        }
+        androidx.compose.foundation.pager.HorizontalPager(
+            pager,
+            Modifier.fillMaxWidth(),
+            pageSpacing = 16.dp,
+            verticalAlignment = Alignment.Top,
+            key = { it },
+        ) { page ->
+            val day = Schedule.schoolDayAt(s.day, page - center, schedule)
+            val lessons = if (day == s.day) s.lessons else Schedule.lessonsOn(day, schedule)
+            val isToday = day == todayDate
+            Column {
+                if (lessons.isEmpty()) {
+                    Text("Kein Unterricht", style = T.small, color = c.sub, modifier = Modifier.padding(start = 8.dp, top = 4.dp, bottom = 8.dp))
                 }
-                if (exam) Pill("Klausur", c.warnSoft, c.warn)
-                if (ha) Pill("HA")
-                if (l.cancelled) Pill("Entfall", c.warnSoft, c.warn)
+                lessons.forEach { l ->
+                    val past = isToday && l.endDateTime?.let { !s.now.isBefore(it) } == true
+                    val now = isToday && s.current?.slot?.id == l.slot.id
+                    val dayEpoch = l.date.toEpochDay()
+                    val ha = s.tasks.any { !it.done && it.dueDate == dayEpoch && it.subjectId == l.slot.subjectId }
+                    val exam = s.exams.any { it.date == dayEpoch && it.subjectId == l.slot.subjectId }
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(18.dp))
+                            .background(if (now) c.accentSoft else Color.Transparent)
+                            .clickable { onLessonClick(l) }
+                            .alpha(if (past) 0.5f else 1f)
+                            .padding(horizontal = 10.dp, vertical = 9.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Text(l.periodLabel, style = T.smallBold, color = c.sub, modifier = Modifier.width(36.dp))
+                        LessonMark(subjectColor(l.subject?.color), l.length)
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                l.subject?.name ?: "?",
+                                style = T.body.copy(textDecoration = if (l.cancelled) TextDecoration.LineThrough else null),
+                                color = c.text,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            val time = listOfNotNull(l.start?.let { Fmt.time(it) }, l.end?.let { Fmt.time(it) }).joinToString(" – ")
+                            Text(listOf(time, l.room.takeIf { it.isNotBlank() }?.let { "R $it" }).filterNotNull().filter { it.isNotBlank() }.joinToString(" · "), style = T.small, color = c.sub)
+                        }
+                        if (exam) Pill("Klausur", c.warnSoft, c.warn)
+                        if (ha) Pill("HA")
+                        if (l.cancelled) Pill("Entfall", c.warnSoft, c.warn)
+                    }
+                }
             }
         }
     }
