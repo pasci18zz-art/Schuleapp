@@ -94,17 +94,50 @@ fun Modifier.blurWhenSheetOpen(state: SheetBlurState): Modifier {
 /** Bottom-Sheet im App-Stil. [content] bekommt eine Funktion, die das Sheet animiert schließt. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AppSheet(onDismiss: () -> Unit, content: @Composable ColumnScope.(close: () -> Unit) -> Unit) {
+fun AppSheet(
+    onDismiss: () -> Unit,
+    /** true = es gibt ungespeicherte Eingaben: Wegwischen/Daneben-Tippen fragt erst "Sicher, dass du abbrechen möchtest?" (Ja/Nein). */
+    confirmDiscard: Boolean = false,
+    content: @Composable ColumnScope.(close: () -> Unit) -> Unit,
+) {
     val c = colors
+    val discardNow by androidx.compose.runtime.rememberUpdatedState(confirmDiscard)
+    var askDiscard by remember { mutableStateOf(false) }
+    val bypass = remember { booleanArrayOf(false) }
     val blur = LocalSheetBlur.current
     androidx.compose.runtime.DisposableEffect(Unit) {
         blur.open++
         onDispose { blur.open-- }
     }
-    val state = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val state = rememberModalBottomSheetState(
+        skipPartiallyExpanded = true,
+        confirmValueChange = { target ->
+            if (target == androidx.compose.material3.SheetValue.Hidden && discardNow && !bypass[0]) {
+                askDiscard = true
+                false
+            } else {
+                true
+            }
+        },
+    )
     val scope = rememberCoroutineScope()
     val close: () -> Unit = {
+        bypass[0] = true
         scope.launch { state.hide() }.invokeOnCompletion { onDismiss() }
+    }
+    if (askDiscard) {
+        AlertDialog(
+            onDismissRequest = { askDiscard = false },
+            title = { Text("Sicher, dass du abbrechen möchtest?") },
+            text = { Text("Deine Eingaben gehen dann verloren.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    askDiscard = false
+                    close()
+                }) { Text("Ja", color = colors.warn) }
+            },
+            dismissButton = { TextButton(onClick = { askDiscard = false }) { Text("Nein") } },
+        )
     }
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -392,9 +425,9 @@ fun ConfirmDialog(title: String, text: String, confirm: String = "Löschen", onD
             TextButton(onClick = {
                 onConfirm()
                 onDismiss()
-            }) { Text(confirm, color = colors.warn) }
+            }) { Text("Ja", color = colors.warn) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Abbrechen") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Nein") } },
     )
 }
 

@@ -222,8 +222,8 @@ fun TodayScreen() {
                 }
             } else {
                 NowTile(state, Modifier.appear(2))
-                Box(Modifier.appear(3)) { LessonsTile(state, schedule, onLessonClick) }
-                Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min).appear(4), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                // Handy: Aufgaben und Klausur direkt unter der Jetzt-Karte, dann der Stundenplan.
+                Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min).appear(3), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Box(Modifier.weight(1f).fillMaxHeight()) {
                         TasksTile(state, max = 2, compact = true, onOpen = { nav.tab(Tabs.TASKS) }, onEdit = { editTask = it to false }, onAdd = onAddTask)
                     }
@@ -231,6 +231,7 @@ fun TodayScreen() {
                         ExamTile(state, onOpen = { nav.open(Routes.exam(it.id)) }, onEmpty = { nav.tab(Tabs.EXAMS) })
                     }
                 }
+                Box(Modifier.appear(4)) { LessonsTile(state, schedule, onLessonClick) }
                 StudyTile(Modifier.appear(5), onOpen = { nav.open(Routes.STUDY) })
                 // Im Ansichtsmodus ausgeblendet.
                 if (!readOnly) MonsterTile(Modifier.appear(5))

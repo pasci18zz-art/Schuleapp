@@ -54,7 +54,8 @@ fun ExamEditSheet(initial: Exam, isNew: Boolean, onDismiss: () -> Unit, onSaved:
         return e.copy(period = lesson?.firstPeriod)
     }
 
-    AppSheet(onDismiss = onDismiss) { close ->
+    val initialExam = remember { initial }
+    AppSheet(onDismiss = onDismiss, confirmDiscard = exam != initialExam) { close ->
         SheetHeader(
             title = if (isNew) "Neue Klausur" else "Klausur",
             onSave = if (exam.subjectId.isNotBlank()) {

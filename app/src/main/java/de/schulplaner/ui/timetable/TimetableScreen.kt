@@ -123,9 +123,15 @@ fun TimetableScreen() {
     val monday = baseMonday.plusWeeks((weekPager.currentPage - CENTER).toLong())
     val month = baseMonth.plusMonths((monthPager.currentPage - CENTER).toLong())
 
+    val kinds by repo.taskKinds.collectAsStateWithLifecycle()
+    // Aufgaben der Art "Referat" werden wie Klausuren rot umrahmt.
+    val referatTypes = kinds.filter { it.id == de.schulplaner.data.TaskType.TALK || it.name.contains("referat", ignoreCase = true) }.map { it.id }.toSet()
     val openTasks = tasks.filter { !it.done }
     val haFor: (Lesson) -> List<Task> = { l -> openTasks.filter { it.dueDate == l.date.toEpochDay() && it.subjectId == l.slot.subjectId } }
-    val examFor: (Lesson) -> Boolean = { l -> exams.any { it.date == l.date.toEpochDay() && it.subjectId == l.slot.subjectId } }
+    val examFor: (Lesson) -> Boolean = { l ->
+        exams.any { it.date == l.date.toEpochDay() && it.subjectId == l.slot.subjectId } ||
+            openTasks.any { it.type in referatTypes && it.dueDate == l.date.toEpochDay() && it.subjectId == l.slot.subjectId }
+    }
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val wide = maxWidth >= 720.dp
@@ -198,18 +204,18 @@ fun TimetableScreen() {
                 val monthH = 20.dp + 26.dp + cellH * 6 + 3.dp * 5
                 val day = LocalDate.ofEpochDay(selectedDay)
                 val panel: @Composable (Modifier) -> Unit = { m ->
-                    DayPanel(day, schedule, tasks, exams, m, onTask = { viewTask = it }, onExam = { nav.open(Routes.exam(it.id)) })
+                    DayPanel(day, schedule, tasks, exams, referatTypes, m, onTask = { viewTask = it }, onExam = { nav.open(Routes.exam(it.id)) })
                 }
                 if (wide) {
                     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                         HorizontalPager(monthPager, Modifier.weight(1f).height(monthH), pageSpacing = 16.dp, key = { it }) { page ->
-                            MonthGrid(baseMonth.plusMonths((page - CENTER).toLong()), today, selectedDay, cellH, true, schedule, tasks, exams) { selectedDay = it }
+                            MonthGrid(baseMonth.plusMonths((page - CENTER).toLong()), today, selectedDay, cellH, true, schedule, tasks, exams, referatTypes) { selectedDay = it }
                         }
                         panel(Modifier.width(300.dp))
                     }
                 } else {
                     HorizontalPager(monthPager, Modifier.fillMaxWidth().height(monthH), pageSpacing = 16.dp, key = { it }) { page ->
-                        MonthGrid(baseMonth.plusMonths((page - CENTER).toLong()), today, selectedDay, cellH, false, schedule, tasks, exams) { selectedDay = it }
+                        MonthGrid(baseMonth.plusMonths((page - CENTER).toLong()), today, selectedDay, cellH, false, schedule, tasks, exams, referatTypes) { selectedDay = it }
                     }
                     panel(Modifier.fillMaxWidth())
                 }
@@ -444,6 +450,7 @@ private fun MonthGrid(
     schedule: ScheduleData,
     tasks: List<Task>,
     exams: List<Exam>,
+    referatTypes: Set<String>,
     onSelect: (Long) -> Unit,
 ) {
     val c = colors
@@ -523,24 +530,29 @@ private fun MonthGrid(
                                         )
                                     }
                                 }
-                                val items = dayExams.map { e -> Triple(schedule.subjects[e.subjectId], "Klausur ${schedule.subjects[e.subjectId]?.label ?: ""}".trim(), true) } +
-                                    dayTasks.map { t -> Triple(t.subjectId?.let { schedule.subjects[it] }, t.title, false) }
-                                items.take(3).forEach { (s, text, isExam) ->
-                                    EventPill(s, text, isExam, dayTasks.firstOrNull { it.title == text }?.done == true)
+                                // (Fach, Text, rot umrahmt, erledigt) – Erledigtes wird durchgestrichen.
+                                val items = dayExams.map { e -> listOf(schedule.subjects[e.subjectId], "${e.type} ${schedule.subjects[e.subjectId]?.label ?: ""}".trim(), true, false) } +
+                                    dayTasks.map { t -> listOf(t.subjectId?.let { schedule.subjects[it] }, t.title, t.type in referatTypes, t.done) }
+                                items.take(3).forEach { item ->
+                                    EventPill(item[0] as Subject?, item[1] as String, item[2] as Boolean, item[3] as Boolean)
                                 }
                                 if (items.size > 3) Text("+${items.size - 3}", style = T.smallBold.copy(fontSize = T.small.fontSize * 0.8f), color = c.sub)
                             } else {
-                                val bars = dayExams.map { schedule.subjects[it.subjectId]?.color to true } +
-                                    dayTasks.map { t -> t.subjectId?.let { schedule.subjects[it] }?.color to false }
+                                val bars = dayExams.map { Triple(schedule.subjects[it.subjectId]?.color, true, false) } +
+                                    dayTasks.map { t -> Triple(t.subjectId?.let { schedule.subjects[it] }?.color, t.type in referatTypes, t.done) }
                                 if (bars.isEmpty() && holiday != null && inMonth) {
                                     Icon(HolidayLook.icon(holiday), null, tint = HolidayLook.color(holiday).copy(alpha = 0.8f), modifier = Modifier.size(13.dp))
                                 }
-                                bars.take(3).forEach { (argb, isExam) ->
+                                bars.take(3).forEach { (argb, isRed, isDone) ->
                                     Box(
-                                        Modifier.fillMaxWidth().padding(horizontal = 2.dp).height(5.dp).clip(RoundedCornerShape(3.dp))
-                                            .background(subjectColor(argb))
-                                            .then(if (isExam) Modifier.border(1.dp, c.exam, RoundedCornerShape(3.dp)) else Modifier),
-                                    )
+                                        Modifier.fillMaxWidth().padding(horizontal = 2.dp).height(6.dp).clip(RoundedCornerShape(3.dp))
+                                            .background(subjectColor(argb).copy(alpha = if (isDone) 0.45f else 1f))
+                                            .then(if (isRed) Modifier.border(1.2.dp, c.exam, RoundedCornerShape(3.dp)) else Modifier),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        // Erledigt: einmal durchgestrichen.
+                                        if (isDone) Box(Modifier.fillMaxWidth().height(1.2.dp).background(c.text))
+                                    }
                                 }
                             }
                         }
@@ -560,8 +572,8 @@ private fun EventPill(subject: Subject?, text: String, exam: Boolean, done: Bool
             .fillMaxWidth()
             .clip(RoundedCornerShape(5.dp))
             .background(color.copy(alpha = c.tint))
-            .then(if (exam) Modifier.border(1.2.dp, c.exam, RoundedCornerShape(5.dp)) else Modifier)
-            .alpha(if (done) 0.5f else 1f),
+            .then(if (exam) Modifier.border(1.4.dp, c.exam, RoundedCornerShape(5.dp)) else Modifier)
+            .alpha(if (done) 0.55f else 1f),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.width(3.dp).height(16.dp).background(color))
@@ -583,6 +595,7 @@ private fun DayPanel(
     schedule: ScheduleData,
     tasks: List<Task>,
     exams: List<Exam>,
+    referatTypes: Set<String>,
     modifier: Modifier,
     onTask: (Task) -> Unit,
     onExam: (Exam) -> Unit,
@@ -621,7 +634,13 @@ private fun DayPanel(
         dayTasks.forEach { t ->
             val s = t.subjectId?.let { schedule.subjects[it] }
             Row(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).clickable { onTask(t) }.alpha(if (t.done) 0.5f else 1f).padding(horizontal = 12.dp, vertical = 10.dp),
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .then(if (t.type in referatTypes) Modifier.border(1.5.dp, c.exam, RoundedCornerShape(14.dp)) else Modifier)
+                    .clickable { onTask(t) }
+                    .alpha(if (t.done) 0.5f else 1f)
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {

@@ -132,7 +132,10 @@ fun StudyTile(modifier: Modifier = Modifier, onOpen: (() -> Unit)? = null) {
     val todayTotal = todayList.sumOf { it.totalMs(now) }
     // null = zu, true = neue Session starten, false = laufende ändern
     var picker by remember { mutableStateOf<Boolean?>(null) }
-    val pager = androidx.compose.foundation.pager.rememberPagerState { 3 }
+    // Endlos: von der Uhr nach hinten wischen führt zur Wochenseite und umgekehrt.
+    val loopStart = 3 * 500
+    val pager = androidx.compose.foundation.pager.rememberPagerState(initialPage = loopStart) { 3 * 1000 }
+    val pageNow = pager.currentPage % 3
 
     GlassCard(modifier.fillMaxWidth(), padding = androidx.compose.foundation.layout.PaddingValues(14.dp)) {
         Row(
@@ -141,7 +144,7 @@ fun StudyTile(modifier: Modifier = Modifier, onOpen: (() -> Unit)? = null) {
         ) {
             Icon(Ic.Clock, null, tint = c.accent, modifier = Modifier.size(22.dp))
             Text(
-                when (pager.currentPage) {
+                when (pageNow) {
                     0 -> "Lernzeit"
                     1 -> "Heute gelernt"
                     else -> "Diese Woche"
@@ -150,7 +153,7 @@ fun StudyTile(modifier: Modifier = Modifier, onOpen: (() -> Unit)? = null) {
                 color = c.text,
                 modifier = Modifier.padding(start = 10.dp).weight(1f),
             )
-            when (pager.currentPage) {
+            when (pageNow) {
                 // Was Play startet bzw. was läuft – klein, als Symbole.
                 0 -> {
                     Icon(StudyLook.icon(kind), StudyKind.label(kind), tint = StudyLook.color(kind), modifier = Modifier.size(16.dp))
@@ -170,8 +173,8 @@ fun StudyTile(modifier: Modifier = Modifier, onOpen: (() -> Unit)? = null) {
             Modifier.fillMaxWidth().height(132.dp).padding(top = 10.dp),
             pageSpacing = 16.dp,
             key = { it },
-        ) { page ->
-            when (page) {
+        ) { rawPage ->
+            when (rawPage % 3) {
                 0 -> Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
                     FlipTimer(total, Modifier.weight(1f), height = 92.dp, dim = cur == null)
                     if (!readOnly) {
@@ -185,7 +188,6 @@ fun StudyTile(modifier: Modifier = Modifier, onOpen: (() -> Unit)? = null) {
                                         },
                                         onLongClick = { picker = cur == null },
                                     )
-                                    .shadow(12.dp, CircleShape, ambientColor = c.accent, spotColor = c.accent)
                                     .clip(CircleShape)
                                     .background(c.accent),
                                 contentAlignment = Alignment.Center,
@@ -208,7 +210,7 @@ fun StudyTile(modifier: Modifier = Modifier, onOpen: (() -> Unit)? = null) {
         // Seiten-Punkte.
         Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.Center) {
             repeat(3) { i ->
-                val active = pager.currentPage == i
+                val active = pageNow == i
                 val w by androidx.compose.animation.core.animateDpAsState(if (active) 16.dp else 6.dp, label = "dot")
                 Box(
                     Modifier
@@ -234,16 +236,23 @@ fun StudyTile(modifier: Modifier = Modifier, onOpen: (() -> Unit)? = null) {
 
 /** Heute: Summe und Aufteilung nach Fach (Muster je Art). */
 @Composable
-private fun DaySummary(list: List<StudySession>, now: Long, subjects: List<de.schulplaner.data.Subject>, modifier: Modifier) {
+internal fun DaySummary(
+    list: List<StudySession>,
+    now: Long,
+    subjects: List<de.schulplaner.data.Subject>,
+    modifier: Modifier,
+    maxRows: Int = 4,
+    emptyText: String = "Heute noch nichts gelernt",
+) {
     val c = colors
     if (list.isEmpty()) {
-        Box(modifier, contentAlignment = Alignment.Center) { Text("Heute noch nichts gelernt", style = T.body, color = c.sub) }
+        Box(modifier, contentAlignment = Alignment.Center) { Text(emptyText, style = T.body, color = c.sub) }
         return
     }
     val bySubject = list.groupBy { it.subjectId }.map { (id, l) -> id to l.sumOf { it.totalMs(now) } }.sortedByDescending { it.second }
     val max = bySubject.maxOf { it.second }.coerceAtLeast(1)
     Column(modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        bySubject.take(4).forEach { (id, ms) ->
+        bySubject.take(maxRows).forEach { (id, ms) ->
             val s = subjects.firstOrNull { it.id == id }
             val col = s?.let { de.schulplaner.ui.components.subjectColor(it.color) } ?: NoSubject
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -263,7 +272,7 @@ private fun DaySummary(list: List<StudySession>, now: Long, subjects: List<de.sc
                 Text(StudyLook.short(ms), style = T.smallBold, color = c.sub, modifier = Modifier.width(52.dp), maxLines = 1)
             }
         }
-        if (bySubject.size > 4) Text("+${bySubject.size - 4} weitere", style = T.small, color = c.sub)
+        if (bySubject.size > maxRows) Text("+${bySubject.size - maxRows} weitere", style = T.small, color = c.sub)
     }
 }
 

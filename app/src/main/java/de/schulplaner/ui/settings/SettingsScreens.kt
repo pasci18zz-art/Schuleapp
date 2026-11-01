@@ -450,7 +450,8 @@ private fun SubjectEditSheet(initial: Subject, isNew: Boolean, onDismiss: () -> 
     val repo = LocalContext.current.app.repo
     var s by remember { mutableStateOf(initial) }
     var confirm by remember { mutableStateOf(false) }
-    AppSheet(onDismiss = onDismiss) { close ->
+    val initialSubject = remember { initial }
+    AppSheet(onDismiss = onDismiss, confirmDiscard = s != initialSubject) { close ->
         SheetHeader(
             if (isNew) "Neues Fach" else "Fach",
             onSave = if (s.name.isNotBlank()) {
@@ -470,6 +471,25 @@ private fun SubjectEditSheet(initial: Subject, isNew: Boolean, onDismiss: () -> 
             }
             FormRow("Farbe", divider = false) {
                 ColorRow(s.color) { s = s.copy(color = it) }
+            }
+        }
+        // Für den Notenziel-Rechner: wie viele Noten es pro Halbjahr gibt (später pro Halbjahr änderbar).
+        FormGroup {
+            FormRow("Klausuren") {
+                Text("pro Halbjahr", style = T.small, color = c.sub, modifier = Modifier.weight(1f))
+                de.schulplaner.ui.components.Stepper(
+                    "${s.plannedExams}",
+                    onMinus = { s = s.copy(plannedExams = (s.plannedExams - 1).coerceAtLeast(0)) },
+                    onPlus = { s = s.copy(plannedExams = (s.plannedExams + 1).coerceAtMost(20)) },
+                )
+            }
+            FormRow("Mündlich", divider = false) {
+                Text("Noten pro Halbjahr", style = T.small, color = c.sub, modifier = Modifier.weight(1f))
+                de.schulplaner.ui.components.Stepper(
+                    "${s.plannedOral}",
+                    onMinus = { s = s.copy(plannedOral = (s.plannedOral - 1).coerceAtLeast(0)) },
+                    onPlus = { s = s.copy(plannedOral = (s.plannedOral + 1).coerceAtMost(20)) },
+                )
             }
         }
         FormLabel("Symbol")

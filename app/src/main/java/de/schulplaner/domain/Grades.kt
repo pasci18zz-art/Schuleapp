@@ -37,6 +37,53 @@ object GradeCalc {
         return if (weights > 0.0) sum / weights else null
     }
 
+    /** Ergebnis des Notenziel-Rechners. */
+    data class Goal(
+        val remainingWritten: Int,
+        val remainingOral: Int,
+        /** Punkte, die jede noch fehlende Note im Schnitt haben müsste; null = nicht erreichbar. */
+        val needed: Int?,
+        /** Schnitt, wenn alle fehlenden Noten 15 Punkte wären (oder der aktuelle, falls nichts fehlt). */
+        val best: Double?,
+    ) {
+        val nothingLeft: Boolean get() = remainingWritten + remainingOral == 0
+    }
+
+    /**
+     * Wie viele Punkte braucht man bei den noch fehlenden Klausuren und mündlichen Noten im Schnitt,
+     * damit der Fachschnitt mindestens [target] erreicht? Gewichtung schriftlich/mündlich laut Kategorien.
+     */
+    fun goal(
+        categories: List<GradeCategory>,
+        grades: List<Grade>,
+        plannedWritten: Int,
+        plannedOral: Int,
+        target: Double,
+    ): Goal {
+        val written = categories.firstOrNull { it.kind == de.schulplaner.data.CategoryKind.WRITTEN }
+        val oral = categories.firstOrNull { it.kind == de.schulplaner.data.CategoryKind.ORAL }
+        val countW = if (written == null) 0 else grades.count { g -> categories.any { it.id == g.categoryId && it.kind == de.schulplaner.data.CategoryKind.WRITTEN } }
+        val countO = if (oral == null) 0 else grades.count { g -> categories.any { it.id == g.categoryId && it.kind == de.schulplaner.data.CategoryKind.ORAL } }
+        val remW = if (written == null) 0 else (plannedWritten - countW).coerceAtLeast(0)
+        val remO = if (oral == null) 0 else (plannedOral - countO).coerceAtLeast(0)
+        fun avgWith(x: Int): Double? {
+            val extra = List(remW) { Grade(categoryId = written!!.id, points = x, weight = 1.0) } +
+                List(remO) { Grade(categoryId = oral!!.id, points = x, weight = 1.0) }
+            return subjectAverage(categories, grades + extra)
+        }
+        val best = avgWith(15)
+        if (remW + remO == 0) return Goal(0, 0, null, subjectAverage(categories, grades))
+        var needed: Int? = null
+        for (x in 0..15) {
+            val a = avgWith(x) ?: continue
+            if (a >= target - 1e-9) {
+                needed = x
+                break
+            }
+        }
+        return Goal(remW, remO, needed, best)
+    }
+
     /**
      * Wie viele Punkte braucht die nächste Note in [categoryId], damit der Schnitt mindestens [target] ist?
      * 0 = schon sicher, null = nicht erreichbar.

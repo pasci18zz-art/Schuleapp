@@ -6,6 +6,9 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.layout.positionInParent
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Arrangement
@@ -92,7 +95,7 @@ fun GradesOverviewScreen() {
     val subjectTerms by repo.subjectTerms.collectAsStateWithLifecycle()
 
     var termId by rememberSaveable { mutableStateOf<String?>(null) }
-    var sortByPoints by rememberSaveable { mutableStateOf(false) }
+    var sortByPoints by rememberSaveable { mutableStateOf(true) }
     var view by rememberSaveable { mutableStateOf(GradeView.ALL) }
     var newGrade by remember { mutableStateOf<Grade?>(null) }
     val readOnly = de.schulplaner.ui.components.LocalReadOnly.current
@@ -130,28 +133,49 @@ fun GradesOverviewScreen() {
                 Text("SCHNITT", style = T.overline, color = c.accent, modifier = Modifier.weight(1f))
                 Text("${withValue.size} Fächer · ${subjects.count { it.isLk && !it.archived }} LK", style = T.small, color = c.sub)
             }
-            // Schriftlich | Mündlich | Gesamt – getrennt durch feine blaue Striche, die gewählte Art groß.
-            Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min).padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                val cols = listOf(
-                    Triple(GradeView.WRITTEN, "schriftlich", written),
-                    Triple(GradeView.ORAL, "mündlich", oral),
-                    Triple(GradeView.ALL, "gesamt", avg),
-                )
-                cols.forEachIndexed { i, (mode, label, value) ->
-                    if (i > 0) Box(Modifier.padding(horizontal = 8.dp).width(1.5.dp).fillMaxHeight().clip(RoundedCornerShape(1.dp)).background(c.accent.copy(alpha = 0.55f)))
+            // Schriftlich | Gesamt (groß, Mitte) | Mündlich – feste Größen, nur die Markierung gleitet.
+            val order = listOf(GradeView.WRITTEN, GradeView.ALL, GradeView.ORAL)
+            val sel by animateFloatAsState(order.indexOf(view).toFloat(), androidx.compose.animation.core.spring(dampingRatio = 0.8f, stiffness = 380f), label = "grade-sel")
+            val xs = remember { FloatArray(3) }
+            val ws = remember { FloatArray(3) }
+            val hl = c.accent
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(top = 10.dp)
+                    .drawBehind {
+                        val i = sel.toInt().coerceIn(0, 1)
+                        val f = sel - i
+                        val x = xs[i] + (xs[i + 1] - xs[i]) * f
+                        val w = ws[i] + (ws[i + 1] - ws[i]) * f
+                        if (w > 0f) drawRoundRect(hl.copy(alpha = 0.12f), androidx.compose.ui.geometry.Offset(x, 0f), androidx.compose.ui.geometry.Size(w, size.height), androidx.compose.ui.geometry.CornerRadius(18.dp.toPx()))
+                    },
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                val values = mapOf(GradeView.WRITTEN to written, GradeView.ORAL to oral, GradeView.ALL to avg)
+                val labels = mapOf(GradeView.WRITTEN to "schriftlich", GradeView.ORAL to "mündlich", GradeView.ALL to "gesamt")
+                order.forEachIndexed { i, mode ->
+                    if (i > 0) Box(Modifier.width(1.5.dp).height(46.dp).clip(RoundedCornerShape(1.dp)).background(c.accent.copy(alpha = 0.55f)))
                     val active = view == mode
-                    val size by animateFloatAsState(if (active) 1f else 0.62f, tween(300), label = "avg-size")
+                    val big = mode == GradeView.ALL
+                    val shownValue by animateFloatAsState((values[mode] ?: 0.0).toFloat(), tween(700), label = "grade-val")
+                    val ink by androidx.compose.animation.animateColorAsState(if (active) c.text else c.sub, tween(300), label = "grade-ink")
                     Column(
-                        Modifier.weight(if (active) 1.3f else 1f).clip(RoundedCornerShape(12.dp)).clickable { view = mode }.padding(vertical = 4.dp),
+                        Modifier
+                            .weight(if (big) 1.6f else 1f)
+                            .onGloballyPositioned { xs[i] = it.positionInParent().x; ws[i] = it.size.width.toFloat() }
+                            .clip(RoundedCornerShape(18.dp))
+                            .clickable { view = mode }
+                            .padding(vertical = 8.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
                         Text(
-                            value?.let { GradeCalc.format(it) } ?: "–",
-                            style = T.bigNumber.copy(fontSize = T.bigNumber.fontSize * size),
-                            color = if (active) c.text else c.sub,
+                            if (values[mode] != null) GradeCalc.format(shownValue.toDouble()) else "–",
+                            style = T.bigNumber.copy(fontSize = T.bigNumber.fontSize * (if (big) 1.0f else 0.5f)),
+                            color = ink,
                             maxLines = 1,
                         )
-                        Text(label, style = T.small, color = if (active) c.accent else c.sub)
+                        Text(labels.getValue(mode), style = T.small, color = if (active) c.accent else c.sub)
                     }
                 }
             }
@@ -205,7 +229,8 @@ fun GradesOverviewScreen() {
                         }
                         ProgressBar(((v ?: 0.0) / 15.0).toFloat(), color, height = 5.dp)
                     }
-                    Text(v?.let { GradeCalc.format(it) } ?: "–", style = T.section, color = if ((v ?: 99.0) < 5.0) c.warn else c.text, modifier = Modifier.width(44.dp))
+                    val shownV by animateFloatAsState((v ?: 0.0).toFloat(), tween(500), label = "row-val")
+                    Text(if (v != null) GradeCalc.format(shownV.toDouble()) else "–", style = T.section, color = if ((v ?: 99.0) < 5.0) c.warn else c.text, modifier = Modifier.width(44.dp))
                     Icon(Ic.ChevronRight, null, tint = c.sub, modifier = Modifier.size(16.dp))
                 }
             }
@@ -266,8 +291,6 @@ fun SubjectGradesScreen(subjectId: String, termId: String) {
     var editCategory by remember { mutableStateOf<Pair<GradeCategory, Boolean>?>(null) }
     var overrideSheet by remember { mutableStateOf(false) }
     val readOnly = de.schulplaner.ui.components.LocalReadOnly.current
-    var target by rememberSaveable { mutableStateOf<Int?>(null) }
-    var targetCategoryId by rememberSaveable { mutableStateOf<String?>(null) }
 
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(screenPadding()),
@@ -389,49 +412,8 @@ fun SubjectGradesScreen(subjectId: String, termId: String) {
             ) to true
         }, Modifier.fillMaxWidth(), icon = Ic.Plus, color = c.sub)
 
-        // Ziel-Rechner
-        if (categories.isNotEmpty()) {
-            val t = target ?: ((value ?: 10.0).roundToInt() + 1).coerceIn(5, 15)
-            val catId = targetCategoryId?.takeIf { id -> categories.any { it.id == id } }
-                ?: categories.firstOrNull { it.kind == CategoryKind.WRITTEN }?.id ?: categories.first().id
-            val cat = categories.first { it.id == catId }
-            val need = GradeCalc.neededPoints(categories, grades, catId, t.toDouble())
-            GlassCard(padding = PaddingValues(16.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Icon(Ic.Target, null, tint = c.accent, modifier = Modifier.size(22.dp))
-                    Text("Was brauche ich?", style = T.section, color = c.text)
-                }
-                LazyRow(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    items((5..15).toList()) { v ->
-                        val active = v == t
-                        Box(
-                            Modifier
-                                .size(width = 40.dp, height = 36.dp)
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(if (active) c.accent else c.line)
-                                .clickable { target = v },
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Text("$v", style = T.label, color = if (active) c.accentInk else c.text)
-                        }
-                    }
-                }
-                if (categories.size > 1) {
-                    LazyRow(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        items(categories, key = { it.id }) { k ->
-                            ChoiceChip(k.name, k.id == catId, { targetCategoryId = k.id })
-                        }
-                    }
-                }
-                val text = when (need) {
-                    null -> "Mit einer weiteren Note nicht erreichbar"
-                    0 -> "Schon sicher – egal, was kommt"
-                    else -> "mind. $need Punkte"
-                }
-                Text("Für Ø $t in der nächsten Note (${cat.name}):", style = T.small, color = c.sub, modifier = Modifier.padding(top = 12.dp))
-                Text(text, style = T.title.copy(fontSize = T.section.fontSize * 1.35f), color = c.text, modifier = Modifier.padding(top = 2.dp))
-            }
-        }
+        // Notenziel-Rechner
+        if (categories.isNotEmpty()) GoalCard(subject, termId, categories, grades, value, readOnly)
 
         // Zeugnisnote
         GlassCard(padding = PaddingValues(16.dp), onClick = { overrideSheet = true }) {
@@ -500,3 +482,110 @@ private fun Modifier.outlined(color: Color) = this.border(1.dp, color, RoundedCo
 
 /** Welche Noten oben und in der Fächerliste gezeigt werden. */
 private enum class GradeView { WRITTEN, ORAL, ALL }
+
+/**
+ * Notenziel: Ziel in Punkten eingeben (Planung der Klausuren und mündlichen Noten kommt vom Fach, pro Halbjahr
+ * änderbar). Die Karte zeigt, wie viele Punkte die noch fehlenden Noten im Schnitt haben müssten.
+ */
+@Composable
+private fun GoalCard(
+    subject: de.schulplaner.data.Subject,
+    termId: String,
+    categories: List<GradeCategory>,
+    grades: List<Grade>,
+    current: Double?,
+    readOnly: Boolean,
+) {
+    val c = colors
+    val repo = LocalContext.current.app.repo
+    val settings by repo.settings.collectAsStateWithLifecycle()
+    val goalKey = de.schulplaner.data.SettingKeys.GOAL_PREFIX + subject.id + "_" + termId
+    val planKey = de.schulplaner.data.SettingKeys.PLAN_PREFIX + subject.id + "_" + termId
+    val target = settings[goalKey]?.toIntOrNull() ?: ((current ?: 10.0).roundToInt() + 1).coerceIn(5, 15)
+    val plan = settings[planKey]?.split(",")?.mapNotNull { it.toIntOrNull() }?.takeIf { it.size == 2 }
+    val plannedW = plan?.get(0) ?: subject.plannedExams
+    val plannedO = plan?.get(1) ?: subject.plannedOral
+    val goal = GradeCalc.goal(categories, grades, plannedW, plannedO, target.toDouble())
+    val hasWritten = categories.any { it.kind == CategoryKind.WRITTEN }
+    val hasOral = categories.any { it.kind == CategoryKind.ORAL }
+
+    GlassCard(padding = PaddingValues(16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Icon(Ic.Target, null, tint = c.accent, modifier = Modifier.size(22.dp))
+            Text("Notenziel", style = T.section, color = c.text, modifier = Modifier.weight(1f))
+        }
+        // Ziel in Notenpunkten.
+        Row(Modifier.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Ich will im Halbjahr", style = T.small, color = c.sub)
+                Text("$target Punkte  ·  Note ${GradeCalc.note(target.toDouble())}", style = T.label, color = c.text)
+            }
+            if (!readOnly) de.schulplaner.ui.components.Stepper(
+                "$target",
+                onMinus = { repo.setSetting(goalKey, (target - 1).coerceAtLeast(0).toString()) },
+                onPlus = { repo.setSetting(goalKey, (target + 1).coerceAtMost(15).toString()) },
+            )
+        }
+        // Planung dieses Halbjahrs.
+        if (hasWritten) PlanRow("Klausuren", plannedW, grades.count { g -> categories.any { it.id == g.categoryId && it.kind == CategoryKind.WRITTEN } }, readOnly) {
+            repo.setSetting(planKey, "$it,$plannedO")
+        }
+        if (hasOral) PlanRow("Mündliche Noten", plannedO, grades.count { g -> categories.any { it.id == g.categoryId && it.kind == CategoryKind.ORAL } }, readOnly) {
+            repo.setSetting(planKey, "$plannedW,$it")
+        }
+        Box(Modifier.fillMaxWidth().padding(vertical = 12.dp).height(1.dp).background(c.line))
+        val parts = listOfNotNull(
+            if (goal.remainingWritten > 0) "${goal.remainingWritten} ${if (goal.remainingWritten == 1) "Klausur" else "Klausuren"}" else null,
+            if (goal.remainingOral > 0) "${goal.remainingOral} mündlich" else null,
+        ).joinToString(" und ")
+        when {
+            goal.nothingLeft -> {
+                Text("Alle geplanten Noten sind eingetragen.", style = T.small, color = c.sub)
+                Text(
+                    (goal.best?.let { "Aktuell Ø ${GradeCalc.format(it)}" } ?: "Noch keine Noten") + if ((goal.best ?: 0.0) >= target - 1e-9) " – Ziel erreicht" else " – Ziel verfehlt",
+                    style = T.title.copy(fontSize = T.section.fontSize * 1.2f),
+                    color = c.text,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+            }
+            goal.needed == null -> {
+                Text("Bei den noch fehlenden Noten ($parts)", style = T.small, color = c.sub)
+                Text(
+                    "Nicht mehr erreichbar" + (goal.best?.let { " (max. Ø ${GradeCalc.format(it)})" } ?: ""),
+                    style = T.title.copy(fontSize = T.section.fontSize * 1.2f),
+                    color = c.warn,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+            }
+            goal.needed == 0 -> {
+                Text("Bei den noch fehlenden Noten ($parts)", style = T.small, color = c.sub)
+                Text("Schon sicher – egal, was kommt", style = T.title.copy(fontSize = T.section.fontSize * 1.2f), color = c.good, modifier = Modifier.padding(top = 2.dp))
+            }
+            else -> {
+                Text("Du brauchst bei den noch fehlenden Noten ($parts) im Schnitt", style = T.small, color = c.sub)
+                Text(
+                    "ca. ${goal.needed} Punkte  ·  Note ${GradeCalc.note(goal.needed.toDouble())}",
+                    style = T.title.copy(fontSize = T.section.fontSize * 1.35f),
+                    color = c.text,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PlanRow(label: String, planned: Int, done: Int, readOnly: Boolean, onChange: (Int) -> Unit) {
+    val c = colors
+    Row(Modifier.padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(label, style = T.small, color = c.sub)
+            Text("$done von $planned eingetragen", style = T.label, color = c.text)
+        }
+        if (!readOnly) de.schulplaner.ui.components.Stepper(
+            "$planned",
+            onMinus = { onChange((planned - 1).coerceAtLeast(0)) },
+            onPlus = { onChange((planned + 1).coerceAtMost(20)) },
+        )
+    }
+}

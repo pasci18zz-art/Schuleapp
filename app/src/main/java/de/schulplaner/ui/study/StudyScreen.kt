@@ -163,6 +163,14 @@ fun StudyScreen() {
                 }
                 if (dayList.isEmpty()) {
                     Text("An diesem Tag keine Sessions", style = T.small, color = c.sub, modifier = Modifier.padding(start = 12.dp, bottom = 10.dp))
+                } else {
+                    // Zuerst: wie lange in welchem Fach (Muster = Art), danach die einzelnen Sessions.
+                    DaySummary(
+                        dayList, now, subjects,
+                        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+                        maxRows = 10,
+                    )
+                    Box(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp).height(1.dp).background(c.line))
                 }
                 dayList.forEach { s -> SessionRow(s, subjectMap[s.subjectId ?: ""], now, onClick = if (readOnly) null else ({ edit = s to false })) }
             }

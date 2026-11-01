@@ -46,8 +46,11 @@ fun TaskViewSheet(task: Task, onDismiss: () -> Unit) {
     val files = attachments.filter { it.ownerId == task.id }
     val steps = topics.filter { it.examId == task.id }.sortedBy { it.sortOrder }
     val today = LocalDate.now()
+    var askFinish by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    val readOnly = de.schulplaner.ui.components.LocalReadOnly.current
+    val undo = de.schulplaner.ui.components.LocalUndo.current
 
-    AppSheet(onDismiss = onDismiss) { _ ->
+    AppSheet(onDismiss = onDismiss) { close ->
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             if (subject != null) SubjectIcon(subject, 18.dp)
             Text(subject?.name ?: "Ohne Fach", style = T.label, color = c.sub, modifier = Modifier.weight(1f))
@@ -78,7 +81,11 @@ fun TaskViewSheet(task: Task, onDismiss: () -> Unit) {
                 FormGroup {
                     steps.forEach { st ->
                         Row(Modifier.fillMaxWidth().padding(end = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            CheckCircle(st.done, { repo.saveTopic(st.copy(done = !st.done)) }, square = true, size = 22.dp, checkedColor = c.good)
+                            CheckCircle(st.done, {
+                                repo.saveTopic(st.copy(done = !st.done))
+                                // Letzter Unterpunkt abgehakt: Aufgabe abschließen?
+                                if (!task.done && !st.done && !readOnly && steps.all { it.done || it.id == st.id }) askFinish = true
+                            }, square = true, size = 22.dp, checkedColor = c.good)
                             Text(
                                 st.text,
                                 style = T.body.copy(textDecoration = if (st.done) TextDecoration.LineThrough else null),
@@ -95,6 +102,22 @@ fun TaskViewSheet(task: Task, onDismiss: () -> Unit) {
                 Text("Anhänge", style = T.label, color = c.sub)
                 AttachmentStrip(files, editable = false)
             }
+        }
+        if (askFinish) {
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { askFinish = false },
+                title = { Text("Aufgabe abschließen?") },
+                text = { Text("Alle Unterpunkte sind erledigt.") },
+                confirmButton = {
+                    androidx.compose.material3.TextButton(onClick = {
+                        askFinish = false
+                        repo.setTaskDone(task, true)
+                        undo.show("Erledigt") { repo.setTaskDone(task, false) }
+                        close()
+                    }) { Text("Ja") }
+                },
+                dismissButton = { androidx.compose.material3.TextButton(onClick = { askFinish = false }) { Text("Nein") } },
+            )
         }
     }
 }

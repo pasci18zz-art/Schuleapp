@@ -102,13 +102,18 @@ fun TaskEditSheet(initial: Task, isNew: Boolean, onDismiss: () -> Unit) {
     var steps by remember { mutableStateOf(repo.topics.value.filter { it.examId == initial.id }.sortedBy { it.sortOrder }) }
     var newStep by remember { mutableStateOf("") }
     var showDate by remember { mutableStateOf(false) }
+    var askFinish by remember { mutableStateOf(false) }
     val saved = remember { booleanArrayOf(false) }
 
     val undo = LocalUndo.current
-    AppSheet(onDismiss = {
-        if (isNew && !saved[0]) repo.discardAttachments(task.id)
-        onDismiss()
-    }) { close ->
+    val initialSteps = remember { steps }
+    AppSheet(
+        onDismiss = {
+            if (isNew && !saved[0]) repo.discardAttachments(task.id)
+            onDismiss()
+        },
+        confirmDiscard = !saved[0] && (task != initial || steps != initialSteps || newStep.isNotBlank()),
+    ) { close ->
         SheetHeader(
             title = if (isNew) "Neue Aufgabe" else "Aufgabe",
             onSave = if (task.title.isNotBlank()) {
@@ -196,7 +201,11 @@ fun TaskEditSheet(initial: Task, isNew: Boolean, onDismiss: () -> Unit) {
                 newText = newStep,
                 onNewText = { newStep = it },
                 onAdd = { text -> steps = steps + ExamTopic(examId = task.id, text = text) },
-                onToggle = { st -> steps = steps.map { if (it.id == st.id) it.copy(done = !it.done) else it } },
+                onToggle = { st ->
+                    steps = steps.map { if (it.id == st.id) it.copy(done = !it.done) else it }
+                    // Letzten Unterpunkt abgehakt: fragen, ob die ganze Aufgabe erledigt ist.
+                    if (!task.done && steps.isNotEmpty() && steps.all { it.done }) askFinish = true
+                },
                 onRename = { st, text -> steps = steps.map { if (it.id == st.id) it.copy(text = text) else it } },
                 onRemove = { st -> steps = steps.filter { it.id != st.id } },
                 onReorder = { steps = it },
@@ -205,6 +214,25 @@ fun TaskEditSheet(initial: Task, isNew: Boolean, onDismiss: () -> Unit) {
         }
 
         AttachmentStrip(attachments.filter { it.ownerId == task.id })
+
+        if (askFinish) {
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { askFinish = false },
+                title = { Text("Aufgabe abschließen?") },
+                text = { Text("Alle Unterpunkte sind erledigt.") },
+                confirmButton = {
+                    androidx.compose.material3.TextButton(onClick = {
+                        askFinish = false
+                        saved[0] = true
+                        repo.saveTask(task.copy(title = task.title.trim(), done = true, doneAt = System.currentTimeMillis()))
+                        repo.saveSteps(task.id, steps)
+                        undo.show("Erledigt") { repo.setTaskDone(task, false) }
+                        close()
+                    }) { Text("Ja") }
+                },
+                dismissButton = { androidx.compose.material3.TextButton(onClick = { askFinish = false }) { Text("Nein") } },
+            )
+        }
     }
 
     if (showDate) {

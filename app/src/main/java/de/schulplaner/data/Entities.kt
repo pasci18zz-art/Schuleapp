@@ -32,6 +32,9 @@ data class Subject(
     val notesLink: String = "",
     /** Symbol des Fachs (Schlüssel aus SubjectIcons), leer = automatisch nach dem Namen. */
     val icon: String = "",
+    /** Geplante Klausuren bzw. mündliche Noten pro Halbjahr (für den Notenziel-Rechner). */
+    val plannedExams: Int = 2,
+    val plannedOral: Int = 3,
     val updatedAt: Long = 0,
     val deleted: Boolean = false,
     @Transient val dirty: Boolean = true,
@@ -368,6 +371,10 @@ object SettingKeys {
     /** Lernzettel-Aufgabe beim Anlegen einer Klausur ("false" = aus) und ihre Aufgabenart. */
     const val LZ_ENABLED = "lz_enabled"
     const val LZ_KIND = "lz_kind"
+    /** Notenziel (Punkte) pro Fach und Halbjahr: "goal_<fach>_<halbjahr>". */
+    const val GOAL_PREFIX = "goal_"
+    /** Abweichende Planung pro Fach und Halbjahr: "plan_<fach>_<halbjahr>" = "klausuren,muendlich". */
+    const val PLAN_PREFIX = "plan_"
     /** Monster-Zähler: ein Eintrag pro Tag, "monster_<epochDay>" = Anzahl. */
     const val MONSTER_PREFIX = "monster_"
 }

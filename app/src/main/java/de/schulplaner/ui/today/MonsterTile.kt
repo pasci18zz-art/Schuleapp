@@ -300,58 +300,27 @@ private fun DrawScope.canTexture(shimmer: Float, strength: Float = 1f) {
 }
 
 /**
- * Drei lange, ausgefranste Krallen-Kratzer (eigene Zeichnung im Monster-Stil, kein Original-Logo):
- * oben breit mit gezackten Spitzen, Ränder unregelmäßig eingerissen, unten in dünne Fetzen auslaufend.
- * [progress] 0→1 lässt sie von oben nach unten aufreißen.
+ * Krallen-Logo nach der eigenen Zeichnung ([ClawLogo]), gefüllt mit weich leuchtender Kante.
+ * [progress] 0→1 lässt die Kratzer von oben nach unten aufreißen.
  */
 private fun DrawScope.drawLogo(progress: Float, glow: Float, flash: Float) {
-    val w = size.width
-    val h = size.height
-    // Feste Pseudo-Zufallswerte, damit die Kratzer immer gleich aussehen.
-    fun jitter(seed: Int): Float = (((seed * 7919 + 104729) % 1000) / 1000f) * 2f - 1f
-    fun claw(index: Int, cx: Float, top: Float, bottom: Float, angle: Float, half: Float, delay: Float) {
-        val p = ((progress - delay) / (1f - delay)).coerceIn(0f, 1f)
-        if (p <= 0f) return
-        val len = bottom - top
-        val steps = 22
-        val path = Path()
-        // Obere Kante: drei kleine Zacken.
-        path.moveTo(cx - half, top + len * 0.03f)
-        path.lineTo(cx - half * 0.45f, top)
-        path.lineTo(cx - half * 0.1f, top + len * 0.035f)
-        path.lineTo(cx + half * 0.35f, top - len * 0.01f)
-        path.lineTo(cx + half, top + len * 0.04f)
-        // Rechte Kante nach unten: verjüngt, ausgefranst.
-        for (k in 1..steps) {
-            val f = k / steps.toFloat()
-            val taper = 1f - f * 0.72f
-            val rough = jitter(index * 100 + k) * half * 0.28f + (if (k % 3 == 0) half * 0.22f else 0f)
-            path.lineTo(cx + half * taper + rough, top + len * f)
+    val sc = minOf(size.width / ClawLogo.WIDTH, size.height / ClawLogo.HEIGHT)
+    val ox = (size.width - ClawLogo.WIDTH * sc) / 2f
+    val oy = (size.height - ClawLogo.HEIGHT * sc) / 2f
+    val pts = ClawLogo.points
+    val path = Path().apply {
+        for (i in 0 until pts.size / 2) {
+            val x = ox + pts[i * 2] * sc
+            val y = oy + pts[i * 2 + 1] * sc
+            if (i == 0) moveTo(x, y) else lineTo(x, y)
         }
-        // Unten zwei dünne Fetzen.
-        path.lineTo(cx + half * 0.05f, bottom + len * 0.04f)
-        path.lineTo(cx - half * 0.12f, bottom - len * 0.05f)
-        path.lineTo(cx - half * 0.38f, bottom + len * 0.02f)
-        // Linke Kante nach oben.
-        for (k in steps downTo 1) {
-            val f = k / steps.toFloat()
-            val taper = 1f - f * 0.72f
-            val rough = jitter(index * 100 + k + 50) * half * 0.28f - (if (k % 4 == 1) half * 0.25f else 0f)
-            path.lineTo(cx - half * taper + rough, top + len * f)
-        }
-        path.close()
-        rotate(angle, Offset(cx, bottom)) {
-            clipRect(top = 0f, bottom = top + (len * 1.06f) * p) {
-                // Leuchten, Füllung, feine dunkle Kante.
-                drawPath(path, Color.White.copy(alpha = 0.22f * glow + flash * 0.4f), style = Stroke(11.dp.toPx(), join = StrokeJoin.Round))
-                drawPath(path, Brush.verticalGradient(listOf(Color.White, Cream, Blush), startY = top, endY = bottom))
-                drawPath(path, DeepBerry.copy(alpha = 0.5f), style = Stroke(1.4.dp.toPx(), join = StrokeJoin.Round))
-            }
-        }
+        close()
     }
-    val half = w * 0.095f
-    // Außen lang, Mitte etwas kürzer und tiefer – zusammen ein "M".
-    claw(1, w * 0.19f, h * 0.02f, h * 0.96f, -4f, half, 0f)
-    claw(2, w * 0.5f, h * 0.12f, h * 0.84f, 0f, half * 0.95f, 0.12f)
-    claw(3, w * 0.81f, h * 0.02f, h * 0.96f, 4f, half, 0.24f)
+    val top = oy
+    val bottom = oy + ClawLogo.HEIGHT * sc
+    clipRect(top = 0f, bottom = top + (bottom - top) * 1.04f * progress.coerceIn(0f, 1f)) {
+        drawPath(path, Color.White.copy(alpha = 0.22f * glow + flash * 0.4f), style = Stroke(10.dp.toPx(), join = StrokeJoin.Round))
+        drawPath(path, Brush.verticalGradient(listOf(Color.White, Cream, Blush), startY = top, endY = bottom))
+        drawPath(path, DeepBerry.copy(alpha = 0.55f), style = Stroke(1.4.dp.toPx(), join = StrokeJoin.Round))
+    }
 }

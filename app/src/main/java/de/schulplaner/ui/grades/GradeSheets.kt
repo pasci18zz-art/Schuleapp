@@ -74,10 +74,14 @@ fun GradeEditSheet(initial: Grade, isNew: Boolean, subjectSelectable: Boolean, o
     }
     val categories = allCategories.filter { it.subjectId == grade.subjectId && it.termId == grade.termId }
 
-    AppSheet(onDismiss = {
-        if (isNew && !saved[0]) repo.discardAttachments(grade.id)
-        onDismiss()
-    }) { close ->
+    val initialGrade = remember { grade }
+    AppSheet(
+        onDismiss = {
+            if (isNew && !saved[0]) repo.discardAttachments(grade.id)
+            onDismiss()
+        },
+        confirmDiscard = !saved[0] && grade != initialGrade,
+    ) { close ->
         SheetHeader(
             title = if (isNew) "Neue Note" else "Note",
             onSave = if (grade.subjectId.isNotBlank() && grade.categoryId.isNotBlank()) {
