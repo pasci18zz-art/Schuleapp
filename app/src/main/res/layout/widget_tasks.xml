@@ -1,0 +1,137 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@android:id/background"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_bg"
+    android:clipToOutline="true"
+    android:padding="16dp">
+<LinearLayout
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical">
+    
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="38dp"
+        android:layout_weight="1"
+        android:background="@drawable/widget_seg_track"
+        android:orientation="horizontal"
+        android:padding="3dp">
+<FrameLayout
+    android:id="@+id/seg_0"
+    android:layout_width="0dp"
+    android:layout_height="match_parent"
+    android:layout_weight="1">
+<TextView
+        android:id="@+id/seg_0_label"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:gravity="center"
+        android:text="Alle"
+        android:maxLines="1"
+        android:textColor="#FFFFFFFF"
+        android:textSize="13sp"
+        android:textStyle="bold" />
+</FrameLayout><FrameLayout
+    android:id="@+id/seg_1"
+    android:layout_width="0dp"
+    android:layout_height="match_parent"
+    android:layout_weight="1">
+<ImageView
+        android:id="@+id/seg_1_icon"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:importantForAccessibility="no"
+        android:padding="7dp"
+        android:src="@drawable/ic_k_house" />
+</FrameLayout><FrameLayout
+    android:id="@+id/seg_2"
+    android:layout_width="0dp"
+    android:layout_height="match_parent"
+    android:layout_weight="1">
+<ImageView
+        android:id="@+id/seg_2_icon"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:importantForAccessibility="no"
+        android:padding="7dp"
+        android:src="@drawable/ic_k_house" />
+</FrameLayout><FrameLayout
+    android:id="@+id/seg_3"
+    android:layout_width="0dp"
+    android:layout_height="match_parent"
+    android:layout_weight="1">
+<ImageView
+        android:id="@+id/seg_3_icon"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:importantForAccessibility="no"
+        android:padding="7dp"
+        android:src="@drawable/ic_k_house" />
+</FrameLayout><FrameLayout
+    android:id="@+id/seg_4"
+    android:layout_width="0dp"
+    android:layout_height="match_parent"
+    android:layout_weight="1">
+<ImageView
+        android:id="@+id/seg_4_icon"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:importantForAccessibility="no"
+        android:padding="7dp"
+        android:src="@drawable/ic_k_house" />
+</FrameLayout><FrameLayout
+    android:id="@+id/seg_5"
+    android:layout_width="0dp"
+    android:layout_height="match_parent"
+    android:layout_weight="1">
+<ImageView
+        android:id="@+id/seg_5_icon"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:importantForAccessibility="no"
+        android:padding="7dp"
+        android:src="@drawable/ic_k_house" />
+</FrameLayout>
+    </LinearLayout>
+        <FrameLayout
+            android:layout_width="8dp"
+            android:layout_height="1dp" />
+        <ImageView
+            android:id="@+id/tasks_add"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:background="@drawable/widget_circle"
+            android:contentDescription="Aufgabe hinzufügen"
+            android:padding="9dp"
+            android:src="@drawable/ic_w_plus" />
+    </LinearLayout>
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:layout_marginTop="4dp">
+        <ListView
+            android:id="@+id/tasks_list"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:divider="@null"
+            android:dividerHeight="0dp"
+            android:scrollbars="none" />
+        <TextView
+            android:id="@+id/tasks_empty"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:text="Alles erledigt"
+            android:textColor="#B3FFFFFF"
+            android:textSize="14sp" />
+    </FrameLayout>
+</LinearLayout>
+</FrameLayout>

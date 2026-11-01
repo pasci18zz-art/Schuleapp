@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Schulplaner</string>
+    <string name="tile_label">HA eintragen</string>
+    <string name="shortcut_ha_short">HA eintragen</string>
+    <string name="shortcut_ha_long">Hausaufgabe eintragen</string>
+    <string name="widget_today">Heute</string>
+    <string name="widget_today_desc">Aktuelle und nächste Stunde, dazu deine Aufgaben</string>
+    <string name="widget_study">Lernzeit</string>
+    <string name="widget_study_desc">Stoppuhr für Lernsessions: starten, pausieren, beenden</string>
+    <string name="widget_tasks">Aufgaben</string>
+    <string name="widget_tasks_desc">Alle Aufgaben mit Filter – heute und morgen fällig oben in Rot</string>
+    <string name="widget_exam">Nächste Klausur</string>
+    <string name="widget_exam_desc">Tage bis zur nächsten Klausur und Lernstand</string>
+    <string name="widget_holiday">Ferien</string>
+    <string name="widget_holiday_desc">Countdown bis zu den nächsten Ferien</string>
+    <string name="widget_quick">HA eintragen</string>
+    <string name="widget_quick_desc">Ein Tipp: Hausaufgabe für die aktuelle Stunde eintragen</string>
+</resources>
