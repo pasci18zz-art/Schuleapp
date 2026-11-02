@@ -145,7 +145,12 @@ object HomeLayoutStore {
     private fun prefs(ctx: Context) = ctx.getSharedPreferences("startseite", Context.MODE_PRIVATE)
 
     fun load(ctx: Context, cols: Int): List<TileConf> {
-        val raw = prefs(ctx).getString("cols_$cols", null) ?: return defaults(cols)
+        val p = prefs(ctx)
+        // Version 2: neues Raster mit Höhe pro Kachel. Alte Anordnungen passen dazu nicht mehr und starten neu.
+        if (p.getInt("version", 1) < 2) {
+            p.edit().remove("cols_2").remove("cols_3").putInt("version", 2).apply()
+        }
+        val raw = p.getString("cols_$cols", null) ?: return defaults(cols)
         val parsed = raw.split(',').mapNotNull { part ->
             val bits = part.split(':')
             val tile = HomeTile.of(bits.getOrNull(0) ?: return@mapNotNull null) ?: return@mapNotNull null
@@ -607,7 +612,6 @@ fun HomeGrid(
             if (selected != null) {
                 key("auswahl") {
                     SelectionDecor(
-                        title = selected.title,
                         onSettings = { settings = selected },
                         onHide = {
                             update(layout.map { if (it.tile == selected) it.copy(visible = false) else it })
@@ -649,26 +653,15 @@ fun HomeGrid(
 
 /** Rahmen, Werkzeugleiste und Ziehgriff der ausgewählten Kachel (so groß wie die Kachel selbst). */
 @Composable
-private fun SelectionDecor(title: String, onSettings: () -> Unit, onHide: () -> Unit) {
+private fun SelectionDecor(onSettings: () -> Unit, onHide: () -> Unit) {
     val c = colors
     val shape = RoundedCornerShape(22.dp)
     Box(Modifier.fillMaxSize()) {
         Box(Modifier.matchParentSize().border(2.5.dp, c.accent, shape))
-        Text(
-            title,
-            style = T.smallBold,
-            color = c.accentInk,
-            maxLines = 1,
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .padding(10.dp)
-                .clip(RoundedCornerShape(50))
-                .background(c.accent)
-                .padding(horizontal = 10.dp, vertical = 4.dp),
-        )
+        // Werkzeuge unten links, Ziehgriff unten rechts: Sie überdecken sich auch bei flachen Kacheln nicht.
         Row(
             Modifier
-                .align(Alignment.TopEnd)
+                .align(Alignment.BottomStart)
                 .padding(8.dp)
                 .clip(RoundedCornerShape(50))
                 .background(c.sheetGlass)
@@ -715,7 +708,7 @@ private fun EditBar(onReset: () -> Unit, onDone: () -> Unit) {
             Column(Modifier.weight(1f)) {
                 Text("Startseite anpassen", style = T.section, color = c.text)
                 Text(
-                    "Kachel antippen = auswählen. Ecke unten rechts ziehen = Größe. Gedrückt halten und ziehen = verschieben.",
+                    "Ecke ziehen = Größe · Halten und ziehen = verschieben",
                     style = T.small,
                     color = c.sub,
                 )
