@@ -169,6 +169,7 @@ fun AppRoot(startRoute: String? = null) {
     }
 
     val sheetBlur = remember { de.schulplaner.ui.components.SheetBlurState() }
+    val moodHost = remember { de.schulplaner.ui.today.MoodHost() }
     val readOnly by androidx.compose.ui.platform.LocalContext.current.app.prefs.readOnly.collectAsStateWithLifecycle()
     CompositionLocalProvider(
         LocalNavigator provides navigator,
@@ -176,6 +177,7 @@ fun AppRoot(startRoute: String? = null) {
         LocalConfetti provides confetti,
         de.schulplaner.ui.components.LocalSheetBlur provides sheetBlur,
         de.schulplaner.ui.components.LocalReadOnly provides readOnly,
+        de.schulplaner.ui.today.LocalMoodHost provides moodHost,
     ) {
         AppBackground(Modifier.blurWhenSheetOpen(sheetBlur)) {
             val fadeTop = androidx.compose.foundation.layout.WindowInsets.statusBars
@@ -240,6 +242,10 @@ fun AppRoot(startRoute: String? = null) {
             }
             UndoBar(undo, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 84.dp))
             BottomNav(navigator, route, Modifier.align(Alignment.BottomCenter))
+            // Stimmungs-Tracker (versteckt): liegt über allem, im Ansichtsmodus gibt es ihn nicht.
+            if (!readOnly && moodHost.visible) {
+                de.schulplaner.ui.today.MoodOverlay(moodHost.origin) { moodHost.close() }
+            }
             ConfettiOverlay(confetti)
         }
         BackHandler(enabled = route == Routes.MAIN && pager.currentPage != Tabs.TODAY) { navigator.tab(Tabs.TODAY) }

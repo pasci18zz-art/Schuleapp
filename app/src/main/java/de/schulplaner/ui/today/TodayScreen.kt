@@ -14,6 +14,8 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.rotate
@@ -167,7 +169,8 @@ fun TodayScreen() {
     )
 
     var editTask by remember { mutableStateOf<Pair<Task, Boolean>?>(null) }
-    var showMood by remember { mutableStateOf(false) }
+    val moodHost = de.schulplaner.ui.today.LocalMoodHost.current
+    var sunCoords by remember { mutableStateOf<androidx.compose.ui.layout.LayoutCoordinates?>(null) }
     var pickDaily by remember { mutableStateOf(false) }
     val readOnly = de.schulplaner.ui.components.LocalReadOnly.current
     val onAddTask: (() -> Unit)? = if (readOnly) null else ({ editTask = TaskDefaults.quick(LocalDateTime.now(), schedule) to true })
@@ -184,38 +187,46 @@ fun TodayScreen() {
     // Beim Verlassen der Startseite den Bearbeiten-Modus beenden.
     androidx.compose.runtime.DisposableEffect(Unit) { onDispose { HomeLayoutStore.editing = false } }
 
+    val scroll = rememberScrollState()
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val wide = maxWidth >= 840.dp
         val cols = if (wide) 3 else 2
+        val viewportPx = with(androidx.compose.ui.platform.LocalDensity.current) { maxHeight.toPx() }
         Column(
             Modifier
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(scroll)
                 .padding(screenPadding(if (wide) 28 else 16)),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             // Sonne bzw. Mond oben rechts in der Ecke – nur gezeichnet, nimmt keinen Platz weg.
             // Langes Drücken darauf öffnet (versteckt) den Stimmungs-Tracker.
             Box(Modifier.appear(0)) {
-                SkyArt(now.hour, Modifier.matchParentSize(), pop = sunPop.value)
+                SkyArt(now.hour, Modifier.matchParentSize(), pop = { sunPop.value })
                 ScreenHeader(
                     title = "Heute",
                     overline = Fmt.full(today),
                     chip = state.weekLabel,
                 )
                 if (!readOnly) {
+                    // Genau über der Sonne (46 dp vom rechten, 34 dp vom oberen Rand).
                     Box(
                         Modifier
                             .align(Alignment.TopEnd)
-                            .size(width = 112.dp, height = 84.dp)
+                            .size(width = 92.dp, height = 68.dp)
+                            .onGloballyPositioned { sunCoords = it }
                             .pointerInput(Unit) {
                                 detectTapGestures(onLongPress = {
                                     haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
                                     scope.launch {
-                                        sunPop.animateTo(1.35f, tween(160))
-                                        sunPop.animateTo(1f, androidx.compose.animation.core.spring(dampingRatio = 0.35f, stiffness = 300f))
+                                        // Erst hüpft die Sonne kurz hoch, dann wächst die Stimmungsseite aus ihr heraus.
+                                        sunPop.animateTo(1.4f, tween(140, easing = androidx.compose.animation.core.FastOutSlowInEasing))
+                                        val lc = sunCoords
+                                        if (lc != null && lc.isAttached) {
+                                            moodHost.open(lc.positionInRoot() + Offset(lc.size.width / 2f, lc.size.height / 2f))
+                                        }
+                                        sunPop.animateTo(1f, androidx.compose.animation.core.spring(dampingRatio = 0.4f, stiffness = 260f))
                                     }
-                                    showMood = true
                                 })
                             },
                     )
@@ -234,13 +245,16 @@ fun TodayScreen() {
             }
 
             // Adventskalender (1.–24. Dezember) – nicht im Ansichtsmodus.
-            if (!readOnly && adventVisible(today)) AdventCard(today, Modifier.appear(1))
+            // Bleibt fest ganz oben (nicht verschiebbar) und macht sich klein, sobald das Türchen von heute offen ist.
+            if (!readOnly && !editing && adventVisible(today)) AdventCard(today, Modifier.appear(1))
 
             Box(Modifier.appear(1)) {
                 HomeGrid(
                     cols = cols,
                     gap = if (wide) 16.dp else 12.dp,
                     editable = !readOnly,
+                    scroll = scroll,
+                    viewportPx = viewportPx,
                     available = { t ->
                         when (t) {
                             HomeTile.MONSTER -> !readOnly
@@ -307,7 +321,6 @@ fun TodayScreen() {
         }
     }
     if (pickDaily) DailyPickerSheet(onDismiss = { pickDaily = false })
-    if (showMood && !readOnly) MoodOverlay(onClose = { showMood = false })
 }
 
 @Composable
@@ -403,7 +416,7 @@ private fun NowTile(s: TodayState, modifier: Modifier = Modifier) {
  * mit funkelnden Sternen (abends) – oben rechts, mit weichem Leuchten, das in den Hintergrund übergeht.
  */
 @Composable
-private fun SkyArt(hour: Int, modifier: Modifier = Modifier, pop: Float = 1f) {
+private fun SkyArt(hour: Int, modifier: Modifier = Modifier, pop: () -> Float = { 1f }) {
     val day = hour in 6..17
     val t = rememberInfiniteTransition(label = "sky")
     val spin by t.animateFloat(0f, 360f, infiniteRepeatable(tween(30000, easing = LinearEasing)), label = "spin")
@@ -414,7 +427,7 @@ private fun SkyArt(hour: Int, modifier: Modifier = Modifier, pop: Float = 1f) {
         val d = density
         val cx = size.width - 46 * d
         val cy = 34 * d
-        scale(pop, Offset(cx, cy)) {
+        scale(pop(), Offset(cx, cy)) {
         if (day) {
             // Warmes Leuchten, das sanft ausläuft.
             drawCircle(Brush.radialGradient(listOf(Color(0x80FFD36E), Color(0x00FFD36E)), Offset(cx, cy), 120 * d * pulse), 120 * d * pulse, Offset(cx, cy))

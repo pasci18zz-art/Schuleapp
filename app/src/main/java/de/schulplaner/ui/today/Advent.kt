@@ -161,14 +161,21 @@ fun AdventCard(today: LocalDate, modifier: Modifier = Modifier) {
                     drawCircle(Color.White.copy(alpha = 0.15f + 0.45f * a), (1.2f + (i % 3)) * density, Offset(x, y))
                 }
             }
+            // Ist das Türchen von heute schon offen, bleibt nur eine schmale Zeile – sie steht nicht im Weg.
+            val slim = !isPreview && opened(todayDoor) && !expanded
             Row(
                 Modifier
                     .fillMaxWidth()
                     .clickable(enabled = !isPreview) { expanded = !expanded }
-                    .padding(14.dp),
+                    .padding(horizontal = 14.dp, vertical = if (slim) 9.dp else 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
+                if (slim) {
+                    Text("Adventskalender", style = T.label, color = Gold)
+                    Text("$openedCount von 24 geöffnet", style = T.small, color = Color.White.copy(alpha = 0.8f), modifier = Modifier.weight(1f))
+                    Icon(Ic.ChevronDown, "Alle Türchen zeigen", tint = Gold, modifier = Modifier.size(20.dp))
+                } else {
                 Column(Modifier.weight(1f)) {
                     Text(if (isPreview) "KLEINER VORGESCHMACK" else "ADVENTSKALENDER", style = T.overline, color = Gold)
                     Text(
@@ -192,6 +199,7 @@ fun AdventCard(today: LocalDate, modifier: Modifier = Modifier) {
                     big = true,
                     motif = if (isPreview) preview.motif else gifts[todayDoor - 1].motif,
                 ) { open = todayDoor }
+                }
             }
         }
         if (expanded && !isPreview) {
@@ -239,7 +247,7 @@ private fun Door(number: Int, opened: Boolean, available: Boolean, glow: Float, 
     val shape = RoundedCornerShape(if (big) 18.dp else 12.dp)
     Box(
         Modifier
-            .then(if (big) Modifier.size(64.dp) else Modifier.fillMaxWidth().aspectRatio(0.82f))
+            .then(if (big) Modifier.size(54.dp) else Modifier.fillMaxWidth().aspectRatio(0.82f))
             .graphicsLayer { translationX = shake.value }
             .clip(shape)
             .background(

@@ -1,6 +1,16 @@
 package de.schulplaner.ui.today
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.Outline
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.LayoutDirection
+import kotlin.math.max
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -141,47 +151,84 @@ fun DrawScope.moodFace(level: Int, center: Offset, radius: Float, fill: Color = 
 
 private fun Color.lighten(f: Float) = Color(red + (1f - red) * f, green + (1f - green) * f, blue + (1f - blue) * f, alpha)
 
+/** Gemeinsamer Zustand: Wo der Stimmungs-Tracker gerade offen ist und aus welchem Punkt (Sonne/Mond) er wächst. */
+class MoodHost {
+    var visible by mutableStateOf(false)
+        private set
+    var origin by mutableStateOf(Offset.Zero)
+        private set
+
+    fun open(at: Offset) {
+        origin = at
+        visible = true
+    }
+
+    fun close() {
+        visible = false
+    }
+}
+
+val LocalMoodHost = androidx.compose.runtime.staticCompositionLocalOf { MoodHost() }
+
+/** Sanft anfahren, lange ausrollen. */
+private val Emphasized = CubicBezierEasing(0.2f, 0f, 0f, 1f)
+private val EmphasizedIn = CubicBezierEasing(0.4f, 0f, 0.2f, 1f)
+
+/** Wachsender Kreis ab [origin]. Als Layer-Ausschnitt gezeichnet: Der Inhalt wird nur einmal aufgenommen und dann nur noch beschnitten. */
+private class RevealShape(private val origin: Offset, private val progress: Float) : Shape {
+    override fun createOutline(size: Size, layoutDirection: LayoutDirection, density: Density): Outline {
+        val far = hypot(max(origin.x, size.width - origin.x), max(origin.y, size.height - origin.y))
+        return Outline.Generic(Path().apply { addOval(Rect(origin, far * progress)) })
+    }
+}
+
 /**
  * Versteckter Stimmungs-Tracker (langes Drücken auf Sonne/Mond). Wächst als Kreis aus der Sonne heraus.
- * Im Ansichtsmodus gibt es ihn nicht.
+ * Liegt direkt in der App (kein eigenes Fenster) und ist im Ansichtsmodus nicht vorhanden.
  */
 @Composable
-fun MoodOverlay(onClose: () -> Unit) {
+fun MoodOverlay(origin: Offset, onClose: () -> Unit) {
     val reveal = remember { Animatable(0f) }
     val scope = rememberCoroutineScope()
     var closing by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) { reveal.animateTo(1f, tween(620, easing = FastOutSlowInEasing)) }
+    // Der erste Aufbau ist schwer: zwei Bilder abwarten, damit er nicht in die Animation fällt (das war das Ruckeln).
+    LaunchedEffect(Unit) {
+        withFrameNanos { }
+        withFrameNanos { }
+        reveal.animateTo(1f, tween(640, easing = Emphasized))
+    }
     val close: () -> Unit = {
         if (!closing) {
             closing = true
             scope.launch {
-                reveal.animateTo(0f, tween(380, easing = FastOutSlowInEasing))
+                reveal.animateTo(0f, tween(380, easing = EmphasizedIn))
                 onClose()
             }
         }
     }
-    Dialog(onDismissRequest = close, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
-        BackHandler(onBack = close)
-        val density = LocalDensity.current
-        Box(
-            Modifier
-                .fillMaxSize()
-                .drawWithContent {
-                    val origin = Offset(size.width - with(density) { 64.dp.toPx() }, with(density) { 86.dp.toPx() })
-                    val maxR = hypot(origin.x.toDouble(), (size.height - origin.y).toDouble()).toFloat() + 40f
-                    val r = maxR * reveal.value
-                    clipPath(Path().apply { addOval(androidx.compose.ui.geometry.Rect(origin, r)) }) {
-                        this@drawWithContent.drawContent()
-                    }
-                },
-        ) {
-            MoodContent(close)
-        }
+    BackHandler(onBack = close)
+    // Die schwere Monatsübersicht erst aufbauen, wenn der Kreis schon groß ist.
+    val ready by remember { derivedStateOf { reveal.value > 0.4f } }
+    Box(
+        Modifier
+            .fillMaxSize()
+            .graphicsLayer {
+                shape = RevealShape(origin, reveal.value)
+                clip = true
+                alpha = (reveal.value * 5f).coerceAtMost(1f)
+            }
+            // Berührungen nicht an die Seite dahinter durchlassen.
+            .pointerInput(Unit) { detectTapGestures { } },
+    ) {
+        MoodContent(close, ready)
     }
 }
 
+/** Blinzeln: kurz vor Ende jedes Durchlaufs schließen sich die Augen (0 = offen, 1 = zu). */
+private fun blinkOf(phase: Float): Float = if (phase > 0.95f) (1f - kotlin.math.abs(phase - 0.975f) / 0.025f).coerceIn(0f, 1f) else 0f
+
 @Composable
-private fun MoodContent(onClose: () -> Unit) {
+private fun MoodContent(onClose: () -> Unit, showMonth: Boolean) {
     val c = colors
     val repo = LocalContext.current.app.repo
     val settings by repo.settings.collectAsStateWithLifecycle()
@@ -209,8 +256,8 @@ private fun MoodContent(onClose: () -> Unit) {
 
     val t = rememberInfiniteTransition(label = "mood-bg")
     val drift by t.animateFloat(0f, 1f, infiniteRepeatable(tween(14000, easing = LinearEasing), RepeatMode.Reverse), label = "drift")
-    val blinkPhase by t.animateFloat(0f, 1f, infiniteRepeatable(tween(4200, easing = LinearEasing), RepeatMode.Restart), label = "blink")
-    val blink = if (blinkPhase > 0.95f) (1f - kotlin.math.abs(blinkPhase - 0.975f) / 0.025f) else 0f
+    // Als State (ohne "by") und nur beim Zeichnen gelesen – sonst würde die ganze Seite in jedem Bild neu berechnet.
+    val blinkPhase = t.animateFloat(0f, 1f, infiniteRepeatable(tween(4200, easing = LinearEasing), RepeatMode.Restart), label = "blink")
 
     Box(
         Modifier
@@ -269,7 +316,7 @@ private fun MoodContent(onClose: () -> Unit) {
                     val r = size.minDimension / 2
                     drawCircle(Brush.radialGradient(listOf(tint.copy(alpha = 0.45f), Color.Transparent), center, r * 1.0f), r, center)
                     if (level > 0) {
-                        moodFace(level, center, r * 0.8f, blink = blink)
+                        moodFace(level, center, r * 0.8f, blink = blinkOf(blinkPhase.value))
                     } else {
                         drawCircle(c.line, r * 0.8f, center)
                         drawCircle(c.sub.copy(alpha = 0.5f), r * 0.8f, center, style = Stroke(2.dp.toPx(), pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(10f, 10f))))
@@ -354,18 +401,20 @@ private fun MoodContent(onClose: () -> Unit) {
                     )
                 }
 
-                MoodMonth(
-                    month = month,
-                    today = today,
-                    selected = day,
-                    moodOf = { moodOf(it) },
-                    onMonth = { month = it },
-                    onPick = { d ->
-                        saveNote()
-                        day = d
-                    },
-                    modifier = Modifier.padding(top = 22.dp),
-                )
+                if (showMonth) {
+                    MoodMonth(
+                        month = month,
+                        today = today,
+                        selected = day,
+                        moodOf = { moodOf(it) },
+                        onMonth = { month = it },
+                        onPick = { d ->
+                            saveNote()
+                            day = d
+                        },
+                        modifier = Modifier.padding(top = 22.dp),
+                    )
+                }
                 Spacer(Modifier.height(24.dp))
             }
         }
