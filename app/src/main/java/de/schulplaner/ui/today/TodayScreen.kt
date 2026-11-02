@@ -183,9 +183,17 @@ fun TodayScreen() {
     val sunPop = remember { androidx.compose.animation.core.Animatable(1f) }
     val scope = rememberCoroutineScope()
     val editing = HomeLayoutStore.editing && !readOnly
-    androidx.activity.compose.BackHandler(enabled = editing) { HomeLayoutStore.editing = false }
+    androidx.activity.compose.BackHandler(enabled = editing) {
+        HomeLayoutStore.editing = false
+        HomeLayoutStore.selected = null
+    }
     // Beim Verlassen der Startseite den Bearbeiten-Modus beenden.
-    androidx.compose.runtime.DisposableEffect(Unit) { onDispose { HomeLayoutStore.editing = false } }
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        onDispose {
+            HomeLayoutStore.editing = false
+            HomeLayoutStore.selected = null
+        }
+    }
 
     val scroll = rememberScrollState()
     BoxWithConstraints(Modifier.fillMaxSize()) {
@@ -262,8 +270,11 @@ fun TodayScreen() {
                             else -> true
                         }
                     },
-                ) { tile, span, m ->
+                ) { tile, span, m, h ->
                     val half = !wide && span == 1
+                    // Je höher die Kachel, desto mehr Einträge passen in Listen.
+                    fun fit(header: Float, item: Float, default: Int) =
+                        if (h != null) ((h.value - header) / item).toInt().coerceIn(1, 14) else default
                     when (tile) {
                         HomeTile.DAILY -> DailyTile(
                             daily, schedule.subjects, today,
@@ -275,7 +286,7 @@ fun TodayScreen() {
                         HomeTile.NOW -> NowTile(state, m)
                         HomeTile.TASKS -> TasksTile(
                             state,
-                            max = if (wide) 8 else if (half) 2 else 4,
+                            max = fit(64f, if (half) 52f else 60f, if (wide) 8 else if (half) 2 else 4),
                             compact = half,
                             onOpen = { nav.tab(Tabs.TASKS) },
                             onEdit = { editTask = it to false },
@@ -285,7 +296,7 @@ fun TodayScreen() {
                         HomeTile.EXAMS -> if (half) {
                             ExamTile(state, onOpen = { nav.open(Routes.exam(it.id)) }, onEmpty = { nav.tab(Tabs.EXAMS) }, modifier = m)
                         } else {
-                            ExamsListTile(state, onOpen = { nav.open(Routes.exam(it.id)) }, modifier = m)
+                            ExamsListTile(state, onOpen = { nav.open(Routes.exam(it.id)) }, modifier = m, max = fit(56f, 76f, 4))
                         }
                         HomeTile.LESSONS -> LessonsTile(state, schedule, onLessonClick, m)
                         HomeTile.STUDY -> StudyTile(m, onOpen = { nav.open(Routes.STUDY) })
@@ -728,12 +739,12 @@ private fun ExamTile(s: TodayState, onOpen: (Exam) -> Unit, onEmpty: () -> Unit,
 }
 
 @Composable
-private fun ExamsListTile(s: TodayState, onOpen: (Exam) -> Unit, modifier: Modifier = Modifier) {
+private fun ExamsListTile(s: TodayState, onOpen: (Exam) -> Unit, modifier: Modifier = Modifier, max: Int = 4) {
     val c = colors
     GlassCard(modifier, padding = androidx.compose.foundation.layout.PaddingValues(18.dp)) {
         Text("Klausuren", style = T.section, color = c.text)
         if (s.exams.isEmpty()) Text("Keine Klausuren in Sicht", style = T.small, color = c.sub, modifier = Modifier.padding(top = 10.dp))
-        s.exams.take(4).forEach { e ->
+        s.exams.take(max).forEach { e ->
             val subject = s.subjects[e.subjectId]
             val ts = s.topics.filter { it.examId == e.id }
             val progress = if (ts.isEmpty()) 0f else ts.count { it.done }.toFloat() / ts.size
