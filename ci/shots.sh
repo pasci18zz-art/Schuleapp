@@ -36,8 +36,15 @@ echo "Bildschirm ${W}x${H}, Dichte ${DENS}"
 shot 01_start
 dump 01
 
-# Lange auf eine Kachel drücken -> Anpassen-Modus.
-press $((W / 2)) $((H * 45 / 100)) 1100
+# Lange auf eine echte Kachel (Tagesaufgaben) drücken -> Anpassen-Modus.
+T=$(find 01 text "Tagesaufgaben")
+echo "Kachel Tagesaufgaben: $T"
+if [ -n "$T" ]; then
+  set -- $T
+  press $1 $2 1100
+else
+  press $((W / 2)) $((H * 70 / 100)) 1100
+fi
 sleep 2
 shot 02_anpassen
 dump 02
@@ -73,8 +80,22 @@ if [ -n "$A" ] && [ -n "$B" ]; then
   dump 05
 fi
 
+# Zahnrad: Einstellungen der ausgewählten Kachel.
+dump 08
+G=$(find 08 desc "Einstellungen")
+echo "Zahnrad: $G"
+if [ -n "$G" ]; then
+  set -- $G
+  adb shell input tap $1 $2
+  sleep 2
+  shot 08_einstellungen
+  adb shell input keyevent KEYCODE_BACK
+  sleep 2
+fi
+
 # Fertig tippen.
-F=$(find 02 text "Fertig")
+dump 09
+F=$(find 09 text "Fertig")
 if [ -n "$F" ]; then
   set -- $F
   adb shell input tap $1 $2
