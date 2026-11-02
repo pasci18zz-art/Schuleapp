@@ -107,6 +107,7 @@ object Routes {
     const val SET_HOLIDAYS = "settings/holidays"
     const val SET_KINDS = "settings/kinds"
     const val STUDY = "study"
+    const val BRIEF = "brief"
 
     fun exam(id: String) = "exam/$id"
     fun subjectGrades(subjectId: String, termId: String) = "grades/$subjectId/$termId"
@@ -162,6 +163,7 @@ fun AppRoot(startRoute: String? = null) {
         when (startRoute) {
             "tasks" -> navigator.tab(Tabs.TASKS)
             Routes.STUDY -> navigator.open(Routes.STUDY)
+            Routes.BRIEF -> navigator.open(Routes.BRIEF)
             else -> startRoute?.let { if (it.startsWith("exam/")) navigator.open(it) }
         }
     }
@@ -226,6 +228,7 @@ fun AppRoot(startRoute: String? = null) {
                 composable(Routes.SET_HOLIDAYS) { Centered { HolidaysScreen() } }
                 composable(Routes.SET_KINDS) { Centered { de.schulplaner.ui.settings.TaskKindsScreen() } }
                 composable(Routes.STUDY) { Centered { de.schulplaner.ui.study.StudyScreen() } }
+                composable(Routes.BRIEF) { Centered { de.schulplaner.brief.BriefScreen() } }
             }
             }
             if (readOnly) {

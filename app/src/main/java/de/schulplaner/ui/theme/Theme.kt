@@ -161,13 +161,14 @@ object T {
 }
 
 @Composable
-fun SchulTheme(mode: String = "system", content: @Composable () -> Unit) {
+fun SchulTheme(mode: String = "system", season: String = "standard", content: @Composable () -> Unit) {
     val dark = when (mode) {
         "light" -> false
         "dark" -> true
         else -> isSystemInDarkTheme()
     }
-    val c = if (dark) DarkSchulColors else LightSchulColors
+    val s = androidx.compose.runtime.remember(season) { Season.resolve(season) }
+    val c = (if (dark) DarkSchulColors else LightSchulColors).forSeason(s)
     val scheme = if (dark) {
         darkColorScheme(
             primary = c.accent, onPrimary = c.accentInk, primaryContainer = c.accentSoft, onPrimaryContainer = c.accent,
@@ -185,7 +186,7 @@ fun SchulTheme(mode: String = "system", content: @Composable () -> Unit) {
             surfaceContainer = c.sheet, error = c.warn,
         )
     }
-    CompositionLocalProvider(LocalSchulColors provides c) {
+    CompositionLocalProvider(LocalSchulColors provides c, LocalSeason provides s) {
         MaterialTheme(colorScheme = scheme, typography = typography(), content = content)
     }
 }

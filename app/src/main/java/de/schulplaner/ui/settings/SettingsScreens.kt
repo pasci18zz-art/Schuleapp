@@ -152,6 +152,10 @@ fun SettingsScreen() {
     val reminderOn by prefs.reminderOn.collectAsStateWithLifecycle(true)
     val reminderMinute by prefs.reminderMinute.collectAsStateWithLifecycle(18 * 60)
     var pickTime by remember { mutableStateOf(false) }
+    var pickBriefTime by remember { mutableStateOf(false) }
+    val season by prefs.season.collectAsStateWithLifecycle("standard")
+    val briefOn by prefs.briefOn.collectAsStateWithLifecycle(true)
+    val briefMinute by prefs.briefMinute.collectAsStateWithLifecycle(6 * 60 + 30)
     val today = LocalDate.now()
     val readOnly by prefs.readOnly.collectAsStateWithLifecycle()
     val settingsMap by repo.settings.collectAsStateWithLifecycle()
@@ -202,6 +206,61 @@ fun SettingsScreen() {
                 { v -> scope.launch { prefs.setTheme(v) } },
                 Modifier.padding(top = 12.dp),
             )
+            Text("Design-Thema", style = T.label, color = c.sub, modifier = Modifier.padding(top = 16.dp, bottom = 8.dp))
+            val auto = de.schulplaner.ui.theme.Season.forDate(today)
+            val options = listOf("standard" to "Standard", de.schulplaner.ui.theme.Season.AUTO to "Saisonal · ${auto.label}") +
+                de.schulplaner.ui.theme.Season.entries.filter { it != de.schulplaner.ui.theme.Season.STANDARD }.map { it.key to it.label }
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                options.forEach { (key, label) ->
+                    val look = de.schulplaner.ui.theme.Season.resolve(key, today)
+                    de.schulplaner.ui.components.ChoiceChip(label, season == key, { scope.launch { prefs.setSeason(key) } }, leading = {
+                        SeasonDot(look)
+                    })
+                }
+            }
+            Text(
+                "Saisonal wechselt von selbst: Herbstblätter, Schnee, Weihnachten, Frühlingsblüten, Sommerfunkeln.",
+                style = T.small,
+                color = c.sub,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+        }
+
+        if (!readOnly) GlassCard(padding = PaddingValues(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Icon(Ic.Sun, null, tint = c.accent, modifier = Modifier.size(22.dp))
+                Text("Morgenbrief", style = T.section, color = c.text, modifier = Modifier.weight(1f))
+                MiniSegmented(listOf(true to "An", false to "Aus"), briefOn, { on ->
+                    scope.launch {
+                        prefs.setBrief(on, briefMinute)
+                        de.schulplaner.brief.MorningBrief.scheduleFromPrefs(ctx)
+                    }
+                }, Modifier.width(110.dp))
+            }
+            if (briefOn) {
+                Row(Modifier.padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Uhrzeit", style = T.body, color = c.sub, modifier = Modifier.weight(1f))
+                    Text(
+                        Fmt.minutes(briefMinute) + " Uhr",
+                        style = T.body,
+                        color = c.text,
+                        modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(c.line).clickable { pickBriefTime = true }.padding(horizontal = 12.dp, vertical = 8.dp),
+                    )
+                }
+                Text(
+                    "Tagesüberblick als Live-Mitteilung (Now Bar): Stunden, wichtigste Aufgaben, Klausuren, Besonderes. " +
+                        "Am Wochenende und in den Ferien nur, wenn noch Aufgaben offen sind. Verschwindet zu Unterrichtsbeginn.",
+                    style = T.small,
+                    color = c.sub,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+            }
+            Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                de.schulplaner.ui.components.ChoiceChip("Ansehen", false, { nav.open(Routes.BRIEF) })
+                de.schulplaner.ui.components.ChoiceChip("Testen", false, {
+                    scope.launch(kotlinx.coroutines.Dispatchers.IO) { de.schulplaner.brief.MorningBrief.fire(ctx, force = true) }
+                })
+            }
         }
 
         GlassCard(padding = PaddingValues(16.dp)) {
@@ -307,6 +366,14 @@ fun SettingsScreen() {
             scope.launch {
                 prefs.setReminder(true, m)
                 Reminders.scheduleFromPrefs(ctx, replace = true)
+            }
+        }
+    }
+    if (pickBriefTime) {
+        TimeDialog(briefMinute, onDismiss = { pickBriefTime = false }) { m ->
+            scope.launch {
+                prefs.setBrief(true, m)
+                de.schulplaner.brief.MorningBrief.scheduleFromPrefs(ctx)
             }
         }
     }
@@ -1015,4 +1082,17 @@ private fun SyncCard() {
             }
         }
     }
+}
+
+@Composable
+private fun SeasonDot(s: de.schulplaner.ui.theme.Season) {
+    val colors = when (s) {
+        de.schulplaner.ui.theme.Season.STANDARD -> listOf(Color(0xFF7C8DFF), Color(0xFFFFA468))
+        de.schulplaner.ui.theme.Season.SPRING -> listOf(Color(0xFFFF9EC7), Color(0xFFA7E07A))
+        de.schulplaner.ui.theme.Season.SUMMER -> listOf(Color(0xFFFFC94D), Color(0xFF45D6D0))
+        de.schulplaner.ui.theme.Season.AUTUMN -> listOf(Color(0xFFFFA94D), Color(0xFFE0603A))
+        de.schulplaner.ui.theme.Season.WINTER -> listOf(Color(0xFF8EC5FF), Color(0xFFB9A6FF))
+        de.schulplaner.ui.theme.Season.XMAS -> listOf(Color(0xFFE5484D), Color(0xFF3FAE6B))
+    }
+    Box(Modifier.size(14.dp).clip(CircleShape).background(androidx.compose.ui.graphics.Brush.linearGradient(colors)))
 }

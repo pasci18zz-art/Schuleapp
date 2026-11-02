@@ -5,6 +5,8 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Laufende Lernsession als Live-Update (Now Bar bei Samsung, ab Android 16) -->
     <uses-permission android:name="android.permission.POST_PROMOTED_NOTIFICATIONS" />
+    <!-- Morgenbrief nach Neustart wieder einplanen -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <!-- App-Verknüpfungen auf der Startseite (Notes, Claude, Spotify) und Auswahl anderer Apps -->
     <queries>
@@ -71,6 +73,15 @@
         <receiver
             android:name=".widget.ActionReceiver"
             android:exported="false" />
+
+        <receiver
+            android:name=".brief.BriefReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
 
         <receiver
             android:name=".widget.TodayWidget"

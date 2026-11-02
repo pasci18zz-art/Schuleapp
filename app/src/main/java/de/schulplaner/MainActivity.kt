@@ -22,7 +22,8 @@ class MainActivity : ComponentActivity() {
         val route = if (savedInstanceState == null) intent?.getStringExtra(EXTRA_ROUTE) else null
         setContent {
             val theme by app.prefs.theme.collectAsStateWithLifecycle("system")
-            SchulTheme(theme) {
+            val season by app.prefs.season.collectAsStateWithLifecycle("standard")
+            SchulTheme(theme, season) {
                 AppRoot(startRoute = route)
             }
         }

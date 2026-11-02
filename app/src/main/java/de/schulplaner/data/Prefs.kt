@@ -20,6 +20,29 @@ class Prefs(private val context: Context) {
     private val reminderOnKey = booleanPreferencesKey("reminder_on")
     private val reminderMinuteKey = intPreferencesKey("reminder_minute")
     private val notifAskedKey = booleanPreferencesKey("notif_asked")
+    private val seasonKey = stringPreferencesKey("season")
+    private val briefOnKey = booleanPreferencesKey("brief_on")
+    private val briefMinuteKey = intPreferencesKey("brief_minute")
+
+    /** Design-Thema: "standard", "saisonal" oder eine feste Jahreszeit (siehe Season). */
+    val season: Flow<String> = context.dataStore.data.map { it[seasonKey] ?: "standard" }
+
+    suspend fun setSeason(value: String) {
+        context.dataStore.edit { it[seasonKey] = value }
+    }
+
+    /** Morgenbrief: Tagesüberblick als Live-Mitteilung (Standard 6:30 Uhr). */
+    val briefOn: Flow<Boolean> = context.dataStore.data.map { it[briefOnKey] ?: true }
+    val briefMinute: Flow<Int> = context.dataStore.data.map { it[briefMinuteKey] ?: (6 * 60 + 30) }
+
+    suspend fun setBrief(on: Boolean, minute: Int) {
+        context.dataStore.edit {
+            it[briefOnKey] = on
+            it[briefMinuteKey] = minute
+        }
+    }
+
+    suspend fun briefSnapshot(): Pair<Boolean, Int> = briefOn.first() to briefMinute.first()
 
     /** Gewählte Apps für die Verknüpfungen auf der Startseite (Schlüssel → Paketname). */
     val appLinks: Flow<Map<String, String>> = context.dataStore.data.map { prefs ->

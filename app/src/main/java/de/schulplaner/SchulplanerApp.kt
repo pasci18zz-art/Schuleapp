@@ -60,6 +60,7 @@ class SchulplanerApp : Application() {
             repo.seedHessenHolidays()
         }
         appScope.launch { Reminders.scheduleFromPrefs(this@SchulplanerApp, replace = false) }
+        appScope.launch { runCatching { de.schulplaner.brief.MorningBrief.scheduleFromPrefs(this@SchulplanerApp) } }
 
         // Lern-Mitteilung folgt der aktuellen Session (auch wenn sie vom anderen Gerät kommt).
         appScope.launch {

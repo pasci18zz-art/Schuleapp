@@ -47,6 +47,7 @@ class QuickAddActivity : ComponentActivity() {
         val blur = applyWindowBlur()
         setContent {
             val theme by app.prefs.theme.collectAsStateWithLifecycle("system")
+            val season by app.prefs.season.collectAsStateWithLifecycle("standard")
             val task by produceState<Task?>(null) {
                 // Beim Kaltstart kurz warten, bis der Stundenplan aus der Datenbank geladen ist.
                 val data = withTimeoutOrNull(2000) {
@@ -54,7 +55,7 @@ class QuickAddActivity : ComponentActivity() {
                 } ?: repo.scheduleData.value
                 value = TaskDefaults.quick(LocalDateTime.now(), data)
             }
-            SchulTheme(theme) {
+            SchulTheme(theme, season) {
                 // Frosted Glass hinter dem Sheet: Mit Fenster-Unschärfe nur leicht abgedunkelt,
                 // sonst (Unschärfe aus/Energiesparen) ein dunkles, fast deckendes Glas.
                 var shown by remember { mutableStateOf(false) }

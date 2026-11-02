@@ -233,6 +233,9 @@ fun TodayScreen() {
                 }
             }
 
+            // Adventskalender (1.–24. Dezember) – nicht im Ansichtsmodus.
+            if (!readOnly && adventVisible(today)) AdventCard(today, Modifier.appear(1))
+
             Box(Modifier.appear(1)) {
                 HomeGrid(
                     cols = cols,

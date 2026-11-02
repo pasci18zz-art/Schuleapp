@@ -27,6 +27,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.statusBars
+import de.schulplaner.ui.theme.fairyLights
+import de.schulplaner.ui.theme.seasonParticles
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -109,6 +113,10 @@ fun AppBackground(modifier: Modifier = Modifier, content: @Composable BoxScope.(
     val a = t.animateFloat(0f, 1f, infiniteRepeatable(tween(23000, easing = LinearEasing), RepeatMode.Reverse), label = "a")
     val b = t.animateFloat(0f, 1f, infiniteRepeatable(tween(31000, easing = LinearEasing), RepeatMode.Reverse), label = "b")
     val drift = t.animateFloat(0f, 1f, infiniteRepeatable(tween(40000, easing = LinearEasing), RepeatMode.Restart), label = "drift")
+    val season = de.schulplaner.ui.theme.LocalSeason.current
+    // Eine Minute pro Durchlauf: Blätter, Schnee, Blüten, Funkeln (nur, wenn ein Thema gewählt ist).
+    val minute = t.animateFloat(0f, 1f, infiniteRepeatable(tween(60000, easing = LinearEasing), RepeatMode.Restart), label = "season")
+    val topInset = androidx.compose.foundation.layout.WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     Box(modifier.fillMaxSize().background(c.bg)) {
         // Eigene Ebene nur für den Hintergrund (Geschwister der Inhalte), damit die Kacheln genau diese Ebene weichzeichnen.
         Box(
@@ -137,10 +145,16 @@ fun AppBackground(modifier: Modifier = Modifier, content: @Composable BoxScope.(
                         val r = (3f + (i % 3) * 1.8f) * density
                         drawCircle(if (i % 2 == 0) c.accent.copy(alpha = 0.16f) else c.orb2.copy(alpha = 0.5f), r, Offset(x, y))
                     }
+                    seasonParticles(season, minute.value, c.isDark, front = false)
+                    if (season == de.schulplaner.ui.theme.Season.XMAS) fairyLights(minute.value, topInset.toPx() + 2.dp.toPx())
                 },
         )
         androidx.compose.runtime.CompositionLocalProvider(LocalHaze provides haze) {
             Box(Modifier.fillMaxSize(), content = content)
+        }
+        // Ein paar größere Teilchen schweben auch vor den Inhalten (fangen keine Berührungen ab).
+        if (season != de.schulplaner.ui.theme.Season.STANDARD) {
+            Box(Modifier.fillMaxSize().drawBehind { seasonParticles(season, minute.value, c.isDark, front = true) })
         }
     }
 }
