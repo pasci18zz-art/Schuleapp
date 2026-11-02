@@ -17,6 +17,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.drawscope.scale
 import de.schulplaner.ui.components.HeroCard
 import de.schulplaner.ui.components.appear
 import kotlin.math.cos
@@ -410,7 +411,7 @@ private fun SkyArt(hour: Int, modifier: Modifier = Modifier, pop: Float = 1f) {
         val d = density
         val cx = size.width - 46 * d
         val cy = 34 * d
-        androidx.compose.ui.graphics.drawscope.scale(pop, Offset(cx, cy)) {
+        scale(pop, Offset(cx, cy)) {
         if (day) {
             // Warmes Leuchten, das sanft ausläuft.
             drawCircle(Brush.radialGradient(listOf(Color(0x80FFD36E), Color(0x00FFD36E)), Offset(cx, cy), 120 * d * pulse), 120 * d * pulse, Offset(cx, cy))
