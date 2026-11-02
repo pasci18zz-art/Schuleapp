@@ -118,6 +118,48 @@ class Repository(
         .map { parseKinds(it) }
         .stateIn(scope, SharingStarted.Eagerly, TaskKind.defaults)
 
+    // ---------- Tagesaufgaben ----------
+    private val pinSerializer = kotlinx.serialization.builtins.ListSerializer(DailyPin.serializer())
+
+    private fun parsePins(st: Map<String, String>): List<DailyPin> =
+        st[SettingKeys.DAILY_PINS]?.let { runCatching { kindJson.decodeFromString(pinSerializer, it) }.getOrNull() } ?: emptyList()
+
+    val dailyPins: StateFlow<List<DailyPin>> = settings
+        .map { parsePins(it) }
+        .stateIn(scope, SharingStarted.Eagerly, emptyList())
+
+    private fun savePins(pins: List<DailyPin>) {
+        // Alte Einträge (älter als 3 Wochen) fallen weg, damit die Liste klein bleibt.
+        val min = LocalDate.now().toEpochDay() - 21
+        setSetting(SettingKeys.DAILY_PINS, kindJson.encodeToString(pinSerializer, pins.filter { it.day >= min }))
+    }
+
+    fun isPinned(taskId: String, stepId: String? = null): Boolean =
+        dailyPins.value.any { it.taskId == taskId && it.stepId == stepId }
+
+    /** Für heute anpinnen bzw. wieder lösen. */
+    fun togglePin(taskId: String, stepId: String? = null) {
+        val pins = dailyPins.value
+        if (pins.any { it.taskId == taskId && it.stepId == stepId }) {
+            savePins(pins.filterNot { it.taskId == taskId && it.stepId == stepId })
+        } else {
+            savePins(pins + DailyPin(taskId, stepId, LocalDate.now().toEpochDay()))
+        }
+    }
+
+    fun unpin(taskId: String, stepId: String? = null) {
+        val pins = dailyPins.value
+        if (pins.any { it.taskId == taskId && it.stepId == stepId }) savePins(pins.filterNot { it.taskId == taskId && it.stepId == stepId })
+    }
+
+    /** Ansichtsmodus an: private Daten (Stimmung) von diesem Gerät entfernen, ohne den Sync zu berühren. */
+    fun purgePrivateLocal() {
+        scope.launch(Dispatchers.IO) { dao.deleteSettingsLocally(SettingKeys.MOOD_PREFIX) }
+    }
+
+    // ---------- Stimmung ----------
+    fun setMood(day: Long, mood: Mood?) = setSetting(SettingKeys.MOOD_PREFIX + day, mood?.encode() ?: "")
+
     fun saveTaskKinds(kinds: List<TaskKind>) = setSetting(SettingKeys.TASK_KINDS, kindJson.encodeToString(kindListSerializer, kinds))
 
     private fun now() = System.currentTimeMillis()

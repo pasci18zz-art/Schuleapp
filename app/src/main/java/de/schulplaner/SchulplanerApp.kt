@@ -65,7 +65,15 @@ class SchulplanerApp : Application() {
         appScope.launch {
             // Im Ansichtsmodus keine Lern-Mitteilung (sie hätte Knöpfe zum Steuern).
             combine(repo.currentStudy, repo.subjects, prefs.readOnly) { s, subjects, ro -> (if (ro) null else s) to subjects.associateBy { it.id } }
-                .collectLatest { (s, subjects) -> StudyNotifier.show(this@SchulplanerApp, s, subjects) }
+                .collectLatest { (s, subjects) ->
+                    StudyNotifier.show(this@SchulplanerApp, s, subjects)
+                    // Solange sie läuft, jede Minute die große Zeitanzeige auffrischen.
+                    while (s != null && s.isRunning) {
+                        val elapsed = s.totalMs(System.currentTimeMillis())
+                        delay(60_000 - elapsed % 60_000 + 200)
+                        StudyNotifier.show(this@SchulplanerApp, s, subjects)
+                    }
+                }
         }
         // Widgets nach Änderungen neu zeichnen (gebündelt).
         appScope.launch(Dispatchers.IO) {

@@ -95,6 +95,9 @@ val LocalReadOnly = androidx.compose.runtime.staticCompositionLocalOf { false }
 /** Gemeinsamer Zustand für den Weichzeichner: Der Hintergrund ist die Quelle, Glas-Kacheln zeichnen ihn verschwommen. */
 val LocalHaze = androidx.compose.runtime.staticCompositionLocalOf<HazeState?> { null }
 
+/** Startseite: Langes Drücken auf eine Kachel öffnet "Startseite anpassen" (nur dort gesetzt). */
+val LocalTileEdit = androidx.compose.runtime.staticCompositionLocalOf<(() -> Unit)?> { null }
+
 /** Lebendiger Hintergrund mit treibenden Farbflächen; Kacheln darüber zeigen ihn weichgezeichnet. */
 @Composable
 fun AppBackground(modifier: Modifier = Modifier, content: @Composable BoxScope.() -> Unit) {
@@ -156,7 +159,8 @@ fun Modifier.frosted(tint: Color = colors.card, blur: Dp = 26.dp): Modifier {
 /** Gibt beim Drücken leicht nach (wie bei Samsung). */
 @Composable
 fun Modifier.pressable(onClick: (() -> Unit)?, onLongClick: (() -> Unit)? = null, role: Role = Role.Button): Modifier {
-    if (onClick == null) return this
+    if (onClick == null && onLongClick == null) return this
+    val click = onClick ?: {}
     val source = remember { MutableInteractionSource() }
     val pressed by source.collectIsPressedAsState()
     val scale by animateFloatAsState(if (pressed) 0.97f else 1f, spring(stiffness = Spring.StiffnessMediumLow), label = "press")
@@ -164,9 +168,9 @@ fun Modifier.pressable(onClick: (() -> Unit)?, onLongClick: (() -> Unit)? = null
         .scale(scale)
         .then(
             if (onLongClick != null) {
-                Modifier.combinedClickableCompat(source, onClick, onLongClick)
+                Modifier.combinedClickableCompat(source, click, onLongClick)
             } else {
-                Modifier.clickable(interactionSource = source, indication = null, role = role, onClick = onClick)
+                Modifier.clickable(interactionSource = source, indication = null, role = role, onClick = click)
             },
         )
 }
@@ -188,9 +192,10 @@ fun GlassCard(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val c = colors
+    val tileEdit = LocalTileEdit.current
     Column(
         modifier
-            .pressable(onClick, onLongClick)
+            .pressable(onClick, onLongClick ?: tileEdit)
             .shadow(if (c.isDark) 0.dp else 1.5.dp, shape, ambientColor = c.shadow, spotColor = c.shadow)
             .clip(shape)
             .frosted()
@@ -558,11 +563,13 @@ fun Modifier.appear(index: Int): Modifier {
 @Composable
 fun HeroCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
     val c = colors
+    val tileEdit = LocalTileEdit.current
     val shape = RoundedCornerShape(24.dp)
     val t = rememberInfiniteTransition(label = "hero")
     val shine = t.animateFloat(-1f, 2.5f, infiniteRepeatable(tween(5200, easing = LinearEasing), RepeatMode.Restart), label = "shine")
     Column(
         modifier
+            .pressable(null, tileEdit)
             .shadow(if (c.isDark) 0.dp else 10.dp, shape, ambientColor = c.heroStart, spotColor = c.heroStart)
             .clip(shape)
             .background(Brush.linearGradient(listOf(c.heroStart, c.heroEnd)))

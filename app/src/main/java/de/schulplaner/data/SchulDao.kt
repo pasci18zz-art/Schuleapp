@@ -130,6 +130,10 @@ interface SchulDao {
     @Query("SELECT * FROM settings WHERE id = :key")
     suspend fun setting(key: String): Setting?
 
+    /** Entfernt Einträge eines Präfixes nur lokal (z. B. Stimmung im Ansichtsmodus). */
+    @Query("DELETE FROM settings WHERE id LIKE :prefix || '%'")
+    suspend fun deleteSettingsLocally(prefix: String)
+
     @Upsert
     suspend fun upsertSetting(item: Setting)
 

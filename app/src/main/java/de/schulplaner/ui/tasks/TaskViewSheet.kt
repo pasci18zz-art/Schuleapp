@@ -50,6 +50,8 @@ fun TaskViewSheet(task: Task, onDismiss: () -> Unit) {
     var askFinish by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     val readOnly = de.schulplaner.ui.components.LocalReadOnly.current
     val undo = de.schulplaner.ui.components.LocalUndo.current
+    val pins by repo.dailyPins.collectAsStateWithLifecycle()
+    fun pinned(stepId: String?) = pins.any { it.taskId == task.id && it.stepId == stepId }
 
     AppSheet(onDismiss = onDismiss) { close ->
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -57,6 +59,7 @@ fun TaskViewSheet(task: Task, onDismiss: () -> Unit) {
             Text(subject?.name ?: "Ohne Fach", style = T.label, color = c.sub, modifier = Modifier.weight(1f))
             Icon(KindIcons.of(kind.icon), null, tint = c.sub, modifier = Modifier.size(18.dp))
             Text(kind.name, style = T.label, color = c.sub)
+            if (!readOnly && !task.done) de.schulplaner.ui.today.PinTodayButton(pinned(null)) { repo.togglePin(task.id, null) }
         }
         Text(
             task.title,
@@ -93,6 +96,7 @@ fun TaskViewSheet(task: Task, onDismiss: () -> Unit) {
                                 color = if (st.done) c.sub else c.text,
                                 modifier = Modifier.weight(1f),
                             )
+                            if (!readOnly && !st.done) de.schulplaner.ui.today.PinStepButton(pinned(st.id)) { repo.togglePin(task.id, st.id) }
                         }
                     }
                 }

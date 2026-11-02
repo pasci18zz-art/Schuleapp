@@ -104,6 +104,10 @@ fun TaskEditSheet(initial: Task, isNew: Boolean, onDismiss: () -> Unit) {
     var showDate by remember { mutableStateOf(false) }
     var askFinish by remember { mutableStateOf(false) }
     val saved = remember { booleanArrayOf(false) }
+    val pins by repo.dailyPins.collectAsStateWithLifecycle()
+    // Neue Aufgabe: "Für heute" erst beim Speichern anpinnen.
+    var pinNew by remember { mutableStateOf(false) }
+    val pinned = if (isNew) pinNew else pins.any { it.taskId == initial.id && it.stepId == null }
 
     val undo = LocalUndo.current
     val initialSteps = remember { steps }
@@ -123,6 +127,7 @@ fun TaskEditSheet(initial: Task, isNew: Boolean, onDismiss: () -> Unit) {
                     // Ein angefangener Unterpunkt wird mitgespeichert.
                     val all = if (newStep.isNotBlank()) steps + ExamTopic(examId = task.id, text = newStep.trim()) else steps
                     repo.saveSteps(task.id, all)
+                    if (isNew && pinNew) repo.togglePin(task.id, null)
                     close()
                 }
             } else {
@@ -139,7 +144,14 @@ fun TaskEditSheet(initial: Task, isNew: Boolean, onDismiss: () -> Unit) {
             } else {
                 null
             },
-            extra = { AttachButton(OwnerType.TASK, task.id) },
+            extra = {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    de.schulplaner.ui.today.PinTodayButton(pinned) {
+                        if (isNew) pinNew = !pinNew else repo.togglePin(initial.id, null)
+                    }
+                    AttachButton(OwnerType.TASK, task.id)
+                }
+            },
         )
         InlineTextField(task.title, { task = task.copy(title = it) }, "Was ist zu tun?", Modifier.fillMaxWidth().padding(horizontal = 4.dp), big = true)
 

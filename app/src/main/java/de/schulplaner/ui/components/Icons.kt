@@ -77,5 +77,11 @@ object Ic {
     val Sparkle by lazy { icon("sparkle", "M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M6 18l2.5-2.5M15.5 8.5 18 6") }
     val Book by lazy { icon("book", "M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z", "M4 21a2 2 0 0 1 2-2h13v2H6") }
     val Music by lazy { icon("music", "M9 18V5l12-2v13", circle(6f, 18f, 3f), circle(18f, 16f, 3f)) }
+    val Eye by lazy { icon("eye", "M2.5 12S6.5 5.5 12 5.5 21.5 12 21.5 12 17.5 18.5 12 18.5 2.5 12 2.5 12z", circle(12f, 12f, 3f)) }
+    val EyeOff by lazy { icon("eye_off", "M3 3l18 18", "M10.6 6.1A10 10 0 0 1 12 6c5 0 9 6 9 6a17 17 0 0 1-2.6 3.2", "M6.6 7.6C4.3 9.2 3 12 3 12s4 6 9 6c1.6 0 3-.4 4.3-1.1", "M9.9 10a3 3 0 0 0 4.1 4.1") }
+    val Pushpin by lazy { icon("pushpin", "M8.5 3h7", "M10 3v5.5L7 12.5h10L14 8.5V3", "M12 12.5V21") }
+    val Grid by lazy { icon("grid", rect(3f, 3f, 8f, 8f, 2f), rect(13f, 3f, 8f, 8f, 2f), rect(3f, 13f, 8f, 8f, 2f), rect(13f, 13f, 8f, 8f, 2f)) }
+    val Expand by lazy { icon("expand", "M4 9V4h5", "M20 15v5h-5", "M4 4l6 6", "M20 20l-6-6") }
+    val Reset by lazy { icon("reset", "M4 4v5h5", "M4.6 15a8 8 0 1 0 1.9-8.3L4 9") }
     val Cloud by lazy { icon("cloud", "M7 18a5 5 0 1 1 1-9.9A6 6 0 0 1 19 10a4 4 0 0 1 0 8z") }
 }

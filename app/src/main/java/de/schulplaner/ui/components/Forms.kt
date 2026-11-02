@@ -152,7 +152,7 @@ fun AppSheet(
     ) {
         BlurBehind()
         // Eigenes Fenster: Der App-Weichzeichner reicht nicht bis hierher, das Sheet nutzt die Fenster-Unschärfe.
-        androidx.compose.runtime.CompositionLocalProvider(LocalHaze provides null) {
+        androidx.compose.runtime.CompositionLocalProvider(LocalHaze provides null, LocalTileEdit provides null) {
         Column(
             Modifier
                 .fillMaxWidth()

@@ -377,4 +377,30 @@ object SettingKeys {
     const val PLAN_PREFIX = "plan_"
     /** Monster-Zähler: ein Eintrag pro Tag, "monster_<epochDay>" = Anzahl. */
     const val MONSTER_PREFIX = "monster_"
+    /** Tagesaufgaben: angepinnte Aufgaben/Unterpunkte als JSON-Liste von [DailyPin]. */
+    const val DAILY_PINS = "daily_pins"
+    /** Stimmung pro Tag: "mood_<epochDay>" = "<1..5>|<Notiz>". Nie im Ansichtsmodus sichtbar. */
+    const val MOOD_PREFIX = "mood_"
+}
+
+/** Für einen Tag angepinnte Aufgabe (oder einzelner Unterpunkt, wenn [stepId] gesetzt ist). */
+@Serializable
+data class DailyPin(
+    val taskId: String,
+    val stepId: String? = null,
+    /** Tag, für den angepinnt wurde (epochDay). Unerledigtes wandert in die nächsten Tage mit. */
+    val day: Long,
+)
+
+/** Eine Stimmung: 1 = furchtbar … 5 = super. */
+data class Mood(val level: Int, val note: String = "") {
+    fun encode(): String = "$level|${note.replace("\n", " ")}"
+
+    companion object {
+        fun decode(v: String?): Mood? {
+            if (v.isNullOrBlank()) return null
+            val level = v.substringBefore('|').toIntOrNull()?.takeIf { it in 1..5 } ?: return null
+            return Mood(level, v.substringAfter('|', ""))
+        }
+    }
 }

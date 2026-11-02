@@ -43,7 +43,9 @@ object StudyNotifier {
         val total = session.totalMs(now)
         val running = session.isRunning
         val subject = session.subjectId?.let { subjects[it] }
-        val title = StudyKind.label(session.kind) + (subject?.let { " · ${it.name}" } ?: "")
+        val what = StudyKind.label(session.kind) + (subject?.let { " · ${it.name}" } ?: "")
+        // Die Lernzeit ist der Hauptinhalt (groß als Titel), Art und Fach klein darunter.
+        val title = if (running) clock(total) else "Pause · ${clock(total)}"
 
         val open = PendingIntent.getActivity(
             ctx, 10,
@@ -65,7 +67,8 @@ object StudyNotifier {
         val builder = Notification.Builder(ctx, CHANNEL)
             .setSmallIcon(R.drawable.ic_stat_study)
             .setContentTitle(title)
-            .setContentText(if (running) "Läuft" else "Pausiert bei ${format(total)}")
+            .setContentText(what)
+            .setSubText(if (running) "Lernzeit läuft" else "Pausiert")
             .setCategory(Notification.CATEGORY_STOPWATCH)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
@@ -80,10 +83,23 @@ object StudyNotifier {
         builder.addExtras(
             Bundle().apply {
                 putBoolean("android.requestPromotedOngoing", true)
-                if (!running) putString("android.shortCriticalText", "Pause")
+                // Läuft: Der Chip in der Statusleiste/Now Bar zeigt die mitlaufende Uhr. Pausiert: die Zeit fest.
+                if (!running) putString("android.shortCriticalText", "II ${clockShort(total)}")
             },
         )
         nm.notify(ID, builder.build())
+    }
+
+    /** "1 h 05 min" bzw. "23 min" – gut lesbar als großer Titel. */
+    fun clock(ms: Long): String {
+        val min = ms / 60_000
+        return if (min >= 60) "${min / 60} h ${(min % 60).toString().padStart(2, '0')} min" else "$min min"
+    }
+
+    /** "1:05" bzw. "23 m" für den kleinen Chip. */
+    private fun clockShort(ms: Long): String {
+        val min = ms / 60_000
+        return if (min >= 60) "${min / 60}:${(min % 60).toString().padStart(2, '0')}" else "${min}m"
     }
 
     /** "1:05 h" oder "23 min". */

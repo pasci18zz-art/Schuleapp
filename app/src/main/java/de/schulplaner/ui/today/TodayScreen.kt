@@ -22,6 +22,8 @@ import de.schulplaner.ui.components.appear
 import kotlin.math.cos
 import kotlin.math.sin
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -164,14 +166,26 @@ fun TodayScreen() {
     )
 
     var editTask by remember { mutableStateOf<Pair<Task, Boolean>?>(null) }
+    var showMood by remember { mutableStateOf(false) }
+    var pickDaily by remember { mutableStateOf(false) }
     val readOnly = de.schulplaner.ui.components.LocalReadOnly.current
     val onAddTask: (() -> Unit)? = if (readOnly) null else ({ editTask = TaskDefaults.quick(LocalDateTime.now(), schedule) to true })
     val onLessonClick: (Lesson) -> Unit = { l ->
         if (!readOnly) editTask = TaskDefaults.forSubject(l.slot.subjectId, l.date, schedule) to true
     }
+    val pins by repo.dailyPins.collectAsStateWithLifecycle()
+    val daily = dailyItems(pins, tasks, topics, todayEpoch)
+    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
+    val sunPop = remember { androidx.compose.animation.core.Animatable(1f) }
+    val scope = rememberCoroutineScope()
+    val editing = HomeLayoutStore.editing && !readOnly
+    androidx.activity.compose.BackHandler(enabled = editing) { HomeLayoutStore.editing = false }
+    // Beim Verlassen der Startseite den Bearbeiten-Modus beenden.
+    androidx.compose.runtime.DisposableEffect(Unit) { onDispose { HomeLayoutStore.editing = false } }
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val wide = maxWidth >= 840.dp
+        val cols = if (wide) 3 else 2
         Column(
             Modifier
                 .fillMaxSize()
@@ -180,16 +194,32 @@ fun TodayScreen() {
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             // Sonne bzw. Mond oben rechts in der Ecke – nur gezeichnet, nimmt keinen Platz weg.
+            // Langes Drücken darauf öffnet (versteckt) den Stimmungs-Tracker.
             Box(Modifier.appear(0)) {
-                SkyArt(now.hour, Modifier.matchParentSize())
+                SkyArt(now.hour, Modifier.matchParentSize(), pop = sunPop.value)
                 ScreenHeader(
                     title = "Heute",
                     overline = Fmt.full(today),
                     chip = state.weekLabel,
                 )
+                if (!readOnly) {
+                    Box(
+                        Modifier
+                            .align(Alignment.TopEnd)
+                            .size(width = 112.dp, height = 84.dp)
+                            .pointerInput(Unit) {
+                                detectTapGestures(onLongPress = {
+                                    haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                                    scope.launch {
+                                        sunPop.animateTo(1.35f, tween(160))
+                                        sunPop.animateTo(1f, androidx.compose.animation.core.spring(dampingRatio = 0.35f, stiffness = 300f))
+                                    }
+                                    showMood = true
+                                })
+                            },
+                    )
+                }
             }
-
-            Box(Modifier.appear(1)) { FerienTile(schedule.holidays, today) }
 
             if (schedule.slots.isEmpty()) {
                 GlassCard {
@@ -202,41 +232,65 @@ fun TodayScreen() {
                 }
             }
 
-            if (wide) {
-                // Spalten oben bündig; jede Kachel so hoch wie ihr Inhalt.
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    Column(Modifier.weight(1f).appear(2), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                        NowTile(state)
-                        LessonsTile(state, schedule, onLessonClick)
-                        if (!readOnly) MonsterTile()
-                        AppShortcutsRow()
-                    }
-                    Column(Modifier.weight(1f).appear(3), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                        TasksTile(state, max = 8, onOpen = { nav.tab(Tabs.TASKS) }, onEdit = { editTask = it to false }, onAdd = onAddTask, modifier = Modifier.fillMaxWidth())
-                    }
-                    Column(Modifier.weight(1f).appear(4), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                        StudyTile(onOpen = { nav.open(Routes.STUDY) })
-                        ExamsListTile(state, onOpen = { nav.open(Routes.exam(it.id)) })
-                        GradesTile(onOpen = { nav.tab(Tabs.GRADES) })
+            Box(Modifier.appear(1)) {
+                HomeGrid(
+                    cols = cols,
+                    gap = if (wide) 16.dp else 12.dp,
+                    editable = !readOnly,
+                    available = { t ->
+                        when (t) {
+                            HomeTile.MONSTER -> !readOnly
+                            HomeTile.DAILY -> !readOnly || daily.isNotEmpty()
+                            else -> true
+                        }
+                    },
+                ) { tile, span, m ->
+                    val half = !wide && span == 1
+                    when (tile) {
+                        HomeTile.DAILY -> DailyTile(
+                            daily, schedule.subjects, today,
+                            onOpen = { editTask = it to false },
+                            onPick = if (readOnly) null else ({ pickDaily = true }),
+                            modifier = m,
+                        )
+                        HomeTile.FERIEN -> FerienTile(schedule.holidays, today, m)
+                        HomeTile.NOW -> NowTile(state, m)
+                        HomeTile.TASKS -> TasksTile(
+                            state,
+                            max = if (wide) 8 else if (half) 2 else 4,
+                            compact = half,
+                            onOpen = { nav.tab(Tabs.TASKS) },
+                            onEdit = { editTask = it to false },
+                            onAdd = onAddTask,
+                            modifier = m,
+                        )
+                        HomeTile.EXAMS -> if (half) {
+                            ExamTile(state, onOpen = { nav.open(Routes.exam(it.id)) }, onEmpty = { nav.tab(Tabs.EXAMS) }, modifier = m)
+                        } else {
+                            ExamsListTile(state, onOpen = { nav.open(Routes.exam(it.id)) }, modifier = m)
+                        }
+                        HomeTile.LESSONS -> LessonsTile(state, schedule, onLessonClick, m)
+                        HomeTile.STUDY -> StudyTile(m, onOpen = { nav.open(Routes.STUDY) })
+                        HomeTile.MONSTER -> MonsterTile(m)
+                        HomeTile.APPS -> AppShortcutsRow(m)
+                        HomeTile.GRADES -> GradesTile(onOpen = { nav.tab(Tabs.GRADES) }, modifier = m)
                     }
                 }
-            } else {
-                NowTile(state, Modifier.appear(2))
-                // Handy: Aufgaben und Klausur direkt unter der Jetzt-Karte, dann der Stundenplan.
-                Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min).appear(3), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Box(Modifier.weight(1f).fillMaxHeight()) {
-                        TasksTile(state, max = 2, compact = true, onOpen = { nav.tab(Tabs.TASKS) }, onEdit = { editTask = it to false }, onAdd = onAddTask)
-                    }
-                    Box(Modifier.weight(1f).fillMaxHeight()) {
-                        ExamTile(state, onOpen = { nav.open(Routes.exam(it.id)) }, onEmpty = { nav.tab(Tabs.EXAMS) })
-                    }
+            }
+
+            if (!readOnly && !editing) {
+                Row(
+                    Modifier
+                        .align(Alignment.CenterHorizontally)
+                        .clip(RoundedCornerShape(50))
+                        .clickable { HomeLayoutStore.editing = true }
+                        .padding(horizontal = 14.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Icon(Ic.Grid, null, tint = colors.sub, modifier = Modifier.size(15.dp))
+                    Text("Startseite anpassen", style = T.small, color = colors.sub)
                 }
-                Box(Modifier.appear(4)) { LessonsTile(state, schedule, onLessonClick) }
-                StudyTile(Modifier.appear(5), onOpen = { nav.open(Routes.STUDY) })
-                // Im Ansichtsmodus ausgeblendet.
-                if (!readOnly) MonsterTile(Modifier.appear(5))
-                AppShortcutsRow(Modifier.appear(6))
-                Box(Modifier.appear(7)) { GradesTile(onOpen = { nav.tab(Tabs.GRADES) }) }
             }
         }
     }
@@ -248,6 +302,8 @@ fun TodayScreen() {
             TaskEditSheet(task, isNew, onDismiss = { editTask = null })
         }
     }
+    if (pickDaily) DailyPickerSheet(onDismiss = { pickDaily = false })
+    if (showMood && !readOnly) MoodOverlay(onClose = { showMood = false })
 }
 
 @Composable
@@ -343,7 +399,7 @@ private fun NowTile(s: TodayState, modifier: Modifier = Modifier) {
  * mit funkelnden Sternen (abends) – oben rechts, mit weichem Leuchten, das in den Hintergrund übergeht.
  */
 @Composable
-private fun SkyArt(hour: Int, modifier: Modifier = Modifier) {
+private fun SkyArt(hour: Int, modifier: Modifier = Modifier, pop: Float = 1f) {
     val day = hour in 6..17
     val t = rememberInfiniteTransition(label = "sky")
     val spin by t.animateFloat(0f, 360f, infiniteRepeatable(tween(30000, easing = LinearEasing)), label = "spin")
@@ -354,6 +410,7 @@ private fun SkyArt(hour: Int, modifier: Modifier = Modifier) {
         val d = density
         val cx = size.width - 46 * d
         val cy = 34 * d
+        androidx.compose.ui.graphics.drawscope.scale(pop, Offset(cx, cy)) {
         if (day) {
             // Warmes Leuchten, das sanft ausläuft.
             drawCircle(Brush.radialGradient(listOf(Color(0x80FFD36E), Color(0x00FFD36E)), Offset(cx, cy), 120 * d * pulse), 120 * d * pulse, Offset(cx, cy))
@@ -424,12 +481,13 @@ private fun SkyArt(hour: Int, modifier: Modifier = Modifier) {
                 drawPath(star, Color(0xFFFFF3C4).copy(alpha = 0.35f + 0.65f * a))
             }
         }
+        }
     }
 }
 
 /** Tagesplan: von rechts nach links wischen = nächster Schultag (Wochenenden/Ferien werden übersprungen). */
 @Composable
-private fun LessonsTile(s: TodayState, schedule: de.schulplaner.domain.ScheduleData, onLessonClick: (Lesson) -> Unit) {
+private fun LessonsTile(s: TodayState, schedule: de.schulplaner.domain.ScheduleData, onLessonClick: (Lesson) -> Unit, modifier: Modifier = Modifier) {
     val c = colors
     if (schedule.slots.isEmpty()) return
     val center = 500
@@ -443,7 +501,7 @@ private fun LessonsTile(s: TodayState, schedule: de.schulplaner.domain.ScheduleD
         else -> Fmt.dayMonth(shownDay)
     }
     GlassCard(
-        Modifier.animateContentSize(),
+        modifier.animateContentSize(),
         padding = androidx.compose.foundation.layout.PaddingValues(start = 10.dp, end = 10.dp, top = 10.dp, bottom = 8.dp),
     ) {
         Row(Modifier.fillMaxWidth().padding(start = 8.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -576,7 +634,7 @@ private fun TasksTile(
 
 /** Countdown bis zu den nächsten Ferien (bzw. "noch X Tage Ferien"). */
 @Composable
-private fun FerienTile(holidays: List<Holiday>, today: LocalDate) {
+private fun FerienTile(holidays: List<Holiday>, today: LocalDate, modifier: Modifier = Modifier) {
     val c = colors
     val t = today.toEpochDay()
     val ferien = holidays.filter { it.kind == HolidayKind.FERIEN || it.name.contains("ferien", ignoreCase = true) }
@@ -584,7 +642,7 @@ private fun FerienTile(holidays: List<Holiday>, today: LocalDate) {
     val next = ferien.filter { it.startDate > t }.minByOrNull { it.startDate }
     val h = current ?: next ?: return
     val days = if (current != null) h.endDate - t + 1 else h.startDate - t
-    GlassCard(padding = androidx.compose.foundation.layout.PaddingValues(horizontal = 14.dp, vertical = 12.dp)) {
+    GlassCard(modifier, padding = androidx.compose.foundation.layout.PaddingValues(horizontal = 14.dp, vertical = 12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             val tint = HolidayLook.color(h)
             Box(
@@ -610,11 +668,11 @@ private fun FerienTile(holidays: List<Holiday>, today: LocalDate) {
 }
 
 @Composable
-private fun ExamTile(s: TodayState, onOpen: (Exam) -> Unit, onEmpty: () -> Unit) {
+private fun ExamTile(s: TodayState, onOpen: (Exam) -> Unit, onEmpty: () -> Unit, modifier: Modifier = Modifier) {
     val c = colors
     val exam = s.exams.firstOrNull()
     if (exam == null) {
-        GlassCard(Modifier.fillMaxSize(), onClick = onEmpty) {
+        GlassCard(modifier, onClick = onEmpty) {
             Icon(Ic.Exam, null, tint = c.accent, modifier = Modifier.size(22.dp))
             Text("Keine Klausuren in Sicht", style = T.label, color = c.sub, modifier = Modifier.padding(top = 12.dp))
         }
@@ -624,7 +682,7 @@ private fun ExamTile(s: TodayState, onOpen: (Exam) -> Unit, onEmpty: () -> Unit)
     val ts = s.topics.filter { it.examId == exam.id }
     val progress = if (ts.isEmpty()) 0f else ts.count { it.done }.toFloat() / ts.size
     val days = Fmt.daysUntil(s.now.toLocalDate(), LocalDate.ofEpochDay(exam.date))
-    GlassCard(Modifier.fillMaxSize(), onClick = { onOpen(exam) }) {
+    GlassCard(modifier, onClick = { onOpen(exam) }) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(Sym.Pen, null, tint = c.accent, modifier = Modifier.size(22.dp))
             Box(Modifier.weight(1f))
@@ -653,9 +711,9 @@ private fun ExamTile(s: TodayState, onOpen: (Exam) -> Unit, onEmpty: () -> Unit)
 }
 
 @Composable
-private fun ExamsListTile(s: TodayState, onOpen: (Exam) -> Unit) {
+private fun ExamsListTile(s: TodayState, onOpen: (Exam) -> Unit, modifier: Modifier = Modifier) {
     val c = colors
-    GlassCard(padding = androidx.compose.foundation.layout.PaddingValues(18.dp)) {
+    GlassCard(modifier, padding = androidx.compose.foundation.layout.PaddingValues(18.dp)) {
         Text("Klausuren", style = T.section, color = c.text)
         if (s.exams.isEmpty()) Text("Keine Klausuren in Sicht", style = T.small, color = c.sub, modifier = Modifier.padding(top = 10.dp))
         s.exams.take(4).forEach { e ->
@@ -691,7 +749,7 @@ private fun ExamsListTile(s: TodayState, onOpen: (Exam) -> Unit) {
 }
 
 @Composable
-private fun GradesTile(onOpen: () -> Unit) {
+private fun GradesTile(onOpen: () -> Unit, modifier: Modifier = Modifier) {
     val c = colors
     val repo = LocalContext.current.app.repo
     val subjects by repo.subjects.collectAsStateWithLifecycle()
@@ -703,7 +761,7 @@ private fun GradesTile(onOpen: () -> Unit) {
     val results = TermStats.results(term.id, subjects, categories, grades, subjectTerms)
     val avg = TermStats.average(results) ?: return
     val best = results.filter { it.value != null }.sortedByDescending { it.value }.take(3)
-    GlassCard(onClick = onOpen, padding = androidx.compose.foundation.layout.PaddingValues(18.dp)) {
+    GlassCard(modifier, onClick = onOpen, padding = androidx.compose.foundation.layout.PaddingValues(18.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(Ic.Grades, null, tint = c.accent, modifier = Modifier.size(22.dp))
             Box(Modifier.weight(1f))

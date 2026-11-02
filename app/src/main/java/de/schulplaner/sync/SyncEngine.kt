@@ -99,6 +99,13 @@ class SyncEngine(
 
     // ---------- Auslöser ----------
 
+    /** Nach dem Ausschalten des Ansichtsmodus: alles noch einmal komplett holen (auch, was vorher ausgelassen wurde). */
+    fun fullResync() {
+        if (!canSync()) return
+        supabase.cursor = null
+        scope.launch { syncNow() }
+    }
+
     /** Nach lokalen Änderungen: kurz warten (mehrere Änderungen bündeln), dann abgleichen. */
     fun requestSoon() {
         if (!canSync()) return
@@ -191,6 +198,8 @@ class SyncEngine(
     private suspend fun <T : Any> applyRemote(type: SyncType<T>, row: kotlinx.serialization.json.JsonObject, first: Boolean) {
         val data: JsonElement = row["data"] ?: return
         val remote = runCatching { supabase.json.decodeFromJsonElement(type.serializer, data) }.getOrNull() ?: return
+        // Die Stimmung ist privat: Im Ansichtsmodus landet sie gar nicht erst auf dem Gerät.
+        if (readOnly() && remote is de.schulplaner.data.Setting && remote.id.startsWith(de.schulplaner.data.SettingKeys.MOOD_PREFIX)) return
         val remoteUpdated = row["updated_at"]?.jsonPrimitive?.long ?: type.updatedAt(remote)
         val remoteDeleted = row["deleted"]?.jsonPrimitive?.boolean ?: type.deleted(remote)
         val local = type.get(type.id(remote))

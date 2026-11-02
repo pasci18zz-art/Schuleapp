@@ -67,6 +67,7 @@ import de.schulplaner.domain.Fmt
 import de.schulplaner.domain.Schedule
 import de.schulplaner.quick.QuickHaTileService
 import de.schulplaner.ui.LocalNavigator
+import de.schulplaner.ui.Tabs
 import de.schulplaner.ui.Routes
 import de.schulplaner.ui.components.AppSheet
 import de.schulplaner.ui.components.ConfirmDialog
@@ -163,6 +164,10 @@ fun SettingsScreen() {
             NavRow(Ic.Clock, "Stundenzeiten", "${periods.size} Stunden") { nav.open(Routes.SET_PERIODS) }
             NavRow(Ic.Palm, "Ferien & freie Tage", "${holidays.size} eingetragen") { nav.open(Routes.SET_HOLIDAYS) }
             NavRow(Sym.House, "Aufgabenarten", kinds.joinToString(", ") { it.name }) { nav.open(Routes.SET_KINDS) }
+            NavRow(Ic.Grid, "Startseite anpassen", "Kacheln verschieben, Größe ändern, ausblenden") {
+                de.schulplaner.ui.today.HomeLayoutStore.editing = true
+                nav.tab(Tabs.TODAY)
+            }
         }
 
         if (!readOnly) LernzettelCard(settingsMap, kinds)
@@ -285,10 +290,16 @@ fun SettingsScreen() {
                 "Auf diesem Gerät kann dann nichts mehr geändert werden. Zum Ausschalten braucht man den Code.",
                 confirm = "Einschalten",
                 onDismiss = { confirmReadOnly = null },
-            ) { prefs.setReadOnly(true) }
+            ) {
+                prefs.setReadOnly(true)
+                repo.purgePrivateLocal()
+            }
         } else {
             // Ausschalten nur mit Code.
-            UnlockDialog(onDismiss = { confirmReadOnly = null }) { prefs.setReadOnly(false) }
+            UnlockDialog(onDismiss = { confirmReadOnly = null }) {
+                prefs.setReadOnly(false)
+                ctx.app.sync.fullResync()
+            }
         }
     }
     if (pickTime) {
