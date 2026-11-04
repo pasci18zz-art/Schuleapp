@@ -116,7 +116,7 @@ fun TaskLine(
             }
         }
         if (!compact && due != null) {
-            Text(dueLabel(today, due), style = T.smallBold, color = dueColor, maxLines = 1, modifier = Modifier.padding(start = 8.dp, end = 10.dp))
+            Text(dueLabel(today, due) + (task.duePeriod?.let { " · $it. Std" } ?: ""), style = T.smallBold, color = dueColor, maxLines = 1, modifier = Modifier.padding(start = 8.dp, end = 10.dp))
         }
         Icon(KindIcons.of(kind.icon), kind.name, tint = c.sub, modifier = Modifier.size(if (compact) 16.dp else 19.dp))
     }

@@ -38,9 +38,16 @@ data class Lesson(
     val cancelled: Boolean,
     val note: String,
     val override: LessonOverride?,
-    /** true = Teil einer Doppelstunde, für den es eine eigene Änderung gibt (Doppelstunde wird geteilt). */
-    val part: Boolean = false,
+    /** Eigene Änderungen einzelner Stunden einer Doppelstunde (Stunde -> Änderung). Die Doppelstunde bleibt eine Stunde. */
+    val parts: Map<Int, LessonOverride> = emptyMap(),
 ) {
+    /** Fällt diese einzelne Stunde aus (ganze Doppelstunde oder nur sie)? */
+    fun cancelledAt(period: Int): Boolean = cancelled || parts[period]?.cancelled == true
+
+    /** Gibt es bei einer Einzelstunde einen Raum oder Hinweis? */
+    val partRoomChanged: Boolean get() = parts.values.any { it.room.isNotBlank() }
+    val partNotes: List<String> get() = parts.entries.sortedBy { it.key }.mapNotNull { (p, o) -> o.note.takeIf { it.isNotBlank() }?.let { "$p. Std: $it" } }
+
     val periodLabel: String = if (firstPeriod == lastPeriod) "$firstPeriod." else "$firstPeriod.–$lastPeriod."
     val isFree: Boolean get() = slot.isFree
     val length: Int get() = lastPeriod - firstPeriod + 1
@@ -81,27 +88,13 @@ object Schedule {
                 val ov = data.overrides[LessonOverride.idFor(slot.id, epoch)]
                 val subject = data.subjects[slot.subjectId]
                 val last = slot.period + slot.length - 1
-                // Gibt es für eine einzelne Stunde der Doppelstunde eine eigene Änderung, wird sie in Einzelstunden geteilt.
-                val parts = (slot.period..last).associateWith { data.overrides[LessonOverride.partId(slot.id, epoch, it)] }
-                if (slot.length > 1 && parts.values.any { it != null }) {
-                    return@flatMap (slot.period..last).map { p ->
-                        val pov = parts[p] ?: ov
-                        Lesson(
-                            slot = slot,
-                            subject = subject,
-                            date = date,
-                            firstPeriod = p,
-                            lastPeriod = p,
-                            start = data.periodByNumber[p]?.let { LocalTime.of(it.startMinute / 60, it.startMinute % 60) },
-                            end = data.periodByNumber[p]?.let { LocalTime.of(it.endMinute / 60, it.endMinute % 60) },
-                            room = pov?.room?.takeIf { it.isNotBlank() } ?: slot.room.ifBlank { subject?.room ?: "" },
-                            cancelled = pov?.cancelled == true,
-                            note = pov?.note ?: "",
-                            override = pov,
-                            part = true,
-                        )
-                    }
+                val parts = if (slot.length > 1) {
+                    (slot.period..last).mapNotNull { p -> data.overrides[LessonOverride.partId(slot.id, epoch, p)]?.let { p to it } }.toMap()
+                } else {
+                    emptyMap()
                 }
+                // Fallen alle Einzelstunden aus, gilt die ganze Doppelstunde als Entfall.
+                val allPartsCancelled = slot.length > 1 && (slot.period..last).all { parts[it]?.cancelled == true }
                 listOf(Lesson(
                     slot = slot,
                     subject = subject,
@@ -111,9 +104,10 @@ object Schedule {
                     start = data.periodByNumber[slot.period]?.let { LocalTime.of(it.startMinute / 60, it.startMinute % 60) },
                     end = data.periodByNumber[last]?.let { LocalTime.of(it.endMinute / 60, it.endMinute % 60) },
                     room = ov?.room?.takeIf { it.isNotBlank() } ?: slot.room.ifBlank { subject?.room ?: "" },
-                    cancelled = ov?.cancelled == true,
+                    cancelled = ov?.cancelled == true || allPartsCancelled,
                     note = ov?.note ?: "",
                     override = ov,
+                    parts = parts,
                 ))
             }
     }

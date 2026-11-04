@@ -123,7 +123,7 @@ fun ExamEditSheet(initial: Exam, isNew: Boolean, onDismiss: () -> Unit, onSaved:
                 if (!fromList) Icon(Ic.Check, null, tint = c.accent, modifier = Modifier.size(16.dp))
             }
         }
-        if (!fromList) {
+        run {
             FormGroup {
                 FormRow("Stunde", divider = false) {
                     Text(exam.period?.let { "$it. Std" } ?: "–", style = T.body, color = c.text, modifier = Modifier.weight(1f))

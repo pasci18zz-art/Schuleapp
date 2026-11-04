@@ -84,12 +84,10 @@ fun LessonSheet(
     } else {
         full
     }
-    val partMode = single || full.part
+    val partMode = single
     val id = if (partMode) LessonOverride.partId(full.slot.id, epoch, lesson.firstPeriod) else LessonOverride.idFor(full.slot.id, epoch)
-    // Eigene Änderung dieser Stunde; sonst die der ganzen Doppelstunde als Ausgangspunkt.
-    val own = schedule.overrides[id]
-    val inherited = schedule.overrides[LessonOverride.idFor(full.slot.id, epoch)]
-    val base = own ?: inherited?.copy(id = id) ?: LessonOverride(id = id, slotId = full.slot.id, date = epoch)
+    // Nur die eigene Änderung (ganze Doppelstunde bzw. diese eine Stunde) – nichts wird übernommen oder vermischt.
+    val base = schedule.overrides[id] ?: LessonOverride(id = id, slotId = full.slot.id, date = epoch)
     var override by remember { mutableStateOf(base) }
     var newNote by remember { mutableStateOf("") }
     val subjectId = lesson.slot.subjectId

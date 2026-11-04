@@ -63,8 +63,9 @@ object TaskDefaults {
 
     /** Neue HA für ein Fach, fällig zur nächsten Stunde nach [from]. */
     fun forSubject(subjectId: String?, from: LocalDate, data: ScheduleData): Task {
-        val due = subjectId?.let { Schedule.nextOccurrence(it, from, data)?.date }
-        return Task(subjectId = subjectId, dueDate = due?.toEpochDay(), type = TaskType.HOMEWORK)
+        // Standard: fällig bis zur ersten Stunde des Fachs an dem Tag.
+        val next = subjectId?.let { Schedule.nextOccurrence(it, from, data) }
+        return Task(subjectId = subjectId, dueDate = next?.date?.toEpochDay(), duePeriod = next?.firstPeriod, type = TaskType.HOMEWORK)
     }
 }
 
@@ -86,6 +87,12 @@ fun TaskEditSheet(initial: Task, isNew: Boolean, onDismiss: () -> Unit) {
 
     fun nextDates(subjectId: String?): List<LocalDate> =
         subjectId?.let { id -> Schedule.nextOccurrences(id, today, schedule, 2).map { it.date } } ?: emptyList()
+
+    /** Erste Stunde des Fachs an diesem Tag (für "fällig bis zur Stunde"). */
+    fun firstPeriodOn(subjectId: String?, epoch: Long?): Int? {
+        if (subjectId == null || epoch == null) return null
+        return Schedule.lessonsOn(LocalDate.ofEpochDay(epoch), schedule).filter { it.slot.subjectId == subjectId }.minOfOrNull { it.firstPeriod }
+    }
 
     var task by remember { mutableStateOf(initial) }
     var mode by remember {
@@ -163,6 +170,7 @@ fun TaskEditSheet(initial: Task, isNew: Boolean, onDismiss: () -> Unit) {
                 mode == DueMode.SECOND && dates.size > 1 -> task = task.copy(dueDate = dates[1].toEpochDay())
                 mode != DueMode.CUSTOM -> mode = DueMode.CUSTOM
             }
+            task = task.copy(duePeriod = firstPeriodOn(id, task.dueDate))
         })
 
         FormGroup {
@@ -182,19 +190,38 @@ fun TaskEditSheet(initial: Task, isNew: Boolean, onDismiss: () -> Unit) {
                     dates.getOrNull(0)?.let { d ->
                         ChoiceChip("Nächste · ${Fmt.dayDate(d)}", mode == DueMode.NEXT, {
                             mode = DueMode.NEXT
-                            task = task.copy(dueDate = d.toEpochDay())
+                            task = task.copy(dueDate = d.toEpochDay(), duePeriod = firstPeriodOn(task.subjectId, d.toEpochDay()))
                         })
                     }
                     dates.getOrNull(1)?.let { d ->
                         ChoiceChip("Übernächste · ${Fmt.dayDate(d)}", mode == DueMode.SECOND, {
                             mode = DueMode.SECOND
-                            task = task.copy(dueDate = d.toEpochDay())
+                            task = task.copy(dueDate = d.toEpochDay(), duePeriod = firstPeriodOn(task.subjectId, d.toEpochDay()))
                         })
                     }
                     val customLabel = if (mode == DueMode.CUSTOM && task.dueDate != null) Fmt.dayDate(LocalDate.ofEpochDay(task.dueDate!!)) else "Datum …"
                     ChoiceChip(customLabel, mode == DueMode.CUSTOM && task.dueDate != null, { showDate = true }, leading = {
                         Icon(Ic.CalendarPlain, null, tint = c.sub, modifier = Modifier.size(15.dp))
                     })
+                }
+            }
+            if (task.dueDate != null) {
+                // Bis zu welcher Stunde (automatisch die erste Stunde des Fachs an dem Tag, änderbar).
+                FormRow("Bis") {
+                    Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        ChoiceChip("Ganzer Tag", task.duePeriod == null, { task = task.copy(duePeriod = null) })
+                        val subjectPeriods = Schedule.lessonsOn(LocalDate.ofEpochDay(task.dueDate!!), schedule)
+                            .filter { it.slot.subjectId == task.subjectId }
+                            .flatMap { it.firstPeriod..it.lastPeriod }
+                            .toSet()
+                        (1..schedule.maxPeriod.coerceAtLeast(1)).forEach { p ->
+                            ChoiceChip(
+                                if (p in subjectPeriods) "$p. Std ●" else "$p. Std",
+                                task.duePeriod == p,
+                                { task = task.copy(duePeriod = p) },
+                            )
+                        }
+                    }
                 }
             }
             FormTextRow("Notizen", task.description, { task = task.copy(description = it) }, placeholder = "optional", singleLine = false, divider = false)
@@ -253,7 +280,7 @@ fun TaskEditSheet(initial: Task, isNew: Boolean, onDismiss: () -> Unit) {
             onDismiss = { showDate = false },
         ) { d ->
             mode = DueMode.CUSTOM
-            task = task.copy(dueDate = d.toEpochDay())
+            task = task.copy(dueDate = d.toEpochDay(), duePeriod = firstPeriodOn(task.subjectId, d.toEpochDay()))
         }
     }
 }

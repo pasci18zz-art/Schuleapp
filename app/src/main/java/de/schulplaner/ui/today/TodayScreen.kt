@@ -84,6 +84,7 @@ import de.schulplaner.ui.components.GlassCard
 import de.schulplaner.ui.components.GlassIconButton
 import de.schulplaner.ui.components.Ic
 import de.schulplaner.ui.components.Pill
+import de.schulplaner.ui.components.pressable
 import de.schulplaner.ui.components.ProgressBar
 import de.schulplaner.ui.components.ProgressRing
 import de.schulplaner.ui.components.ScreenHeader
@@ -570,8 +571,7 @@ private fun LessonsTile(s: TodayState, schedule: de.schulplaner.domain.ScheduleD
                     Text("Kein Unterricht", style = T.small, color = c.sub, modifier = Modifier.padding(start = 8.dp, top = 4.dp, bottom = 8.dp))
                 }
                 lessons.forEach { l ->
-                    // Vorbei (auch an früheren Tagen): grau.
-                    val past = l.endDateTime?.let { !s.now.isBefore(it) } == true
+                    val past = isToday && l.endDateTime?.let { !s.now.isBefore(it) } == true
                     val now = isToday && s.current?.slot?.id == l.slot.id
                     val dayEpoch = l.date.toEpochDay()
                     val ha = s.tasks.any { !it.done && it.dueDate == dayEpoch && it.subjectId == l.slot.subjectId }
@@ -582,13 +582,13 @@ private fun LessonsTile(s: TodayState, schedule: de.schulplaner.domain.ScheduleD
                             .clip(RoundedCornerShape(18.dp))
                             .background(if (now) c.accentSoft else Color.Transparent)
                             .clickable { onLessonClick(l) }
-                            .alpha(if (past) 0.55f else 1f)
+                            .alpha(if (past) 0.5f else 1f)
                             .padding(horizontal = 10.dp, vertical = 9.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         Text(l.periodLabel, style = T.smallBold, color = c.sub, maxLines = 1, softWrap = false, modifier = Modifier.width(50.dp))
-                        LessonMark(if (past) c.sub else subjectColor(l.subject?.color), l.length)
+                        LessonMark(subjectColor(l.subject?.color), l.length)
                         Column(Modifier.weight(1f)) {
                             Text(
                                 l.subject?.name ?: "?",
@@ -603,22 +603,24 @@ private fun LessonsTile(s: TodayState, schedule: de.schulplaner.domain.ScheduleD
                                 Text(time, style = T.small, color = c.sub)
                                 if (l.room.isNotBlank()) {
                                     // Raumänderung: Ort-Symbol in Akzentfarbe.
-                                    Icon(Ic.Pin, if (roomChanged) "Raumänderung" else null, tint = if (roomChanged && !past) c.accent else c.sub, modifier = Modifier.size(12.dp))
-                                    Text("R ${l.room}", style = if (roomChanged) T.smallBold else T.small, color = if (roomChanged && !past) c.accent else c.sub, maxLines = 1)
+                                    Icon(Ic.Pin, if (roomChanged) "Raumänderung" else null, tint = if (roomChanged) c.accent else c.sub, modifier = Modifier.size(12.dp))
+                                    Text("R ${l.room}", style = if (roomChanged) T.smallBold else T.small, color = if (roomChanged) c.accent else c.sub, maxLines = 1)
                                 }
                             }
-                            if (l.note.isNotBlank()) {
-                                // Hinweis / Vertretung mit kleinem "i".
+                            // Hinweis / Vertretung mit kleinem "i" (auch für einzelne Stunden einer Doppelstunde).
+                            (listOf(l.note) + l.partNotes).filter { it.isNotBlank() }.forEach { note ->
                                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    Icon(Ic.Info, "Hinweis", tint = if (past) c.sub else c.accent, modifier = Modifier.size(12.dp))
-                                    Text(l.note, style = T.small, color = if (past) c.sub else c.text, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                    Icon(Ic.Info, "Hinweis", tint = c.accent, modifier = Modifier.size(12.dp))
+                                    Text(note, style = T.small, color = c.text, maxLines = 2, overflow = TextOverflow.Ellipsis)
                                 }
                             }
                         }
                         if (exam) Pill("Klausur", c.warnSoft, c.warn)
                         if (ha) Pill("HA")
                         if (l.cancelled) {
-                            if (past) Pill("Entfall", c.line, c.sub) else Pill("Entfall", c.warnSoft, c.warn)
+                            Pill("Entfall", c.warnSoft, c.warn)
+                        } else {
+                            l.parts.filter { it.value.cancelled }.keys.sorted().forEach { p -> Pill("$p. Entfall", c.warnSoft, c.warn) }
                         }
                     }
                 }
@@ -661,14 +663,21 @@ private fun TasksTile(
     }
     GlassCard(modifier, padding = androidx.compose.foundation.layout.PaddingValues(14.dp), onLongClick = { pickKinds = true }) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Row(Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).clickable(onClick = onOpen), verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).then(Modifier.pressable(onOpen, onLongClick = { pickKinds = true })),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 Icon(Ic.Tasks, "Aufgaben", tint = c.accent, modifier = Modifier.size(22.dp))
                 if (!compact) Text(title, style = T.section, color = c.text, modifier = Modifier.padding(start = 10.dp))
                 Box(Modifier.weight(1f))
                 Text("${openAll.size}", style = T.title.copy(fontSize = T.section.fontSize * 1.6f), color = if (openAll.isEmpty()) c.text else urgent)
             }
+            // Filter: welche Aufgabenarten hier stehen.
+            Box(Modifier.padding(start = 8.dp).size(28.dp).clip(CircleShape).background(c.line).clickable { pickKinds = true }, contentAlignment = Alignment.Center) {
+                Icon(Ic.Filter, "Angezeigte Arten wählen", tint = c.sub, modifier = Modifier.size(15.dp))
+            }
             if (onAdd != null) {
-                Box(Modifier.padding(start = 8.dp).size(28.dp).clip(CircleShape).background(c.accentSoft).clickable(onClick = onAdd), contentAlignment = Alignment.Center) {
+                Box(Modifier.padding(start = 6.dp).size(28.dp).clip(CircleShape).background(c.accentSoft).clickable(onClick = onAdd), contentAlignment = Alignment.Center) {
                     Icon(Ic.Plus, "Aufgabe hinzufügen", tint = c.accent, modifier = Modifier.size(16.dp))
                 }
             }

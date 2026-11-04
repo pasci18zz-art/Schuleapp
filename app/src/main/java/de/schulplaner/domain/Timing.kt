@@ -32,5 +32,12 @@ object Timing {
     }
 
     /** Stunden zählen: Doppelstunden zählen doppelt, Entfall zählt nicht. */
-    fun periodCount(lessons: List<Lesson>): Int = lessons.filter { !it.cancelled && !it.isFree }.sumOf { it.length }
+    fun periodCount(lessons: List<Lesson>): Int {
+        var n = 0
+        for (l in lessons) {
+            if (l.isFree) continue
+            for (p in l.firstPeriod..l.lastPeriod) if (!l.cancelledAt(p)) n++
+        }
+        return n
+    }
 }

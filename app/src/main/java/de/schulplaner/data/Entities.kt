@@ -214,6 +214,8 @@ data class Task(
     val subjectId: String? = null,
     val type: String = TaskType.HOMEWORK,
     val dueDate: Long? = null,
+    /** Fällig bis zu dieser Stunde (z. B. 1 = bis zur 1. Stunde); null = ganzer Tag. */
+    val duePeriod: Int? = null,
     val done: Boolean = false,
     val doneAt: Long? = null,
     val createdAt: Long = 0,

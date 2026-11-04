@@ -2,6 +2,7 @@ package de.schulplaner.ui.timetable
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
@@ -370,9 +371,7 @@ private fun WeekGrid(
                                 if (l.isFree) {
                                     FreeCell(l, editMode) { onLesson(l, null) }
                                 } else {
-                                    // Vergangene Stunden werden grau (man sieht, wie weit die Woche ist).
-                                    val past = !editMode && l.endDateTime?.let { !now.isBefore(it) } == true
-                                    LessonCell(l, editMode, wide, past, if (editMode) emptyList() else haFor(l), !editMode && examFor(l), { p -> onLesson(l, p) }, onTask)
+                                    LessonCell(l, editMode, wide, false, if (editMode) emptyList() else haFor(l), !editMode && examFor(l), { p -> onLesson(l, p) }, onTask)
                                 }
                             }
                         }
@@ -398,6 +397,30 @@ private fun LessonCell(l: Lesson, editMode: Boolean, wide: Boolean, past: Boolea
             .height(RowH * len + Gap * (len - 1))
             .clip(shape)
             .then(if (l.cancelled) Modifier.stripes(tinted, 6.dp) else Modifier.background(tinted))
+            // Fällt nur eine Stunde der Doppelstunde aus: nur dieser Teil gestrichelt, kein zweiter Fachname.
+            .then(
+                if (!l.cancelled && l.parts.values.any { it.cancelled }) {
+                    Modifier.drawWithContent {
+                        drawContent()
+                        val h = size.height / len
+                        for (i in 0 until len) {
+                            if (!l.cancelledAt(l.firstPeriod + i)) continue
+                            val top = h * i
+                            clipRect(top = top, bottom = top + h) {
+                                drawRect(c.bg.copy(alpha = 0.55f), topLeft = androidx.compose.ui.geometry.Offset(0f, top), size = androidx.compose.ui.geometry.Size(size.width, h))
+                                val step = 6.dp.toPx()
+                                var x = -h
+                                while (x < size.width) {
+                                    drawLine(color.copy(alpha = 0.55f), androidx.compose.ui.geometry.Offset(x, top + h), androidx.compose.ui.geometry.Offset(x + h, top), 1.5.dp.toPx())
+                                    x += step
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    Modifier
+                },
+            )
             .then(if (exam) Modifier.border(1.5.dp, c.exam, shape) else Modifier)
             // Antippen = ganze (Doppel-)Stunde; lang drücken = nur die Stunde unter dem Finger (obere/untere Hälfte).
             .pointerInput(l.slot.id, l.firstPeriod, len, editMode) {
@@ -425,8 +448,9 @@ private fun LessonCell(l: Lesson, editMode: Boolean, wide: Boolean, past: Boolea
         )
         val roomText = listOfNotNull(l.room.ifBlank { null }, if (editMode && l.slot.weekType != WeekType.ALL) "nur ${l.slot.weekType}" else null).joinToString(" · ")
         // Raumänderung in Akzentfarbe mit Ort-Symbol, Hinweis/Vertretung mit kleinem "i".
-        val roomChanged = l.override?.room?.isNotBlank() == true
-        if (roomText.isNotBlank() || l.note.isNotBlank()) {
+        val roomChanged = l.override?.room?.isNotBlank() == true || l.partRoomChanged
+        val hasNote = l.note.isNotBlank() || l.partNotes.isNotEmpty()
+        if (roomText.isNotBlank() || hasNote) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                 if (roomChanged) Icon(Ic.Pin, "Raumänderung", tint = if (past) c.sub else c.accent, modifier = Modifier.size(10.dp))
                 if (roomText.isNotBlank()) {
@@ -439,7 +463,7 @@ private fun LessonCell(l: Lesson, editMode: Boolean, wide: Boolean, past: Boolea
                         modifier = Modifier.weight(1f, fill = false),
                     )
                 }
-                if (l.note.isNotBlank()) Icon(Ic.Info, "Hinweis: ${l.note}", tint = if (past) c.sub else c.accent, modifier = Modifier.size(11.dp))
+                if (hasNote) Icon(Ic.Info, "Hinweis: ${(listOf(l.note) + l.partNotes).filter { it.isNotBlank() }.joinToString("; ")}", tint = if (past) c.sub else c.accent, modifier = Modifier.size(11.dp))
             }
         }
         if (exam) Text("Klausur", style = T.smallBold.copy(fontSize = T.small.fontSize * 0.82f), color = c.exam, maxLines = 1)
