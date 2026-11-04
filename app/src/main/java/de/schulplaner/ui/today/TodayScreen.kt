@@ -28,6 +28,7 @@ import kotlin.math.sin
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -705,7 +706,7 @@ private fun TasksTile(
                                 Modifier
                             } else {
                                 Modifier.pointerInput(t.id) {
-                                    androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress(
+                                    detectDragGesturesAfterLongPress(
                                         onDragStart = { off ->
                                             val rc = holder[0]
                                             if (rc != null && rc.isAttached) {
