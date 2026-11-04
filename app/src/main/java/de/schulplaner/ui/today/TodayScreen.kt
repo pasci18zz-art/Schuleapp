@@ -15,6 +15,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.StrokeCap
@@ -187,7 +188,8 @@ fun TodayScreen() {
     val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
     val sunPop = remember { androidx.compose.animation.core.Animatable(1f) }
     val scope = rememberCoroutineScope()
-    val editing = HomeLayoutStore.editing && !readOnly
+    // Auch im Ansichtsmodus darf die Startseite angepasst werden (nur Anordnung, gilt nur für dieses Gerät).
+    val editing = HomeLayoutStore.editing
     androidx.activity.compose.BackHandler(enabled = editing) {
         HomeLayoutStore.editing = false
         HomeLayoutStore.selected = null
@@ -265,7 +267,7 @@ fun TodayScreen() {
                 HomeGrid(
                     cols = cols,
                     gap = if (wide) 16.dp else 12.dp,
-                    editable = !readOnly,
+                    editable = true,
                     scroll = scroll,
                     viewportPx = viewportPx,
                     available = { t ->
@@ -312,7 +314,7 @@ fun TodayScreen() {
                 }
             }
 
-            if (!readOnly && !editing) {
+            if (!editing) {
                 Row(
                     Modifier
                         .align(Alignment.CenterHorizontally)
@@ -327,6 +329,8 @@ fun TodayScreen() {
                 }
             }
         }
+        // Schwebende Aufgabe beim Ziehen in die Tagesaufgaben.
+        TaskDragOverlay(schedule.subjects, scroll, viewportPx)
     }
 
     editTask?.let { (task, isNew) ->
@@ -574,7 +578,7 @@ private fun LessonsTile(s: TodayState, schedule: de.schulplaner.domain.ScheduleD
                     val past = isToday && l.endDateTime?.let { !s.now.isBefore(it) } == true
                     val now = isToday && s.current?.slot?.id == l.slot.id
                     val dayEpoch = l.date.toEpochDay()
-                    val ha = s.tasks.any { !it.done && it.dueDate == dayEpoch && it.subjectId == l.slot.subjectId }
+                    val ha = s.tasks.any { !it.done && de.schulplaner.domain.Timing.taskInLesson(it, l, schedule) }
                     val exam = s.exams.any { it.date == dayEpoch && it.subjectId == l.slot.subjectId }
                     Row(
                         Modifier
@@ -661,7 +665,9 @@ private fun TasksTile(
         kindsShown.size == 1 -> s.kinds.firstOrNull { it.id in kindsShown }?.name ?: "Aufgaben"
         else -> "Aufgaben"
     }
-    GlassCard(modifier, padding = androidx.compose.foundation.layout.PaddingValues(14.dp), onLongClick = { pickKinds = true }) {
+    val dragScope = rememberCoroutineScope()
+    val readOnlyHere = de.schulplaner.ui.components.LocalReadOnly.current
+    GlassCard(modifier, padding = androidx.compose.foundation.layout.PaddingValues(14.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Row(
                 Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).then(Modifier.pressable(onOpen, onLongClick = { pickKinds = true })),
@@ -686,19 +692,54 @@ private fun TasksTile(
             Text("Alles erledigt", style = T.small, color = c.sub, modifier = Modifier.padding(top = 10.dp, start = 2.dp))
         }
         (open + done).forEach { t ->
-            TaskLine(
-                task = t,
-                subject = t.subjectId?.let { s.subjects[it] },
-                kind = kindOf(t.type, s.kinds),
-                percent = stepPercent(t.id, s.topics),
-                today = today,
-                onToggle = {
-                    repo.setTaskDone(t, !t.done)
-                    if (!t.done) undo.show("Erledigt") { repo.setTaskDone(t, false) }
-                },
-                onClick = { onEdit(t) },
-                compact = compact,
-            )
+            androidx.compose.runtime.key(t.id) {
+                // Gedrückt halten und nach oben ziehen: Aufgabe landet in den Tagesaufgaben.
+                val holder = remember { arrayOfNulls<androidx.compose.ui.layout.LayoutCoordinates>(1) }
+                val lifted = TaskDrag.task?.id == t.id
+                Box(
+                    Modifier
+                        .onGloballyPositioned { holder[0] = it }
+                        .graphicsLayer { alpha = if (lifted) 0.35f else 1f }
+                        .then(
+                            if (readOnlyHere || t.done) {
+                                Modifier
+                            } else {
+                                Modifier.pointerInput(t.id) {
+                                    androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress(
+                                        onDragStart = { off ->
+                                            val rc = holder[0]
+                                            if (rc != null && rc.isAttached) {
+                                                TaskDrag.width = rc.size.width
+                                                TaskDrag.begin(t, rc.localToRoot(off), off)
+                                            }
+                                        },
+                                        onDrag = { change, _ ->
+                                            change.consume()
+                                            val rc = holder[0]
+                                            if (rc != null && rc.isAttached && TaskDrag.task != null) TaskDrag.pointer = rc.localToRoot(change.position)
+                                        },
+                                        onDragEnd = { TaskDrag.finish(dragScope) { repo.pinToday(it.id) } },
+                                        onDragCancel = { TaskDrag.finish(dragScope) { repo.pinToday(it.id) } },
+                                    )
+                                }
+                            },
+                        ),
+                ) {
+                    TaskLine(
+                        task = t,
+                        subject = t.subjectId?.let { s.subjects[it] },
+                        kind = kindOf(t.type, s.kinds),
+                        percent = stepPercent(t.id, s.topics),
+                        today = today,
+                        onToggle = {
+                            repo.setTaskDone(t, !t.done)
+                            if (!t.done) undo.show("Erledigt") { repo.setTaskDone(t, false) }
+                        },
+                        onClick = { onEdit(t) },
+                        compact = compact,
+                    )
+                }
+            }
         }
     }
     if (pickKinds) TaskKindFilterSheet(s.kinds, kindsShown, onDismiss = { pickKinds = false }) { HomePrefs.setTaskKinds(ctx, it) }

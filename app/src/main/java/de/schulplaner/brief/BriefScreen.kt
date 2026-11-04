@@ -109,7 +109,7 @@ fun BriefScreen() {
     val now = rememberNow()
     val today = now.toLocalDate()
     val snap = Repository.Snapshot(schedule, tasks, kinds, emptyList(), settings, exams, topics)
-    val b = MorningBrief.build(snap, today, pins.count { it.day == today.toEpochDay() })
+    val b = MorningBrief.build(snap, today, pins.count { it.day == today.toEpochDay() && !it.hidden })
     val real = b.lessons.filter { !it.cancelled }
     val periods = de.schulplaner.domain.Timing.periodCount(real)
 

@@ -51,7 +51,7 @@ fun TaskViewSheet(task: Task, onDismiss: () -> Unit) {
     val readOnly = de.schulplaner.ui.components.LocalReadOnly.current
     val undo = de.schulplaner.ui.components.LocalUndo.current
     val pins by repo.dailyPins.collectAsStateWithLifecycle()
-    fun pinned(stepId: String?) = pins.any { it.taskId == task.id && it.stepId == stepId }
+    fun pinned(stepId: String?) = pins.any { it.taskId == task.id && it.stepId == stepId && !it.hidden }
 
     AppSheet(onDismiss = onDismiss) { close ->
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {

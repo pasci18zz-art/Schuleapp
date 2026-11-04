@@ -7,6 +7,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -20,6 +25,16 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -78,14 +93,79 @@ private fun dayOf(millis: Long?): Long? =
 fun dailyItems(pins: List<DailyPin>, tasks: List<Task>, topics: List<ExamTopic>, today: Long): List<DailyItem> {
     val taskById = tasks.associateBy { it.id }
     val topicById = topics.associateBy { it.id }
-    return pins.sortedBy { it.day }.mapNotNull { pin ->
+    val hiddenToday = pins.filter { it.hidden && it.day == today }.map { it.taskId to it.stepId }.toSet()
+    val pinned = pins.filter { !it.hidden }.sortedBy { it.day }.mapNotNull { pin ->
         if (pin.day > today) return@mapNotNull null
         val task = taskById[pin.taskId] ?: return@mapNotNull null
         val step = pin.stepId?.let { topicById[it] ?: return@mapNotNull null }
         val done = task.done || step?.done == true
         val doneToday = if (step != null && !task.done) dayOf(step.updatedAt) == today else dayOf(task.doneAt) == today
         val show = pin.day == today || !done || doneToday
-        if (!show) null else DailyItem(pin, task, step, done, pin.day.takeIf { it < today })
+        if (!show || (pin.taskId to pin.stepId) in hiddenToday) null else DailyItem(pin, task, step, done, pin.day.takeIf { it < today })
+    }
+    // Hausaufgaben, die heute oder morgen fällig sind, kommen automatisch dazu (mit dem x für heute herausnehmbar).
+    val have = pinned.filter { it.step == null }.map { it.task.id }.toSet()
+    val auto = tasks.filter { t ->
+        t.type == de.schulplaner.data.TaskType.HOMEWORK && t.id !in have && (t.id to null) !in hiddenToday &&
+            t.dueDate != null && t.dueDate in today..today + 1 && (!t.done || dayOf(t.doneAt) == today)
+    }.sortedBy { it.dueDate }.map { t -> DailyItem(DailyPin(t.id, null, today), t, null, t.done, null) }
+    return pinned + auto
+}
+
+/**
+ * Aufgabe aus der Aufgaben-Kachel in die Tagesaufgaben ziehen: Zustand des Ziehens (Bildschirm-Koordinaten).
+ * Die Tagesaufgaben-Kachel meldet ihre Fläche, die Startseite zeichnet die schwebende Aufgabe.
+ */
+object TaskDrag {
+    var task by mutableStateOf<Task?>(null)
+    var pointer by mutableStateOf(Offset.Zero)
+    var grab by mutableStateOf(Offset.Zero)
+    var start = Offset.Zero
+    var dropCoords: androidx.compose.ui.layout.LayoutCoordinates? = null
+
+    /** Schwebende Aufgabe nach dem Loslassen (fliegt in die Kachel oder zurück). */
+    var flying by mutableStateOf<Task?>(null)
+    var flyFrom = Offset.Zero
+    var flyTo = Offset.Zero
+    var flyHit = false
+    val fly = androidx.compose.animation.core.Animatable(0f)
+
+    /** Zählt hoch, wenn etwas in den Tagesaufgaben gelandet ist (kleiner Hüpfer). */
+    var landed by mutableStateOf(0)
+
+    fun dropRect(): androidx.compose.ui.geometry.Rect? {
+        val c = dropCoords ?: return null
+        if (!c.isAttached) return null
+        return c.boundsInRoot()
+    }
+
+    var width = 0
+
+    fun begin(t: Task, at: Offset, grabOffset: Offset) {
+        task = t
+        pointer = at
+        start = at
+        grab = grabOffset
+    }
+
+    fun finish(scope: kotlinx.coroutines.CoroutineScope, onDrop: (Task) -> Unit) {
+        val t = task ?: return
+        val r = dropRect()
+        val hit = r?.contains(pointer) == true
+        flyFrom = pointer
+        flyTo = if (hit && r != null) r.center else start
+        flyHit = hit
+        flying = t
+        task = null
+        scope.launch {
+            fly.snapTo(0f)
+            fly.animateTo(1f, androidx.compose.animation.core.tween(if (hit) 380 else 280, easing = androidx.compose.animation.core.FastOutSlowInEasing))
+            if (hit) {
+                onDrop(t)
+                landed++
+            }
+            flying = null
+        }
     }
 }
 
@@ -109,9 +189,27 @@ fun DailyTile(
     val warm = Color(0xFFFF9A62)
     val cool = c.accent
     val tileEdit = LocalTileEdit.current
+    // Ablagefläche fürs Ziehen aus der Aufgaben-Kachel: leuchtet, solange eine Aufgabe darüber schwebt.
+    val hovering by remember { derivedStateOf { TaskDrag.task != null && TaskDrag.dropRect()?.contains(TaskDrag.pointer) == true } }
+    val dragActive = TaskDrag.task != null
+    val bump = remember { androidx.compose.animation.core.Animatable(1f) }
+    LaunchedEffect(TaskDrag.landed) {
+        if (TaskDrag.landed > 0) {
+            bump.snapTo(1.05f)
+            bump.animateTo(1f, androidx.compose.animation.core.spring(dampingRatio = 0.4f, stiffness = 400f))
+        }
+    }
+    val lift by animateFloatAsState(if (hovering) 1.03f else 1f, tween(160), label = "daily-hover")
     Column(
         modifier
+            .onGloballyPositioned { TaskDrag.dropCoords = it }
+            .graphicsLayer {
+                val sc = lift * bump.value
+                scaleX = sc
+                scaleY = sc
+            }
             .pressable(null, tileEdit)
+            .then(if (dragActive) Modifier.border(if (hovering) 3.dp else 2.dp, c.accent.copy(alpha = if (hovering) 1f else 0.5f), shape) else Modifier)
             .clip(shape)
             .background(c.card)
             .background(Brush.linearGradient(listOf(warm.copy(alpha = if (c.isDark) 0.26f else 0.22f), cool.copy(alpha = if (c.isDark) 0.26f else 0.18f))))
@@ -197,7 +295,7 @@ fun DailyTile(
                         Ic.Close,
                         "Lösen",
                         tint = c.sub,
-                        modifier = Modifier.size(26.dp).clip(CircleShape).clickable { repo.unpin(item.pin.taskId, item.pin.stepId) }.padding(5.dp),
+                        modifier = Modifier.size(26.dp).clip(CircleShape).clickable { repo.removeFromDaily(item.pin.taskId, item.pin.stepId) }.padding(5.dp),
                     )
                 }
             }
@@ -216,7 +314,7 @@ fun DailyPickerSheet(onDismiss: () -> Unit) {
     val pins by repo.dailyPins.collectAsStateWithLifecycle()
     val bySubject = subjects.associateBy { it.id }
     val open = tasks.filter { !it.done }.sortedWith(compareBy<Task> { it.dueDate ?: Long.MAX_VALUE }.thenBy { it.createdAt })
-    fun pinned(taskId: String, stepId: String?) = pins.any { it.taskId == taskId && it.stepId == stepId }
+    fun pinned(taskId: String, stepId: String?) = pins.any { it.taskId == taskId && it.stepId == stepId && !it.hidden }
 
     AppSheet(onDismiss = onDismiss) { close ->
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -313,4 +411,72 @@ fun PinStepButton(pinned: Boolean, onToggle: () -> Unit) {
         tint = if (pinned) c.accent else c.sub.copy(alpha = 0.6f),
         modifier = Modifier.size(30.dp).clip(CircleShape).background(if (pinned) c.accentSoft else Color.Transparent).clickable(onClick = onToggle).padding(6.dp),
     )
+}
+
+/** Die schwebende Aufgabe beim Ziehen (über der ganzen Startseite) und automatisches Scrollen am Rand. */
+@Composable
+fun TaskDragOverlay(subjects: Map<String, Subject>, scroll: androidx.compose.foundation.ScrollState, viewportPx: Float, modifier: Modifier = Modifier) {
+    val c = colors
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val holder = remember { arrayOfNulls<androidx.compose.ui.layout.LayoutCoordinates>(1) }
+    val dragging = TaskDrag.task
+    val flying = TaskDrag.flying
+    LaunchedEffect(dragging != null) {
+        if (dragging == null) return@LaunchedEffect
+        val zone = with(density) { 140.dp.toPx() }
+        while (true) {
+            androidx.compose.runtime.withFrameNanos { }
+            val y = TaskDrag.pointer.y
+            val delta = when {
+                y < zone -> -((zone - y) / zone).coerceIn(0f, 1f) * 18f
+                y > viewportPx - zone -> ((y - (viewportPx - zone)) / zone).coerceIn(0f, 1f) * 18f
+                else -> 0f
+            }
+            if (delta != 0f) scroll.scrollBy(delta)
+        }
+    }
+    Box(modifier.fillMaxSize().onGloballyPositioned { holder[0] = it }) {
+        val t = dragging ?: flying
+        if (t != null) {
+            val subject = t.subjectId?.let { subjects[it] }
+            val w = with(density) { TaskDrag.width.coerceAtLeast(200).toDp() }
+            Row(
+                Modifier
+                    .offset {
+                        val origin = holder[0]?.takeIf { it.isAttached }?.let { it.positionInRoot() } ?: Offset.Zero
+                        val p = if (TaskDrag.task != null) {
+                            TaskDrag.pointer
+                        } else {
+                            val f = TaskDrag.fly.value
+                            Offset(
+                                TaskDrag.flyFrom.x + (TaskDrag.flyTo.x - TaskDrag.flyFrom.x) * f,
+                                TaskDrag.flyFrom.y + (TaskDrag.flyTo.y - TaskDrag.flyFrom.y) * f,
+                            )
+                        }
+                        androidx.compose.ui.unit.IntOffset((p.x - origin.x - TaskDrag.grab.x).toInt(), (p.y - origin.y - TaskDrag.grab.y).toInt())
+                    }
+                    .width(w)
+                    .graphicsLayer {
+                        val f = if (TaskDrag.task != null) 0f else TaskDrag.fly.value
+                        val sc = if (TaskDrag.task != null) 1.04f else if (TaskDrag.flyHit) 1.04f - 0.5f * f else 1f
+                        scaleX = sc
+                        scaleY = sc
+                        alpha = if (TaskDrag.task != null) 0.97f else 1f - f * (if (TaskDrag.flyHit) 0.8f else 1f)
+                        rotationZ = if (TaskDrag.task != null) -2f else 0f
+                        shadowElevation = 20f
+                        shape = RoundedCornerShape(18.dp)
+                    }
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(c.sheet)
+                    .border(1.5.dp, c.accent.copy(alpha = 0.6f), RoundedCornerShape(18.dp))
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Icon(Ic.Pushpin, null, tint = c.accent, modifier = Modifier.size(18.dp))
+                if (subject != null) SubjectIcon(subject, 15.dp)
+                Text(t.title, style = T.body, color = c.text, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+            }
+        }
+    }
 }

@@ -116,7 +116,21 @@ enum class HomeTile(
 }
 
 /** [span] = Breite in Spalten, [rows] = Höhe in Zeilen (0 = automatisch, so hoch wie der Inhalt). */
-data class TileConf(val tile: HomeTile, val span: Int, val visible: Boolean = true, val rows: Int = 0)
+data class TileConf(val tile: HomeTile, val span: Int, val visible: Boolean = true, val rows: Int = 0, val col: Int = -1)
+
+/**
+ * Jede Kachel hat eine feste Spalte (links beginnend). Fehlt sie (ältere Speicherstände), wird sie einmal der Reihe nach
+ * vergeben. Danach verschiebt sich nichts mehr von selbst zur Seite.
+ */
+fun assignCols(list: List<TileConf>, cols: Int): List<TileConf> {
+    var cursor = 0
+    return list.map { t ->
+        val s = t.span.coerceIn(HomeLayoutStore.minSpan(t.tile, cols), cols)
+        val c = if (t.col >= 0) t.col.coerceIn(0, cols - s) else if (cursor + s <= cols) cursor else 0
+        if (t.visible) cursor = (c + s) % cols
+        t.copy(col = c)
+    }
+}
 
 /** Aufbau der Startseite – pro Gerät und Spaltenzahl gespeichert (Handy und Tablet unabhängig). */
 object HomeLayoutStore {
@@ -137,9 +151,9 @@ object HomeLayoutStore {
 
     fun defaults(cols: Int): List<TileConf> =
         if (cols >= 3) {
-            tabletOrder.map { TileConf(it, it.tabletSpan) }
+            assignCols(tabletOrder.map { TileConf(it, it.tabletSpan) }, cols)
         } else {
-            HomeTile.entries.map { TileConf(it, it.phoneSpan) }
+            assignCols(HomeTile.entries.map { TileConf(it, it.phoneSpan) }, cols)
         }
 
     private fun prefs(ctx: Context) = ctx.getSharedPreferences("startseite", Context.MODE_PRIVATE)
@@ -159,16 +173,17 @@ object HomeLayoutStore {
                 bits.getOrNull(1)?.toIntOrNull() ?: tile.phoneSpan,
                 bits.getOrNull(2) != "0",
                 (bits.getOrNull(3)?.toIntOrNull() ?: 0).coerceIn(0, MAX_ROWS),
+                bits.getOrNull(4)?.toIntOrNull() ?: -1,
             )
         }.distinctBy { it.tile }
         // Neue Kacheln (aus späteren Versionen) hinten anhängen.
         val missing = defaults(cols).filter { d -> parsed.none { it.tile == d.tile } }
-        return parsed + missing
+        return assignCols(parsed + missing, cols)
     }
 
     fun save(ctx: Context, cols: Int, list: List<TileConf>) {
         prefs(ctx).edit()
-            .putString("cols_$cols", list.joinToString(",") { "${it.tile.key}:${it.span}:${if (it.visible) 1 else 0}:${it.rows}" })
+            .putString("cols_$cols", list.joinToString(",") { "${it.tile.key}:${it.span}:${if (it.visible) 1 else 0}:${it.rows}:${it.col}" })
             .apply()
     }
 
@@ -187,7 +202,7 @@ private fun sizeName(span: Int, cols: Int): String = when {
 }
 
 /** Eine Kachel für die Ablage: Breite in Spalten, Höhe in Zeilen (0 = automatisch). */
-private class FlowItem(val tile: HomeTile, val span: Int, val rows: Int, val stretch: Boolean)
+private class FlowItem(val tile: HomeTile, val span: Int, val rows: Int, val stretch: Boolean, val col: Int)
 
 /** Wo die Kacheln gerade liegen (Pixel, im Koordinatensystem des Rasters) – wird beim Berühren gelesen. */
 private class FlowRefs {
@@ -262,16 +277,10 @@ private fun FlowLayout(
         val startCol = IntArray(n)
         for (i in 0 until n) {
             val s = items[i].span.coerceIn(1, cols)
-            var bestC = 0
-            var bestY = Int.MAX_VALUE
-            for (c in 0..cols - s) {
-                var y = 0
-                for (k in c until c + s) y = max(y, colTop[k])
-                if (y < bestY) {
-                    bestY = y
-                    bestC = c
-                }
-            }
+            // Feste Spalte: die Kachel bleibt dort, nur ihre Höhe in der Spalte ergibt sich aus den Kacheln darüber.
+            val bestC = items[i].col.coerceIn(0, cols - s)
+            var bestY = 0
+            for (k in bestC until bestC + s) bestY = max(bestY, colTop[k])
             if (equalizable[i]) {
                 // Kacheln auf gleicher Höhe, unter denen noch nichts liegt, gleich hoch machen.
                 val mates = (0 until i).filter { j ->
@@ -370,6 +379,15 @@ private class GridCtl {
     fun moveTo(p: Offset) {
         pointer = p
         maybeSwap()
+        // Spalte unter der linken Kante der gezogenen Kachel (nur im Anpassen-Modus, nur durch dich).
+        val d = dragging ?: return
+        val conf = layout.firstOrNull { it.tile == d } ?: return
+        val colW = refs.colW
+        if (colW <= 0) return
+        val span = conf.span.coerceIn(HomeLayoutStore.minSpan(d, cols), cols)
+        val left = p.x - grab.x
+        val newCol = ((left + (colW + refs.gap) / 2f) / (colW + refs.gap)).toInt().coerceIn(0, cols - span)
+        if (newCol != conf.col) onChange(layout.map { if (it.tile == d) it.copy(col = newCol) else it })
     }
 
     fun endGesture() {
@@ -415,7 +433,7 @@ private class GridCtl {
         val wantW = p.x + resizeGrab.x - r.left
         val wantH = p.y + resizeGrab.y - r.top
         val min = HomeLayoutStore.minSpan(s, cols)
-        val startCol = ((r.left + (colW + gap) / 2) / (colW + gap)).coerceIn(0, cols - 1)
+        val startCol = conf.col.coerceIn(0, cols - 1)
         val maxSpan = (cols - startCol).coerceAtLeast(min)
         val span = ((wantW + gap).toFloat() / (colW + gap)).roundToInt().coerceIn(min, maxSpan)
         val rows = if (conf.rows == 0 && abs(wantH - r.height) < (unit + gap) * 0.6f) {
@@ -467,7 +485,7 @@ fun HomeGrid(
     fun spanOf(t: TileConf) = t.span.coerceIn(HomeLayoutStore.minSpan(t.tile, cols), cols)
 
     val shown = layout.filter { it.visible && available(it.tile) }
-    val items = shown.map { FlowItem(it.tile, spanOf(it), it.rows, it.tile.stretch) }
+    val items = shown.map { FlowItem(it.tile, spanOf(it), it.rows, it.tile.stretch, it.col) }
     val gapPx = with(density) { gap.roundToPx() }
     val unitPx = with(density) { HomeLayoutStore.UNIT_DP.dp.roundToPx() }
     val selected = if (editing) HomeLayoutStore.selected?.takeIf { s -> shown.any { it.tile == s } } else null
@@ -569,14 +587,8 @@ fun HomeGrid(
                 key(conf.tile) {
                     val s = spanOf(conf)
                     val hDp = if (conf.rows > 0) (HomeLayoutStore.UNIT_DP * conf.rows + gap.value * (conf.rows - 1)).dp else null
-                    val enterEdit: (() -> Unit)? = if (editable && !editing) {
-                        {
-                            HomeLayoutStore.selected = conf.tile
-                            HomeLayoutStore.editing = true
-                        }
-                    } else {
-                        null
-                    }
+                    // Anpassen nur über den Knopf unten (lang drücken öffnet nichts mehr, damit nichts durcheinander kommt).
+                    val enterEdit: (() -> Unit)? = null
                     Box(
                         Modifier.graphicsLayer {
                             // Die gezogene Kachel hebt sich leicht ab.
@@ -638,7 +650,7 @@ fun HomeGrid(
                 conf = conf,
                 cols = cols,
                 naturalRows = ctl.naturalRows(t),
-                onSpan = { sp -> update(layout.map { if (it.tile == t) it.copy(span = sp) else it }) },
+                onSpan = { sp -> update(layout.map { if (it.tile == t) it.copy(span = sp, col = it.col.coerceIn(0, (cols - sp).coerceAtLeast(0))) else it }) },
                 onRows = { rw -> update(layout.map { if (it.tile == t) it.copy(rows = rw) else it }) },
                 onHide = {
                     update(layout.map { if (it.tile == t) it.copy(visible = false) else it })

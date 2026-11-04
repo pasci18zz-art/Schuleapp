@@ -118,6 +118,15 @@ class Repository(
         .map { parseKinds(it) }
         .stateIn(scope, SharingStarted.Eagerly, TaskKind.defaults)
 
+    /** Erledigte Aufgaben 7 Tage nach dem Erledigen endgültig löschen (auf allen Geräten). */
+    fun purgeOldDoneTasks() = io {
+        val limit = now() - 7L * 24 * 60 * 60 * 1000
+        dao.tasks().first().filter { it.done && !it.deleted && (it.doneAt ?: it.updatedAt) < limit }.forEach { t ->
+            dao.upsertTask(t.copy(deleted = true, updatedAt = now(), dirty = true))
+            deleteAttachmentsOf(t.id)
+        }
+    }
+
     // ---------- Tagesaufgaben ----------
     private val pinSerializer = kotlinx.serialization.builtins.ListSerializer(DailyPin.serializer())
 
@@ -135,16 +144,28 @@ class Repository(
     }
 
     fun isPinned(taskId: String, stepId: String? = null): Boolean =
-        dailyPins.value.any { it.taskId == taskId && it.stepId == stepId }
+        dailyPins.value.any { it.taskId == taskId && it.stepId == stepId && !it.hidden }
 
     /** Für heute anpinnen bzw. wieder lösen. */
     fun togglePin(taskId: String, stepId: String? = null) {
         val pins = dailyPins.value
-        if (pins.any { it.taskId == taskId && it.stepId == stepId }) {
+        if (pins.any { it.taskId == taskId && it.stepId == stepId && !it.hidden }) {
             savePins(pins.filterNot { it.taskId == taskId && it.stepId == stepId })
         } else {
-            savePins(pins + DailyPin(taskId, stepId, LocalDate.now().toEpochDay()))
+            pinToday(taskId, stepId)
         }
+    }
+
+    /** In die Tagesaufgaben legen (z. B. per Ziehen aus der Aufgaben-Kachel). */
+    fun pinToday(taskId: String, stepId: String? = null) {
+        val pins = dailyPins.value.filterNot { it.taskId == taskId && it.stepId == stepId }
+        savePins(pins + DailyPin(taskId, stepId, LocalDate.now().toEpochDay()))
+    }
+
+    /** Aus den Tagesaufgaben nehmen; automatisch übernommene HA bleiben für heute draußen. */
+    fun removeFromDaily(taskId: String, stepId: String? = null) {
+        val pins = dailyPins.value.filterNot { it.taskId == taskId && it.stepId == stepId }
+        savePins(pins + DailyPin(taskId, stepId, LocalDate.now().toEpochDay(), hidden = true))
     }
 
     fun unpin(taskId: String, stepId: String? = null) {

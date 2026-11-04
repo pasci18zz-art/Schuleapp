@@ -31,6 +31,20 @@ object Timing {
         return !now.isBefore(subjectEnd(t.subjectId, LocalDate.ofEpochDay(due), data))
     }
 
+    /** Stunde, bis zu der eine Aufgabe fällig ist: eingetragene Stunde, sonst die erste Stunde des Fachs an dem Tag. */
+    fun taskPeriod(t: Task, data: ScheduleData): Int? {
+        t.duePeriod?.let { return it }
+        val due = t.dueDate ?: return null
+        return Schedule.lessonsOn(LocalDate.ofEpochDay(due), data).filter { it.slot.subjectId == t.subjectId }.minOfOrNull { it.firstPeriod }
+    }
+
+    /** Gehört die Aufgabe in diese (Doppel-)Stunde? Nur in den Block, bis zu dem sie fällig ist. */
+    fun taskInLesson(t: Task, l: Lesson, data: ScheduleData): Boolean {
+        if (t.dueDate != l.date.toEpochDay() || t.subjectId != l.slot.subjectId) return false
+        val p = taskPeriod(t, data) ?: return true
+        return p in l.firstPeriod..l.lastPeriod
+    }
+
     /** Stunden zählen: Doppelstunden zählen doppelt, Entfall zählt nicht. */
     fun periodCount(lessons: List<Lesson>): Int {
         var n = 0

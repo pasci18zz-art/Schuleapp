@@ -102,7 +102,10 @@ fun MonsterTile(modifier: Modifier = Modifier) {
         val d = k.removePrefix(SettingKeys.MONSTER_PREFIX).toLongOrNull() ?: continue
         if (d in yearStart..today) yearCans += v.toIntOrNull() ?: 0
     }
+    // Nachgetragen: 20 Dosen aus diesem Schuljahr (vor dem Zähler), zählen nur im Schuljahres-Zähler.
+    if (yearStart == java.time.LocalDate.of(2026, 8, 1).toEpochDay()) yearCans += 20
     val caffeineMg = yearCans * 160
+    val phone = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp < 600
 
     // Im Dunkelmodus gedämpfte Beerentöne statt knalligem Pink.
     val dark = de.schulplaner.ui.components.colors.isDark
@@ -241,11 +244,11 @@ fun MonsterTile(modifier: Modifier = Modifier) {
                 }
             }
         }
-        // Koffein-Zähler unten rechts (ganzes Schuljahr).
+        // Schuljahres-Zähler: Handy oben rechts, Tablet unten rechts.
         Column(
             Modifier
-                .align(Alignment.BottomEnd)
-                .padding(end = 16.dp, bottom = 12.dp)
+                .align(if (phone) Alignment.TopEnd else Alignment.BottomEnd)
+                .padding(end = 14.dp, top = 12.dp, bottom = 12.dp)
                 .clip(RoundedCornerShape(14.dp))
                 .background(Color.White.copy(alpha = 0.16f))
                 .padding(horizontal = 10.dp, vertical = 6.dp),
@@ -258,6 +261,12 @@ fun MonsterTile(modifier: Modifier = Modifier) {
             }
             Text(amount, style = T.section.copy(fontSize = 17.sp), color = Color.White)
             Text("Koffein im Schuljahr", style = T.small.copy(fontSize = 10.sp), color = Cream.copy(alpha = 0.85f))
+            Text(
+                "$yearCans ${if (yearCans == 1) "Dose" else "Dosen"} gesamt",
+                style = T.smallBold.copy(fontSize = 11.sp),
+                color = Color.White,
+                modifier = Modifier.padding(top = 2.dp),
+            )
         }
         editDay?.let { d ->
             var value by remember(d) { androidx.compose.runtime.mutableIntStateOf(countOn(d)) }

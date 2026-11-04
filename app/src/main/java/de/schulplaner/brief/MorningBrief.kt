@@ -234,7 +234,7 @@ object MorningBrief {
         app.repo.awaitLoaded()
         val snap = app.repo.snapshot()
         val today = LocalDate.now().toEpochDay()
-        val pinned = app.repo.dailyPins.value.count { it.day == today }
+        val pinned = app.repo.dailyPins.value.count { it.day == today && !it.hidden }
         val b = build(snap, pinnedCount = pinned)
         if (force || b.worthShowing) post(ctx, b) { id -> id?.let { snap.schedule.subjects[it]?.name } }
     }

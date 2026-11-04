@@ -189,11 +189,11 @@ fun GradesOverviewScreen() {
                 Box(Modifier.weight(1f))
                 // Umschalter mit Symbolen: Buch = schriftlich, Kopf = mündlich, = gesamt.
                 de.schulplaner.ui.components.MiniSegmented(
-                    listOf(GradeView.WRITTEN to "Schriftlich", GradeView.ORAL to "Mündlich", GradeView.ALL to "Gesamt"),
+                    listOf(GradeView.WRITTEN to "Schriftlich", GradeView.ALL to "Gesamt", GradeView.ORAL to "Mündlich"),
                     view,
                     { view = it },
                     Modifier.width(150.dp),
-                    icons = listOf(de.schulplaner.ui.components.Sym.Deutsch, de.schulplaner.ui.components.Sym.Speak, de.schulplaner.ui.components.Sym.Equals),
+                    icons = listOf(de.schulplaner.ui.components.Sym.Deutsch, de.schulplaner.ui.components.Sym.Equals, de.schulplaner.ui.components.Sym.Speak),
                 )
             }
         }

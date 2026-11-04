@@ -395,6 +395,8 @@ data class DailyPin(
     val stepId: String? = null,
     /** Tag, für den angepinnt wurde (epochDay). Unerledigtes wandert in die nächsten Tage mit. */
     val day: Long,
+    /** true = an diesem Tag bewusst herausgenommen (z. B. eine automatisch übernommene HA). */
+    val hidden: Boolean = false,
 )
 
 /** Eine Stimmung: 1 = furchtbar … 5 = super. */

@@ -114,7 +114,7 @@ fun TaskEditSheet(initial: Task, isNew: Boolean, onDismiss: () -> Unit) {
     val pins by repo.dailyPins.collectAsStateWithLifecycle()
     // Neue Aufgabe: "Für heute" erst beim Speichern anpinnen.
     var pinNew by remember { mutableStateOf(false) }
-    val pinned = if (isNew) pinNew else pins.any { it.taskId == initial.id && it.stepId == null }
+    val pinned = if (isNew) pinNew else pins.any { it.taskId == initial.id && it.stepId == null && !it.hidden }
 
     val undo = LocalUndo.current
     val initialSteps = remember { steps }

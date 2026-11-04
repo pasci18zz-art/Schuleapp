@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -84,15 +86,17 @@ fun TasksScreen() {
     fun stillVisible(t: Task) = t.done && (t.dueDate ?: (t.doneAt?.let { LocalDate.ofEpochDay(it / 86_400_000L).toEpochDay() } ?: 0L)) >= todayEpoch
     // Gelöschte Art: Filter zurücksetzen.
     if (type != null && kinds.none { it.id == type }) type = null
-    val visible = tasks.filter { t ->
-        (type == null || t.type == type) &&
-            (subjectFilter == null || t.subjectId == subjectFilter) &&
-            when (status) {
-                Status.OPEN -> !t.done || stillVisible(t)
-                Status.DONE -> t.done
-                Status.ALL -> true
-            }
+    val filtered = tasks.filter { t -> (type == null || t.type == type) && (subjectFilter == null || t.subjectId == subjectFilter) }
+    val visible = filtered.filter { t ->
+        when (status) {
+            Status.OPEN -> !t.done || stillVisible(t)
+            Status.DONE -> t.done
+            Status.ALL -> true
+        }
     }
+    // Erledigte, die nicht mehr in "Offen" stehen: eingeklappt unter "Vergangen" (nach 7 Tagen gelöscht).
+    val past = if (status == Status.OPEN) filtered.filter { it.done && !stillVisible(it) }.sortedByDescending { it.doneAt ?: 0 } else emptyList()
+    var showPast by rememberSaveable { mutableStateOf(false) }
     val groups = groupTasks(visible, today, status)
     val openCount = tasks.count { !it.done }
 
@@ -152,6 +156,43 @@ fun TasksScreen() {
                                 },
                                 onClick = { edit = t to false },
                             )
+                            }
+                        }
+                    }
+                }
+            }
+            if (past.isNotEmpty()) {
+                item(key = "vergangen_kopf") {
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .clickable { showPast = !showPast }
+                            .padding(vertical = 8.dp, horizontal = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            SectionTitle("Vergangen (${past.size})")
+                            Text("Erledigte werden 7 Tage danach gelöscht", style = T.small, color = c.sub)
+                        }
+                        Icon(if (showPast) Ic.ChevronDown else Ic.ChevronRight, if (showPast) "Einklappen" else "Aufklappen", tint = c.sub, modifier = Modifier.size(20.dp))
+                    }
+                }
+                if (showPast) {
+                    item(key = "vergangen_liste") {
+                        GlassCard(Modifier.animateContentSize(), shape = RoundedCornerShape(24.dp), padding = PaddingValues(4.dp)) {
+                            past.forEach { t ->
+                                androidx.compose.runtime.key(t.id) {
+                                    TaskLine(
+                                        task = t,
+                                        subject = t.subjectId?.let { subjectMap[it] },
+                                        kind = kindOf(t.type, kinds),
+                                        percent = stepPercent(t.id, topics),
+                                        today = today,
+                                        onToggle = { repo.setTaskDone(t, !t.done) },
+                                        onClick = { edit = t to false },
+                                    )
+                                }
                             }
                         }
                     }

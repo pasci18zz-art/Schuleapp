@@ -131,7 +131,8 @@ fun TimetableScreen() {
     // Aufgaben der Art "Referat" werden wie Klausuren rot umrahmt.
     val referatTypes = kinds.filter { it.id == de.schulplaner.data.TaskType.TALK || it.name.contains("referat", ignoreCase = true) }.map { it.id }.toSet()
     val openTasks = tasks.filter { !it.done }
-    val haFor: (Lesson) -> List<Task> = { l -> openTasks.filter { it.dueDate == l.date.toEpochDay() && it.subjectId == l.slot.subjectId } }
+    // HA nur in dem Block, bis zu dem sie fällig ist (nicht in jeder Stunde des Fachs an dem Tag).
+    val haFor: (Lesson) -> List<Task> = { l -> openTasks.filter { de.schulplaner.domain.Timing.taskInLesson(it, l, schedule) } }
     val examFor: (Lesson) -> Boolean = { l ->
         exams.any { it.date == l.date.toEpochDay() && it.subjectId == l.slot.subjectId && !de.schulplaner.domain.Timing.examOver(it, now, schedule) } ||
             openTasks.any { it.type in referatTypes && it.dueDate == l.date.toEpochDay() && it.subjectId == l.slot.subjectId && !de.schulplaner.domain.Timing.taskOver(it, now, schedule) }
@@ -401,21 +402,24 @@ private fun LessonCell(l: Lesson, editMode: Boolean, wide: Boolean, past: Boolea
             .then(
                 if (!l.cancelled && l.parts.values.any { it.cancelled }) {
                     Modifier.drawWithContent {
-                        drawContent()
+                        // Unter dem Text zeichnen, damit Fach/HA lesbar bleiben.
                         val h = size.height / len
                         for (i in 0 until len) {
                             if (!l.cancelledAt(l.firstPeriod + i)) continue
                             val top = h * i
                             clipRect(top = top, bottom = top + h) {
-                                drawRect(c.bg.copy(alpha = 0.55f), topLeft = androidx.compose.ui.geometry.Offset(0f, top), size = androidx.compose.ui.geometry.Size(size.width, h))
-                                val step = 6.dp.toPx()
+                                // Wie beim normalen Entfall: Fläche weg, breite Streifen in der Fachfarbe.
+                                drawRect(c.bg, topLeft = androidx.compose.ui.geometry.Offset(0f, top), size = androidx.compose.ui.geometry.Size(size.width, h))
+                                val w = 6.dp.toPx()
+                                val step = w * 3.5f
                                 var x = -h
                                 while (x < size.width) {
-                                    drawLine(color.copy(alpha = 0.55f), androidx.compose.ui.geometry.Offset(x, top + h), androidx.compose.ui.geometry.Offset(x + h, top), 1.5.dp.toPx())
+                                    drawLine(tinted, androidx.compose.ui.geometry.Offset(x, top + h), androidx.compose.ui.geometry.Offset(x + h, top), w)
                                     x += step
                                 }
                             }
                         }
+                        drawContent()
                     }
                 } else {
                     Modifier

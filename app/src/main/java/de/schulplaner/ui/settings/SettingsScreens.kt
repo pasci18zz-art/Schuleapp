@@ -437,7 +437,7 @@ fun SettingsScreen() {
 }
 
 /** Code, mit dem der Ansichtsmodus ausgeschaltet wird. */
-private const val UNLOCK_CODE = "2505"
+private const val UNLOCK_CODE = "250509"
 
 @Composable
 private fun UnlockDialog(onDismiss: () -> Unit, onUnlock: () -> Unit) {
