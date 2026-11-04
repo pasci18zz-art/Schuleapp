@@ -58,13 +58,38 @@ import java.time.LocalDate
 
 /** Antippen einer Stunde: HA eintragen, Entfall/Raum/Vertretung für diesen Tag, Notizen zum Fach. */
 @Composable
-fun LessonSheet(lesson: Lesson, onDismiss: () -> Unit, onAddTask: () -> Unit, onViewTask: (de.schulplaner.data.Task) -> Unit) {
+fun LessonSheet(
+    full: Lesson,
+    onDismiss: () -> Unit,
+    onAddTask: () -> Unit,
+    onViewTask: (de.schulplaner.data.Task) -> Unit,
+    /** Nur diese Stunde einer Doppelstunde ändern (lang drücken auf die obere/untere Hälfte). */
+    period: Int? = null,
+) {
     val c = colors
     val repo = LocalContext.current.app.repo
+    val schedule by repo.scheduleData.collectAsStateWithLifecycle()
     val tasks by repo.tasks.collectAsStateWithLifecycle()
     val notes by repo.notes.collectAsStateWithLifecycle()
-    val epoch = lesson.date.toEpochDay()
-    val base = lesson.override ?: LessonOverride(id = LessonOverride.idFor(lesson.slot.id, epoch), slotId = lesson.slot.id, date = epoch)
+    val epoch = full.date.toEpochDay()
+    val single = period != null && full.length > 1
+    val lesson = if (single && period != null) {
+        val pt = schedule.periodByNumber[period]
+        full.copy(
+            firstPeriod = period,
+            lastPeriod = period,
+            start = pt?.let { java.time.LocalTime.of(it.startMinute / 60, it.startMinute % 60) },
+            end = pt?.let { java.time.LocalTime.of(it.endMinute / 60, it.endMinute % 60) },
+        )
+    } else {
+        full
+    }
+    val partMode = single || full.part
+    val id = if (partMode) LessonOverride.partId(full.slot.id, epoch, lesson.firstPeriod) else LessonOverride.idFor(full.slot.id, epoch)
+    // Eigene Änderung dieser Stunde; sonst die der ganzen Doppelstunde als Ausgangspunkt.
+    val own = schedule.overrides[id]
+    val inherited = schedule.overrides[LessonOverride.idFor(full.slot.id, epoch)]
+    val base = own ?: inherited?.copy(id = id) ?: LessonOverride(id = id, slotId = full.slot.id, date = epoch)
     var override by remember { mutableStateOf(base) }
     var newNote by remember { mutableStateOf("") }
     val subjectId = lesson.slot.subjectId
@@ -74,7 +99,11 @@ fun LessonSheet(lesson: Lesson, onDismiss: () -> Unit, onAddTask: () -> Unit, on
             SubjectBadge(lesson.subject, 50)
             Column(Modifier.weight(1f)) {
                 Text(lesson.subject?.name ?: "?", style = T.title.copy(fontSize = T.section.fontSize * 1.3f), color = c.text)
-                val parts = listOf(Fmt.dayDate(lesson.date), "${lesson.periodLabel} Std", lesson.room.takeIf { it.isNotBlank() }?.let { "R $it" })
+                val parts = listOf(
+                    Fmt.dayDate(lesson.date),
+                    "${lesson.periodLabel} Std" + if (partMode) " (nur diese Stunde)" else "",
+                    lesson.room.takeIf { it.isNotBlank() }?.let { "R $it" },
+                )
                 Text(parts.filterNotNull().joinToString(" · "), style = T.small.copy(fontSize = T.label.fontSize), color = c.sub)
             }
         }

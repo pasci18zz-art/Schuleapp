@@ -160,7 +160,11 @@ object MorningBrief {
         val real = b.lessons.filter { !it.cancelled }
 
         val title = when {
-            b.schoolDay -> "Guten Morgen! ${real.size} ${if (real.size == 1) "Stunde" else "Stunden"} heute"
+            b.schoolDay -> {
+                // Doppelstunden zählen als 2 Stunden.
+                val n = de.schulplaner.domain.Timing.periodCount(real)
+                "Guten Morgen! $n ${if (n == 1) "Stunde" else "Stunden"} heute"
+            }
             else -> "Guten Morgen! Heute frei"
         }
         val lines = mutableListOf<String>()

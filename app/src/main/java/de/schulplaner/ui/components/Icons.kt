@@ -83,5 +83,6 @@ object Ic {
     val Grid by lazy { icon("grid", rect(3f, 3f, 8f, 8f, 2f), rect(13f, 3f, 8f, 8f, 2f), rect(3f, 13f, 8f, 8f, 2f), rect(13f, 13f, 8f, 8f, 2f)) }
     val Expand by lazy { icon("expand", "M4 9V4h5", "M20 15v5h-5", "M4 4l6 6", "M20 20l-6-6") }
     val Reset by lazy { icon("reset", "M4 4v5h5", "M4.6 15a8 8 0 1 0 1.9-8.3L4 9") }
+    val Info by lazy { icon("info", circle(12f, 12f, 9f), "M12 11v6", "M12 7.6v.01") }
     val Cloud by lazy { icon("cloud", "M7 18a5 5 0 1 1 1-9.9A6 6 0 0 1 19 10a4 4 0 0 1 0 8z") }
 }

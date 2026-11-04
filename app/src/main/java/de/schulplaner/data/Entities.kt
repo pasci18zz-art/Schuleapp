@@ -174,6 +174,9 @@ data class LessonOverride(
 ) {
     companion object {
         fun idFor(slotId: String, date: Long) = "${slotId}_$date"
+
+        /** Änderung nur für eine Stunde einer Doppelstunde (z. B. nur die 6. Stunde fällt aus). */
+        fun partId(slotId: String, date: Long, period: Int) = "${slotId}_${date}_p$period"
     }
 }
 

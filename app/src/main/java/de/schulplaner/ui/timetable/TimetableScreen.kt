@@ -3,6 +3,8 @@ package de.schulplaner.ui.timetable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -103,13 +105,14 @@ fun TimetableScreen() {
     val schedule by repo.scheduleData.collectAsStateWithLifecycle()
     val tasks by repo.tasks.collectAsStateWithLifecycle()
     val exams by repo.exams.collectAsStateWithLifecycle()
-    val today = rememberNow().toLocalDate()
+    val now = rememberNow()
+    val today = now.toLocalDate()
     val scope = rememberCoroutineScope()
 
     var monthMode by rememberSaveable { mutableStateOf(false) }
     var editMode by rememberSaveable { mutableStateOf(false) }
     var selectedDay by rememberSaveable { mutableLongStateOf(today.toEpochDay()) }
-    var openLesson by remember { mutableStateOf<Lesson?>(null) }
+    var openLesson by remember { mutableStateOf<Pair<Lesson, Int?>?>(null) }
     var editSlot by remember { mutableStateOf<Pair<LessonSlot, Boolean>?>(null) }
     var newTask by remember { mutableStateOf<Task?>(null) }
     var viewTask by remember { mutableStateOf<Task?>(null) }
@@ -129,8 +132,8 @@ fun TimetableScreen() {
     val openTasks = tasks.filter { !it.done }
     val haFor: (Lesson) -> List<Task> = { l -> openTasks.filter { it.dueDate == l.date.toEpochDay() && it.subjectId == l.slot.subjectId } }
     val examFor: (Lesson) -> Boolean = { l ->
-        exams.any { it.date == l.date.toEpochDay() && it.subjectId == l.slot.subjectId } ||
-            openTasks.any { it.type in referatTypes && it.dueDate == l.date.toEpochDay() && it.subjectId == l.slot.subjectId }
+        exams.any { it.date == l.date.toEpochDay() && it.subjectId == l.slot.subjectId && !de.schulplaner.domain.Timing.examOver(it, now, schedule) } ||
+            openTasks.any { it.type in referatTypes && it.dueDate == l.date.toEpochDay() && it.subjectId == l.slot.subjectId && !de.schulplaner.domain.Timing.taskOver(it, now, schedule) }
     }
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
@@ -178,15 +181,16 @@ fun TimetableScreen() {
                     WeekGrid(
                         monday = baseMonday.plusWeeks((page - CENTER).toLong()),
                         todayEpoch = today.toEpochDay(),
+                        now = now,
                         editMode = editMode,
                         maxPeriod = rows,
                         wide = wide,
                         schedule = schedule,
                         haFor = haFor,
                         examFor = examFor,
-                        onLesson = { l ->
+                        onLesson = { l, period ->
                             if (!readOnly) {
-                                if (editMode) editSlot = l.slot to false else openLesson = l
+                                if (editMode) editSlot = l.slot to false else openLesson = l to period
                             }
                         },
                         onTask = { viewTask = it },
@@ -209,13 +213,13 @@ fun TimetableScreen() {
                 if (wide) {
                     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                         HorizontalPager(monthPager, Modifier.weight(1f).height(monthH), pageSpacing = 16.dp, key = { it }) { page ->
-                            MonthGrid(baseMonth.plusMonths((page - CENTER).toLong()), today, selectedDay, cellH, true, schedule, tasks, exams, referatTypes) { selectedDay = it }
+                            MonthGrid(baseMonth.plusMonths((page - CENTER).toLong()), today, now, selectedDay, cellH, true, schedule, tasks, exams, referatTypes) { selectedDay = it }
                         }
                         panel(Modifier.width(300.dp))
                     }
                 } else {
                     HorizontalPager(monthPager, Modifier.fillMaxWidth().height(monthH), pageSpacing = 16.dp, key = { it }) { page ->
-                        MonthGrid(baseMonth.plusMonths((page - CENTER).toLong()), today, selectedDay, cellH, false, schedule, tasks, exams, referatTypes) { selectedDay = it }
+                        MonthGrid(baseMonth.plusMonths((page - CENTER).toLong()), today, now, selectedDay, cellH, false, schedule, tasks, exams, referatTypes) { selectedDay = it }
                     }
                     panel(Modifier.fillMaxWidth())
                 }
@@ -223,9 +227,10 @@ fun TimetableScreen() {
         }
     }
 
-    openLesson?.let { l ->
+    openLesson?.let { (l, period) ->
         LessonSheet(
-            lesson = l,
+            full = l,
+            period = period,
             onDismiss = { openLesson = null },
             onAddTask = {
                 openLesson = null
@@ -290,13 +295,14 @@ private fun Modifier.stripes(color: Color, width: Dp): Modifier = drawBehind {
 private fun WeekGrid(
     monday: LocalDate,
     todayEpoch: Long,
+    now: java.time.LocalDateTime,
     editMode: Boolean,
     maxPeriod: Int,
     wide: Boolean,
     schedule: ScheduleData,
     haFor: (Lesson) -> List<Task>,
     examFor: (Lesson) -> Boolean,
-    onLesson: (Lesson) -> Unit,
+    onLesson: (Lesson, Int?) -> Unit,
     onTask: (Task) -> Unit,
     onEmpty: (Int, Int) -> Unit,
 ) {
@@ -362,9 +368,11 @@ private fun WeekGrid(
                             }
                             lessons.forEach { l ->
                                 if (l.isFree) {
-                                    FreeCell(l, editMode) { onLesson(l) }
+                                    FreeCell(l, editMode) { onLesson(l, null) }
                                 } else {
-                                    LessonCell(l, editMode, wide, if (editMode) emptyList() else haFor(l), !editMode && examFor(l), { onLesson(l) }, onTask)
+                                    // Vergangene Stunden werden grau (man sieht, wie weit die Woche ist).
+                                    val past = !editMode && l.endDateTime?.let { !now.isBefore(it) } == true
+                                    LessonCell(l, editMode, wide, past, if (editMode) emptyList() else haFor(l), !editMode && examFor(l), { p -> onLesson(l, p) }, onTask)
                                 }
                             }
                         }
@@ -376,12 +384,13 @@ private fun WeekGrid(
 }
 
 @Composable
-private fun LessonCell(l: Lesson, editMode: Boolean, wide: Boolean, tasks: List<Task>, exam: Boolean, onClick: () -> Unit, onTask: (Task) -> Unit) {
+private fun LessonCell(l: Lesson, editMode: Boolean, wide: Boolean, past: Boolean, tasks: List<Task>, exam: Boolean, onClick: (Int?) -> Unit, onTask: (Task) -> Unit) {
     val c = colors
-    val color = subjectColor(l.subject?.color)
+    val color = if (past) c.sub else subjectColor(l.subject?.color)
     val len = l.lastPeriod - l.firstPeriod + 1
-    val tinted = color.copy(alpha = c.tint)
+    val tinted = color.copy(alpha = if (past) 0.14f else c.tint)
     val shape = RoundedCornerShape(12.dp)
+    val textColor = if (past) c.sub else c.text
     Column(
         Modifier
             .offset(y = (RowH + Gap) * (l.firstPeriod - 1))
@@ -390,19 +399,49 @@ private fun LessonCell(l: Lesson, editMode: Boolean, wide: Boolean, tasks: List<
             .clip(shape)
             .then(if (l.cancelled) Modifier.stripes(tinted, 6.dp) else Modifier.background(tinted))
             .then(if (exam) Modifier.border(1.5.dp, c.exam, shape) else Modifier)
-            .clickable(onClick = onClick)
+            // Antippen = ganze (Doppel-)Stunde; lang drücken = nur die Stunde unter dem Finger (obere/untere Hälfte).
+            .pointerInput(l.slot.id, l.firstPeriod, len, editMode) {
+                detectTapGestures(
+                    onTap = { onClick(null) },
+                    onLongPress = { pos ->
+                        if (editMode || len <= 1) {
+                            onClick(null)
+                        } else {
+                            val i = (pos.y / (size.height.toFloat() / len)).toInt().coerceIn(0, len - 1)
+                            onClick(l.firstPeriod + i)
+                        }
+                    },
+                )
+            }
             .padding(horizontal = 5.dp, vertical = 5.dp),
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
         Text(
             if (wide) l.subject?.name ?: "?" else l.subject?.label ?: "?",
             style = T.label.copy(fontSize = T.label.fontSize * 0.95f, textDecoration = if (l.cancelled) TextDecoration.LineThrough else null),
-            color = c.text,
+            color = textColor,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
         val roomText = listOfNotNull(l.room.ifBlank { null }, if (editMode && l.slot.weekType != WeekType.ALL) "nur ${l.slot.weekType}" else null).joinToString(" · ")
-        if (roomText.isNotBlank()) Text(roomText, style = T.smallBold.copy(fontSize = T.small.fontSize * 0.8f), color = c.sub, maxLines = 1, overflow = TextOverflow.Clip)
+        // Raumänderung in Akzentfarbe mit Ort-Symbol, Hinweis/Vertretung mit kleinem "i".
+        val roomChanged = l.override?.room?.isNotBlank() == true
+        if (roomText.isNotBlank() || l.note.isNotBlank()) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                if (roomChanged) Icon(Ic.Pin, "Raumänderung", tint = if (past) c.sub else c.accent, modifier = Modifier.size(10.dp))
+                if (roomText.isNotBlank()) {
+                    Text(
+                        roomText,
+                        style = T.smallBold.copy(fontSize = T.small.fontSize * 0.8f),
+                        color = if (roomChanged && !past) c.accent else c.sub,
+                        maxLines = 1,
+                        overflow = TextOverflow.Clip,
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
+                }
+                if (l.note.isNotBlank()) Icon(Ic.Info, "Hinweis: ${l.note}", tint = if (past) c.sub else c.accent, modifier = Modifier.size(11.dp))
+            }
+        }
         if (exam) Text("Klausur", style = T.smallBold.copy(fontSize = T.small.fontSize * 0.82f), color = c.exam, maxLines = 1)
         // HA unter einem feinen Strich, überall gleich groß; Umbruch nur zwischen Wörtern.
         if (tasks.isNotEmpty()) {
@@ -444,6 +483,7 @@ private fun FreeCell(l: Lesson, editMode: Boolean, onClick: () -> Unit) {
 private fun MonthGrid(
     month: YearMonth,
     today: LocalDate,
+    now: java.time.LocalDateTime,
     selectedDay: Long,
     cellH: Dp,
     rich: Boolean,
@@ -484,11 +524,15 @@ private fun MonthGrid(
                         val dayTasks = tasks.filter { it.dueDate == epoch }.sortedBy { it.done }
                         val selected = epoch == selectedDay
                         val isToday = date == today
+                        // Klausur oder Referat an diesem Tag, das noch nicht vorbei ist: ganzer Tag rot umrahmt.
+                        val redDay = dayExams.any { !de.schulplaner.domain.Timing.examOver(it, now, schedule) } ||
+                            dayTasks.any { !it.done && it.type in referatTypes && !de.schulplaner.domain.Timing.taskOver(it, now, schedule) }
                         Column(
                             Modifier
                                 .weight(1f)
                                 .height(cellH)
                                 .clip(RoundedCornerShape(12.dp))
+                                .then(if (redDay) Modifier.border(2.dp, c.exam, RoundedCornerShape(12.dp)) else Modifier)
                                 .background(
                                     when {
                                         selected -> c.accentSoft
@@ -531,15 +575,15 @@ private fun MonthGrid(
                                     }
                                 }
                                 // (Fach, Text, rot umrahmt, erledigt) – Erledigtes wird durchgestrichen.
-                                val items = dayExams.map { e -> listOf(schedule.subjects[e.subjectId], "${e.type} ${schedule.subjects[e.subjectId]?.label ?: ""}".trim(), true, false) } +
-                                    dayTasks.map { t -> listOf(t.subjectId?.let { schedule.subjects[it] }, t.title, t.type in referatTypes, t.done) }
+                                val items = dayExams.map { e -> listOf(schedule.subjects[e.subjectId], "${e.type} ${schedule.subjects[e.subjectId]?.label ?: ""}".trim(), !de.schulplaner.domain.Timing.examOver(e, now, schedule), false) } +
+                                    dayTasks.map { t -> listOf(t.subjectId?.let { schedule.subjects[it] }, t.title, t.type in referatTypes && !de.schulplaner.domain.Timing.taskOver(t, now, schedule), t.done) }
                                 items.take(3).forEach { item ->
                                     EventPill(item[0] as Subject?, item[1] as String, item[2] as Boolean, item[3] as Boolean)
                                 }
                                 if (items.size > 3) Text("+${items.size - 3}", style = T.smallBold.copy(fontSize = T.small.fontSize * 0.8f), color = c.sub)
                             } else {
-                                val bars = dayExams.map { Triple(schedule.subjects[it.subjectId]?.color, true, false) } +
-                                    dayTasks.map { t -> Triple(t.subjectId?.let { schedule.subjects[it] }?.color, t.type in referatTypes, t.done) }
+                                val bars = dayExams.map { Triple(schedule.subjects[it.subjectId]?.color, !de.schulplaner.domain.Timing.examOver(it, now, schedule), false) } +
+                                    dayTasks.map { t -> Triple(t.subjectId?.let { schedule.subjects[it] }?.color, t.type in referatTypes && !de.schulplaner.domain.Timing.taskOver(t, now, schedule), t.done) }
                                 if (bars.isEmpty() && holiday != null && inMonth) {
                                     Icon(HolidayLook.icon(holiday), null, tint = HolidayLook.color(holiday).copy(alpha = 0.8f), modifier = Modifier.size(13.dp))
                                 }
@@ -655,7 +699,7 @@ private fun DayPanel(
         }
         if (dayExams.isEmpty() && dayTasks.isEmpty()) {
             Text(
-                if (lessons.isEmpty()) "Nichts eingetragen" else "${lessons.size} Stunden, nichts fällig",
+                if (lessons.isEmpty()) "Nichts eingetragen" else "${de.schulplaner.domain.Timing.periodCount(lessons)} Stunden, nichts fällig",
                 style = T.small,
                 color = c.sub,
                 modifier = Modifier.padding(start = 10.dp, bottom = 8.dp),

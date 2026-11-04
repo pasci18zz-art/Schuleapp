@@ -95,7 +95,13 @@ import kotlinx.coroutines.launch
 import java.time.LocalDate
 
 @Composable
-private fun SettingsPage(title: String, root: Boolean = false, action: (@Composable () -> Unit)? = null, content: @Composable ColumnScope.() -> Unit) {
+private fun SettingsPage(
+    title: String,
+    root: Boolean = false,
+    action: (@Composable () -> Unit)? = null,
+    onBack: (() -> Unit)? = null,
+    content: @Composable ColumnScope.() -> Unit,
+) {
     val nav = LocalNavigator.current
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(screenPadding()),
@@ -105,7 +111,7 @@ private fun SettingsPage(title: String, root: Boolean = false, action: (@Composa
             ScreenHeader(title = title)
         } else {
             Row(Modifier.fillMaxWidth().padding(top = 20.dp), verticalAlignment = Alignment.CenterVertically) {
-                GlassIconButton(Ic.ChevronLeft, "Zurück", { nav.back() })
+                GlassIconButton(Ic.ChevronLeft, "Zurück", { if (onBack != null) onBack() else nav.back() })
                 Box(Modifier.weight(1f))
                 action?.invoke()
             }
@@ -160,187 +166,238 @@ fun SettingsScreen() {
     val readOnly by prefs.readOnly.collectAsStateWithLifecycle()
     val settingsMap by repo.settings.collectAsStateWithLifecycle()
     var confirmReadOnly by remember { mutableStateOf<Boolean?>(null) }
+    // Untermenü ("" = Übersicht).
+    var page by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("") }
+    androidx.activity.compose.BackHandler(enabled = page.isNotEmpty()) { page = "" }
 
-    SettingsPage("Einstellungen", root = true) {
-        if (!readOnly) GlassCard(padding = PaddingValues(6.dp)) {
-            NavRow(Ic.Book, "Fächer", "${subjects.size} Fächer · Farben, Lehrer, Räume") { nav.open(Routes.SET_SUBJECTS) }
-            NavRow(Ic.Layers, "Halbjahre", terms.joinToString(", ") { it.name }.ifBlank { "Keine" }) { nav.open(Routes.SET_TERMS) }
-            NavRow(Ic.Clock, "Stundenzeiten", "${periods.size} Stunden") { nav.open(Routes.SET_PERIODS) }
-            NavRow(Ic.Palm, "Ferien & freie Tage", "${holidays.size} eingetragen") { nav.open(Routes.SET_HOLIDAYS) }
-            NavRow(Sym.House, "Aufgabenarten", kinds.joinToString(", ") { it.name }) { nav.open(Routes.SET_KINDS) }
-            NavRow(Ic.Grid, "Startseite anpassen", "Kacheln verschieben, Größe ändern, ausblenden") {
-                de.schulplaner.ui.today.HomeLayoutStore.editing = true
-                nav.tab(Tabs.TODAY)
+    SettingsPage(
+        when (page) {
+            "schule" -> "Schule"
+            "darstellung" -> "Darstellung"
+            "mitteilungen" -> "Benachrichtigungen"
+            "geraet" -> "Gerät & Sync"
+            else -> "Einstellungen"
+        },
+        root = page.isEmpty(),
+        onBack = { page = "" },
+    ) {
+        if (page.isEmpty()) {
+            GlassCard(padding = PaddingValues(6.dp)) {
+                if (!readOnly) NavRow(Ic.Book, "Schule", "Fächer, Halbjahre, Stundenzeiten, Ferien, A/B-Wochen, Aufgabenarten") { page = "schule" }
+                NavRow(Ic.Sun, "Darstellung", "Hell/Dunkel, Design-Thema, Startseite, Ferien-Countdown") { page = "darstellung" }
+                NavRow(Ic.Clock, "Benachrichtigungen", "Morgenbrief, Erinnerung am Vorabend, Schnell-HA") { page = "mitteilungen" }
+                NavRow(Ic.User, "Gerät & Sync", "Ansichtsmodus, Anmeldung und Abgleich") { page = "geraet" }
             }
         }
-
-        if (!readOnly) LernzettelCard(settingsMap, kinds)
-
-        if (!readOnly) GlassCard(padding = PaddingValues(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Icon(Ic.Swap, null, tint = c.accent, modifier = Modifier.size(22.dp))
-                Text("A/B-Wochen", style = T.section, color = c.text, modifier = Modifier.weight(1f))
-                Segmented(listOf(true to "An", false to "Aus"), schedule.abEnabled, {
-                    repo.setSetting(SettingKeys.AB_ENABLED, it.toString())
-                }, Modifier.size(width = 130.dp, height = 46.dp))
+        if (page == "schule") {
+            if (!readOnly) GlassCard(padding = PaddingValues(6.dp)) {
+                NavRow(Ic.Book, "Fächer", "${subjects.size} Fächer · Farben, Lehrer, Räume") { nav.open(Routes.SET_SUBJECTS) }
+                NavRow(Ic.Layers, "Halbjahre", terms.joinToString(", ") { it.name }.ifBlank { "Keine" }) { nav.open(Routes.SET_TERMS) }
+                NavRow(Ic.Clock, "Stundenzeiten", "${periods.size} Stunden") { nav.open(Routes.SET_PERIODS) }
+                NavRow(Ic.Palm, "Ferien & freie Tage", "${holidays.size} eingetragen") { nav.open(Routes.SET_HOLIDAYS) }
+                NavRow(Sym.House, "Aufgabenarten", kinds.joinToString(", ") { it.name }) { nav.open(Routes.SET_KINDS) }
             }
-            if (schedule.abEnabled) {
-                val current = Schedule.weekTypeOf(today, schedule)
-                Text("Diese Woche ist:", style = T.small, color = c.sub, modifier = Modifier.padding(top = 12.dp, bottom = 6.dp))
-                val monday = Schedule.mondayOf(today).toEpochDay()
-                Segmented(listOf("A" to "A-Woche", "B" to "B-Woche"), current ?: "A", { picked ->
-                    val ref = if (picked == "A") monday else monday - 7
-                    repo.setSetting(SettingKeys.AB_REFERENCE, ref.toString())
-                })
-            }
-        }
 
-        GlassCard(padding = PaddingValues(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Icon(Ic.Sun, null, tint = c.accent, modifier = Modifier.size(22.dp))
-                Text("Darstellung", style = T.section, color = c.text)
-            }
-            Segmented(
-                listOf("system" to "System", "light" to "Hell", "dark" to "Dunkel"),
-                theme,
-                { v -> scope.launch { prefs.setTheme(v) } },
-                Modifier.padding(top = 12.dp),
-            )
-            Text("Design-Thema", style = T.label, color = c.sub, modifier = Modifier.padding(top = 16.dp, bottom = 8.dp))
-            val auto = de.schulplaner.ui.theme.Season.forDate(today)
-            val options = listOf("standard" to "Standard", de.schulplaner.ui.theme.Season.AUTO to "Saisonal · ${auto.label}") +
-                de.schulplaner.ui.theme.Season.entries.filter { it != de.schulplaner.ui.theme.Season.STANDARD }.map { it.key to it.label }
-            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                options.forEach { (key, label) ->
-                    val look = de.schulplaner.ui.theme.Season.resolve(key, today)
-                    de.schulplaner.ui.components.ChoiceChip(label, season == key, { scope.launch { prefs.setSeason(key) } }, leading = {
-                        SeasonDot(look)
+            if (!readOnly) LernzettelCard(settingsMap, kinds)
+
+            if (!readOnly) GlassCard(padding = PaddingValues(16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Icon(Ic.Swap, null, tint = c.accent, modifier = Modifier.size(22.dp))
+                    Text("A/B-Wochen", style = T.section, color = c.text, modifier = Modifier.weight(1f))
+                    Segmented(listOf(true to "An", false to "Aus"), schedule.abEnabled, {
+                        repo.setSetting(SettingKeys.AB_ENABLED, it.toString())
+                    }, Modifier.size(width = 130.dp, height = 46.dp))
+                }
+                if (schedule.abEnabled) {
+                    val current = Schedule.weekTypeOf(today, schedule)
+                    Text("Diese Woche ist:", style = T.small, color = c.sub, modifier = Modifier.padding(top = 12.dp, bottom = 6.dp))
+                    val monday = Schedule.mondayOf(today).toEpochDay()
+                    Segmented(listOf("A" to "A-Woche", "B" to "B-Woche"), current ?: "A", { picked ->
+                        val ref = if (picked == "A") monday else monday - 7
+                        repo.setSetting(SettingKeys.AB_REFERENCE, ref.toString())
                     })
                 }
             }
-            Text(
-                "Saisonal wechselt von selbst: Herbstblätter, Schnee, Weihnachten, Frühlingsblüten, Sommerfunkeln.",
-                style = T.small,
-                color = c.sub,
-                modifier = Modifier.padding(top = 8.dp),
-            )
-        }
 
-        if (!readOnly) GlassCard(padding = PaddingValues(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Icon(Ic.Sun, null, tint = c.accent, modifier = Modifier.size(22.dp))
-                Text("Morgenbrief", style = T.section, color = c.text, modifier = Modifier.weight(1f))
-                MiniSegmented(listOf(true to "An", false to "Aus"), briefOn, { on ->
-                    scope.launch {
-                        prefs.setBrief(on, briefMinute)
-                        de.schulplaner.brief.MorningBrief.scheduleFromPrefs(ctx)
+        }
+        if (page == "darstellung") {
+            GlassCard(padding = PaddingValues(16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Icon(Ic.Sun, null, tint = c.accent, modifier = Modifier.size(22.dp))
+                    Text("Darstellung", style = T.section, color = c.text)
+                }
+                Segmented(
+                    listOf("system" to "System", "light" to "Hell", "dark" to "Dunkel"),
+                    theme,
+                    { v -> scope.launch { prefs.setTheme(v) } },
+                    Modifier.padding(top = 12.dp),
+                )
+                Text("Design-Thema", style = T.label, color = c.sub, modifier = Modifier.padding(top = 16.dp, bottom = 8.dp))
+                val auto = de.schulplaner.ui.theme.Season.forDate(today)
+                val options = listOf("standard" to "Standard", de.schulplaner.ui.theme.Season.AUTO to "Saisonal · ${auto.label}") +
+                    de.schulplaner.ui.theme.Season.entries.filter { it != de.schulplaner.ui.theme.Season.STANDARD }.map { it.key to it.label }
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    options.forEach { (key, label) ->
+                        val look = de.schulplaner.ui.theme.Season.resolve(key, today)
+                        de.schulplaner.ui.components.ChoiceChip(label, season == key, { scope.launch { prefs.setSeason(key) } }, leading = {
+                            SeasonDot(look)
+                        })
                     }
-                }, Modifier.width(110.dp))
-            }
-            if (briefOn) {
-                Row(Modifier.padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("Uhrzeit", style = T.body, color = c.sub, modifier = Modifier.weight(1f))
-                    Text(
-                        Fmt.minutes(briefMinute) + " Uhr",
-                        style = T.body,
-                        color = c.text,
-                        modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(c.line).clickable { pickBriefTime = true }.padding(horizontal = 12.dp, vertical = 8.dp),
-                    )
                 }
                 Text(
-                    "Tagesüberblick als Live-Mitteilung (Now Bar): Stunden, wichtigste Aufgaben, Klausuren, Besonderes. " +
-                        "Am Wochenende und in den Ferien nur, wenn noch Aufgaben offen sind. Verschwindet zu Unterrichtsbeginn.",
+                    "Saisonal wechselt von selbst: Herbstblätter, Schnee, Weihnachten, Frühlingsblüten, Sommerfunkeln.",
                     style = T.small,
                     color = c.sub,
                     modifier = Modifier.padding(top = 8.dp),
                 )
             }
-            Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                de.schulplaner.ui.components.ChoiceChip("Ansehen", false, { nav.open(Routes.BRIEF) })
-                de.schulplaner.ui.components.ChoiceChip("Testen", false, {
-                    scope.launch(kotlinx.coroutines.Dispatchers.IO) { de.schulplaner.brief.MorningBrief.fire(ctx, force = true) }
-                })
-            }
-        }
 
-        GlassCard(padding = PaddingValues(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Icon(Ic.Clock, null, tint = c.accent, modifier = Modifier.size(22.dp))
-                Text("Erinnerung am Vorabend", style = T.section, color = c.text, modifier = Modifier.weight(1f))
-                MiniSegmented(listOf(true to "An", false to "Aus"), reminderOn, { on ->
-                    scope.launch {
-                        prefs.setReminder(on, reminderMinute)
-                        Reminders.scheduleFromPrefs(ctx, replace = true)
-                    }
-                }, Modifier.width(110.dp))
+            GlassCard(padding = PaddingValues(6.dp)) {
+                NavRow(Ic.Grid, "Startseite anpassen", "Kacheln verschieben, Größe ändern, ausblenden") {
+                    de.schulplaner.ui.today.HomeLayoutStore.editing = true
+                    nav.tab(Tabs.TODAY)
+                }
             }
-            if (reminderOn) {
-                Row(Modifier.padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("Uhrzeit", style = T.body, color = c.sub, modifier = Modifier.weight(1f))
+
+            GlassCard(padding = PaddingValues(16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Icon(Ic.Palm, null, tint = c.accent, modifier = Modifier.size(22.dp))
+                    Text("Ferien-Countdown", style = T.section, color = c.text)
+                }
+                de.schulplaner.ui.today.HomePrefs.load(ctx)
+                Segmented(
+                    listOf(
+                        de.schulplaner.ui.today.HomePrefs.FERIEN_DAYS to "Tage",
+                        de.schulplaner.ui.today.HomePrefs.FERIEN_SCHOOL to "Schultage",
+                        de.schulplaner.ui.today.HomePrefs.FERIEN_BOTH to "Beides",
+                    ),
+                    de.schulplaner.ui.today.HomePrefs.ferienMode,
+                    { de.schulplaner.ui.today.HomePrefs.setFerienMode(ctx, it) },
+                    Modifier.padding(top = 12.dp),
+                )
+                Text("Schultage: Mo–Fr ohne Ferien und Feiertage. Gilt nur für dieses Gerät.", style = T.small, color = c.sub, modifier = Modifier.padding(top = 8.dp))
+            }
+
+        }
+        if (page == "mitteilungen") {
+            if (!readOnly) GlassCard(padding = PaddingValues(16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Icon(Ic.Sun, null, tint = c.accent, modifier = Modifier.size(22.dp))
+                    Text("Morgenbrief", style = T.section, color = c.text, modifier = Modifier.weight(1f))
+                    MiniSegmented(listOf(true to "An", false to "Aus"), briefOn, { on ->
+                        scope.launch {
+                            prefs.setBrief(on, briefMinute)
+                            de.schulplaner.brief.MorningBrief.scheduleFromPrefs(ctx)
+                        }
+                    }, Modifier.width(110.dp))
+                }
+                if (briefOn) {
+                    Row(Modifier.padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text("Uhrzeit", style = T.body, color = c.sub, modifier = Modifier.weight(1f))
+                        Text(
+                            Fmt.minutes(briefMinute) + " Uhr",
+                            style = T.body,
+                            color = c.text,
+                            modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(c.line).clickable { pickBriefTime = true }.padding(horizontal = 12.dp, vertical = 8.dp),
+                        )
+                    }
                     Text(
-                        Fmt.minutes(reminderMinute) + " Uhr",
-                        style = T.body,
-                        color = c.text,
-                        modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(c.line).clickable { pickTime = true }.padding(horizontal = 12.dp, vertical = 8.dp),
+                        "Tagesüberblick als Live-Mitteilung (Now Bar): Stunden, wichtigste Aufgaben, Klausuren, Besonderes. " +
+                            "Am Wochenende und in den Ferien nur, wenn noch Aufgaben offen sind. Verschwindet zu Unterrichtsbeginn.",
+                        style = T.small,
+                        color = c.sub,
+                        modifier = Modifier.padding(top = 8.dp),
                     )
                 }
-                Text("Erinnert an offene HA und Klausuren für den nächsten Tag.", style = T.small, color = c.sub, modifier = Modifier.padding(top = 8.dp))
+                Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    de.schulplaner.ui.components.ChoiceChip("Ansehen", false, { nav.open(Routes.BRIEF) })
+                    de.schulplaner.ui.components.ChoiceChip("Testen", false, {
+                        scope.launch(kotlinx.coroutines.Dispatchers.IO) { de.schulplaner.brief.MorningBrief.fire(ctx, force = true) }
+                    })
+                }
             }
-        }
 
-        if (!readOnly) GlassCard(padding = PaddingValues(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Icon(Ic.Bookmark, null, tint = c.accent, modifier = Modifier.size(22.dp))
-                Text("Schnell-HA", style = T.section, color = c.text)
-            }
-            Text(
-                "Leg dir die Kachel „HA eintragen“ in die Schnelleinstellungen (oben runterziehen). " +
-                    "Sie wählt automatisch das Fach der aktuellen Stunde und die nächste Stunde als Termin.",
-                style = T.small,
-                color = c.sub,
-                modifier = Modifier.padding(top = 8.dp, bottom = 12.dp),
-            )
-            if (Build.VERSION.SDK_INT >= 33) {
-                de.schulplaner.ui.components.PrimaryButton("Kachel hinzufügen", {
-                    val sbm = ctx.getSystemService(StatusBarManager::class.java)
-                    sbm?.requestAddTileService(
-                        ComponentName(ctx, QuickHaTileService::class.java),
-                        ctx.getString(R.string.tile_label),
-                        AndroidIcon.createWithResource(ctx, R.drawable.ic_tile_ha),
-                        ctx.mainExecutor,
-                    ) { result ->
-                        if (result == StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ALREADY_ADDED) {
-                            Toast.makeText(ctx, "Die Kachel ist schon da", Toast.LENGTH_SHORT).show()
+            GlassCard(padding = PaddingValues(16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Icon(Ic.Clock, null, tint = c.accent, modifier = Modifier.size(22.dp))
+                    Text("Erinnerung am Vorabend", style = T.section, color = c.text, modifier = Modifier.weight(1f))
+                    MiniSegmented(listOf(true to "An", false to "Aus"), reminderOn, { on ->
+                        scope.launch {
+                            prefs.setReminder(on, reminderMinute)
+                            Reminders.scheduleFromPrefs(ctx, replace = true)
                         }
+                    }, Modifier.width(110.dp))
+                }
+                if (reminderOn) {
+                    Row(Modifier.padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text("Uhrzeit", style = T.body, color = c.sub, modifier = Modifier.weight(1f))
+                        Text(
+                            Fmt.minutes(reminderMinute) + " Uhr",
+                            style = T.body,
+                            color = c.text,
+                            modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(c.line).clickable { pickTime = true }.padding(horizontal = 12.dp, vertical = 8.dp),
+                        )
                     }
-                }, Modifier.fillMaxWidth(), icon = Ic.Plus)
-            } else {
-                Text("Schnelleinstellungen bearbeiten → „HA eintragen“ hineinziehen.", style = T.small, color = c.sub)
+                    Text("Erinnert an offene HA und Klausuren für den nächsten Tag.", style = T.small, color = c.sub, modifier = Modifier.padding(top = 8.dp))
+                }
             }
-        }
 
-        // Ansichtsmodus: nur auf diesem Gerät, z. B. für Eltern – alles sehen, nichts ändern.
-        GlassCard(padding = PaddingValues(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Icon(Ic.User, null, tint = c.accent, modifier = Modifier.size(22.dp))
-                Text("Ansichtsmodus", style = T.section, color = c.text, modifier = Modifier.weight(1f))
-                MiniSegmented(listOf(true to "An", false to "Aus"), readOnly, { on ->
-                    if (on != readOnly) confirmReadOnly = on
-                }, Modifier.width(110.dp))
-            }
-            Text(
-                if (readOnly) {
-                    "Dieses Gerät kann nur anschauen: keine Aufgaben anlegen, abhaken oder ändern. Daten kommen weiter per Sync."
+            if (!readOnly) GlassCard(padding = PaddingValues(16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Icon(Ic.Bookmark, null, tint = c.accent, modifier = Modifier.size(22.dp))
+                    Text("Schnell-HA", style = T.section, color = c.text)
+                }
+                Text(
+                    "Leg dir die Kachel „HA eintragen“ in die Schnelleinstellungen (oben runterziehen). " +
+                        "Sie wählt automatisch das Fach der aktuellen Stunde und die nächste Stunde als Termin.",
+                    style = T.small,
+                    color = c.sub,
+                    modifier = Modifier.padding(top = 8.dp, bottom = 12.dp),
+                )
+                if (Build.VERSION.SDK_INT >= 33) {
+                    de.schulplaner.ui.components.PrimaryButton("Kachel hinzufügen", {
+                        val sbm = ctx.getSystemService(StatusBarManager::class.java)
+                        sbm?.requestAddTileService(
+                            ComponentName(ctx, QuickHaTileService::class.java),
+                            ctx.getString(R.string.tile_label),
+                            AndroidIcon.createWithResource(ctx, R.drawable.ic_tile_ha),
+                            ctx.mainExecutor,
+                        ) { result ->
+                            if (result == StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ALREADY_ADDED) {
+                                Toast.makeText(ctx, "Die Kachel ist schon da", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }, Modifier.fillMaxWidth(), icon = Ic.Plus)
                 } else {
-                    "Zum Mitlesen, z. B. für Eltern: Auf diesem Gerät ist dann alles sichtbar, aber nichts änderbar. Gilt nur für dieses Gerät."
-                },
-                style = T.small,
-                color = c.sub,
-                modifier = Modifier.padding(top = 8.dp),
-            )
-        }
+                    Text("Schnelleinstellungen bearbeiten → „HA eintragen“ hineinziehen.", style = T.small, color = c.sub)
+                }
+            }
 
-        SyncCard()
+        }
+        if (page == "geraet") {
+            // Ansichtsmodus: nur auf diesem Gerät, z. B. für Eltern – alles sehen, nichts ändern.
+            GlassCard(padding = PaddingValues(16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Icon(Ic.User, null, tint = c.accent, modifier = Modifier.size(22.dp))
+                    Text("Ansichtsmodus", style = T.section, color = c.text, modifier = Modifier.weight(1f))
+                    MiniSegmented(listOf(true to "An", false to "Aus"), readOnly, { on ->
+                        if (on != readOnly) confirmReadOnly = on
+                    }, Modifier.width(110.dp))
+                }
+                Text(
+                    if (readOnly) {
+                        "Dieses Gerät kann nur anschauen: keine Aufgaben anlegen, abhaken oder ändern. Daten kommen weiter per Sync."
+                    } else {
+                        "Zum Mitlesen, z. B. für Eltern: Auf diesem Gerät ist dann alles sichtbar, aber nichts änderbar. Gilt nur für dieses Gerät."
+                    },
+                    style = T.small,
+                    color = c.sub,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+            }
+
+            SyncCard()
+        }
     }
     confirmReadOnly?.let { on ->
         if (on) {
@@ -432,16 +489,15 @@ private fun LernzettelCard(settings: Map<String, String>, kinds: List<TaskKind>)
     val c = colors
     val ctx = LocalContext.current
     val repo = ctx.app.repo
-    val on = settings[SettingKeys.LZ_ENABLED] != "false"
+    val on = true
     val kind = settings[SettingKeys.LZ_KIND] ?: de.schulplaner.data.TaskType.EXTRA
     GlassCard(padding = PaddingValues(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Icon(Sym.Pen, null, tint = c.accent, modifier = Modifier.size(22.dp))
             Text("Lernzettel zu Klausuren", style = T.section, color = c.text, modifier = Modifier.weight(1f))
-            MiniSegmented(listOf(true to "An", false to "Aus"), on, { repo.setSetting(SettingKeys.LZ_ENABLED, it.toString()) }, Modifier.width(110.dp))
         }
         Text(
-            "Neue Klausur → Aufgabe „Lernzettel“ im selben Fach, fällig am Tag davor. Die Themen der Klausur werden dort zu Unterpunkten (eigene Haken).",
+            "In der Klausur per Knopf „Lernzettel erstellen“: Aufgabe im selben Fach, fällig am Tag davor. Die Themen der Klausur werden dort zu Unterpunkten und bleiben automatisch aktuell.",
             style = T.small,
             color = c.sub,
             modifier = Modifier.padding(top = 8.dp),

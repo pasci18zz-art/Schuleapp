@@ -21,6 +21,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -64,8 +66,11 @@ fun ExamsScreen() {
 
     val subjectMap = subjects.associateBy { it.id }
     val gradeMap = grades.associateBy { it.id }
-    val upcoming = exams.filter { it.date >= today.toEpochDay() }.sortedBy { it.date }
-    val past = exams.filter { it.date < today.toEpochDay() }.sortedByDescending { it.date }
+    // Vorbei = die Stunde der Klausur ist zu Ende (nicht erst am nächsten Tag).
+    val now = rememberNow()
+    val upcoming = exams.filter { !de.schulplaner.domain.Timing.examOver(it, now, schedule) }.sortedBy { it.date }
+    val past = exams.filter { de.schulplaner.domain.Timing.examOver(it, now, schedule) }.sortedByDescending { it.date }
+    var showPast by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = screenPadding(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item {
@@ -90,9 +95,29 @@ fun ExamsScreen() {
             ExamCard(e, subjectMap[e.subjectId], topics, null, today) { nav.open(Routes.exam(e.id)) }
         }
         if (past.isNotEmpty()) {
-            item { SectionTitle("Vergangen") }
-            items(past, key = { it.id }) { e ->
-                ExamCard(e, subjectMap[e.subjectId], topics, e.gradeId?.let { gradeMap[it] }, today, dim = true) { nav.open(Routes.exam(e.id)) }
+            item {
+                // Eingeklappt, damit man sich auf das Nächste konzentrieren kann.
+                androidx.compose.foundation.layout.Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(androidx.compose.foundation.shape.RoundedCornerShape(14.dp))
+                        .clickable { showPast = !showPast }
+                        .padding(vertical = 8.dp, horizontal = 4.dp),
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                ) {
+                    androidx.compose.foundation.layout.Box(Modifier.weight(1f)) { SectionTitle("Vergangen (${past.size})") }
+                    androidx.compose.material3.Icon(
+                        if (showPast) Ic.ChevronDown else Ic.ChevronRight,
+                        if (showPast) "Einklappen" else "Aufklappen",
+                        tint = de.schulplaner.ui.components.colors.sub,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+            }
+            if (showPast) {
+                items(past, key = { it.id }) { e ->
+                    ExamCard(e, subjectMap[e.subjectId], topics, e.gradeId?.let { gradeMap[it] }, today, dim = true) { nav.open(Routes.exam(e.id)) }
+                }
             }
         }
     }

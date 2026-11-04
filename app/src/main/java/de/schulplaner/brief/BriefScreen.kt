@@ -111,6 +111,7 @@ fun BriefScreen() {
     val snap = Repository.Snapshot(schedule, tasks, kinds, emptyList(), settings, exams, topics)
     val b = MorningBrief.build(snap, today, pins.count { it.day == today.toEpochDay() })
     val real = b.lessons.filter { !it.cancelled }
+    val periods = de.schulplaner.domain.Timing.periodCount(real)
 
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(screenPadding()),
@@ -139,8 +140,8 @@ fun BriefScreen() {
                 Text(greet, style = T.hero, color = Color.White, modifier = Modifier.padding(top = 4.dp))
                 val summary = when {
                     b.schoolDay && b.firstStart != null && b.lastEnd != null ->
-                        "${real.size} ${if (real.size == 1) "Stunde" else "Stunden"} · ${Fmt.time(b.firstStart.toLocalTime())} – ${Fmt.time(b.lastEnd.toLocalTime())}"
-                    b.schoolDay -> "${real.size} Stunden heute"
+                        "${periods} ${if (periods == 1) "Stunde" else "Stunden"} · ${Fmt.time(b.firstStart.toLocalTime())} – ${Fmt.time(b.lastEnd.toLocalTime())}"
+                    b.schoolDay -> "$periods Stunden heute"
                     else -> "Heute ist kein Unterricht"
                 }
                 Text(summary, style = T.body, color = Color.White, modifier = Modifier.padding(top = 6.dp))

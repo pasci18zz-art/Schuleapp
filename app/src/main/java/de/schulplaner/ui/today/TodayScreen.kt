@@ -126,6 +126,8 @@ private class TodayState(
     val doneVisible: List<Task>,
     val tasks: List<Task>,
     val exams: List<Exam>,
+    /** Klausuren in den nächsten 7 Tagen, die noch nicht vorbei sind (für die Kacheln). */
+    val examsSoon: List<Exam>,
     val topics: List<ExamTopic>,
     val subjects: Map<String, Subject>,
     val kinds: List<TaskKind>,
@@ -155,7 +157,9 @@ fun TodayScreen() {
     // Erledigte bleiben ausgegraut sichtbar, bis ihr Fälligkeitstag vorbei ist.
     val doneVisible = tasks.filter { it.done && (it.dueDate ?: todayEpoch) >= todayEpoch }
         .sortedBy { it.dueDate ?: Long.MAX_VALUE }
-    val upcomingExams = exams.filter { it.date >= todayEpoch }.sortedBy { it.date }
+    // Vorbei ist eine Klausur, sobald ihre Stunde zu Ende ist.
+    val upcomingExams = exams.filter { !de.schulplaner.domain.Timing.examOver(it, now, schedule) }.sortedBy { it.date }
+    val examsSoon = upcomingExams.filter { it.date <= todayEpoch + 7 }
     val wt = Schedule.weekTypeOf(day, schedule)
 
     val state = TodayState(
@@ -163,7 +167,7 @@ fun TodayScreen() {
         weekLabel = wt?.let { "$it-Woche" },
         holidayName = Schedule.holidayOn(today, schedule)?.name,
         holiday = Schedule.holidayOn(today, schedule),
-        openTasks = openTasks, doneVisible = doneVisible, tasks = tasks, exams = upcomingExams, topics = topics,
+        openTasks = openTasks, doneVisible = doneVisible, tasks = tasks, exams = upcomingExams, examsSoon = examsSoon, topics = topics,
         subjects = schedule.subjects,
         kinds = kinds,
     )
@@ -282,7 +286,7 @@ fun TodayScreen() {
                             onPick = if (readOnly) null else ({ pickDaily = true }),
                             modifier = m,
                         )
-                        HomeTile.FERIEN -> FerienTile(schedule.holidays, today, m)
+                        HomeTile.FERIEN -> FerienTile(schedule, now, m)
                         HomeTile.NOW -> NowTile(state, m)
                         HomeTile.TASKS -> TasksTile(
                             state,
@@ -566,7 +570,8 @@ private fun LessonsTile(s: TodayState, schedule: de.schulplaner.domain.ScheduleD
                     Text("Kein Unterricht", style = T.small, color = c.sub, modifier = Modifier.padding(start = 8.dp, top = 4.dp, bottom = 8.dp))
                 }
                 lessons.forEach { l ->
-                    val past = isToday && l.endDateTime?.let { !s.now.isBefore(it) } == true
+                    // Vorbei (auch an früheren Tagen): grau.
+                    val past = l.endDateTime?.let { !s.now.isBefore(it) } == true
                     val now = isToday && s.current?.slot?.id == l.slot.id
                     val dayEpoch = l.date.toEpochDay()
                     val ha = s.tasks.any { !it.done && it.dueDate == dayEpoch && it.subjectId == l.slot.subjectId }
@@ -577,13 +582,13 @@ private fun LessonsTile(s: TodayState, schedule: de.schulplaner.domain.ScheduleD
                             .clip(RoundedCornerShape(18.dp))
                             .background(if (now) c.accentSoft else Color.Transparent)
                             .clickable { onLessonClick(l) }
-                            .alpha(if (past) 0.5f else 1f)
+                            .alpha(if (past) 0.55f else 1f)
                             .padding(horizontal = 10.dp, vertical = 9.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         Text(l.periodLabel, style = T.smallBold, color = c.sub, maxLines = 1, softWrap = false, modifier = Modifier.width(50.dp))
-                        LessonMark(subjectColor(l.subject?.color), l.length)
+                        LessonMark(if (past) c.sub else subjectColor(l.subject?.color), l.length)
                         Column(Modifier.weight(1f)) {
                             Text(
                                 l.subject?.name ?: "?",
@@ -593,11 +598,28 @@ private fun LessonsTile(s: TodayState, schedule: de.schulplaner.domain.ScheduleD
                                 overflow = TextOverflow.Ellipsis,
                             )
                             val time = listOfNotNull(l.start?.let { Fmt.time(it) }, l.end?.let { Fmt.time(it) }).joinToString(" – ")
-                            Text(listOf(time, l.room.takeIf { it.isNotBlank() }?.let { "R $it" }).filterNotNull().filter { it.isNotBlank() }.joinToString(" · "), style = T.small, color = c.sub)
+                            val roomChanged = l.override?.room?.isNotBlank() == true
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text(time, style = T.small, color = c.sub)
+                                if (l.room.isNotBlank()) {
+                                    // Raumänderung: Ort-Symbol in Akzentfarbe.
+                                    Icon(Ic.Pin, if (roomChanged) "Raumänderung" else null, tint = if (roomChanged && !past) c.accent else c.sub, modifier = Modifier.size(12.dp))
+                                    Text("R ${l.room}", style = if (roomChanged) T.smallBold else T.small, color = if (roomChanged && !past) c.accent else c.sub, maxLines = 1)
+                                }
+                            }
+                            if (l.note.isNotBlank()) {
+                                // Hinweis / Vertretung mit kleinem "i".
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Icon(Ic.Info, "Hinweis", tint = if (past) c.sub else c.accent, modifier = Modifier.size(12.dp))
+                                    Text(l.note, style = T.small, color = if (past) c.sub else c.text, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                }
+                            }
                         }
                         if (exam) Pill("Klausur", c.warnSoft, c.warn)
                         if (ha) Pill("HA")
-                        if (l.cancelled) Pill("Entfall", c.warnSoft, c.warn)
+                        if (l.cancelled) {
+                            if (past) Pill("Entfall", c.line, c.sub) else Pill("Entfall", c.warnSoft, c.warn)
+                        }
                     }
                 }
             }
@@ -619,19 +641,31 @@ private fun TasksTile(
     val repo = LocalContext.current.app.repo
     val undo = LocalUndo.current
     val today = s.now.toLocalDate()
-    val relevant = s.openTasks.filter { it.dueDate == null || it.dueDate <= s.day.toEpochDay() + 1 }
-    val open = (if (compact) relevant else s.openTasks).take(max)
-    val done = s.doneVisible.filter { !compact || it.dueDate == null || it.dueDate <= s.day.toEpochDay() + 1 }
+    val ctx = LocalContext.current
+    HomePrefs.load(ctx)
+    // Nur die gewählten Arten (Standard: Hausaufgaben). Leere Auswahl = alles.
+    val kindsShown = HomePrefs.taskKinds
+    val match: (Task) -> Boolean = { kindsShown.isEmpty() || it.type in kindsShown }
+    val openAll = s.openTasks.filter(match)
+    val relevant = openAll.filter { it.dueDate == null || it.dueDate <= s.day.toEpochDay() + 1 }
+    val open = (if (compact) relevant else openAll).take(max)
+    val done = s.doneVisible.filter(match).filter { !compact || it.dueDate == null || it.dueDate <= s.day.toEpochDay() + 1 }
         .take((max - open.size).coerceAtLeast(0))
     // Je mehr offen ist, desto wärmer/röter wird die Zahl.
-    val urgent = urgencyColor(taskUrgency(s.openTasks.size))
-    GlassCard(modifier, padding = androidx.compose.foundation.layout.PaddingValues(14.dp)) {
+    val urgent = urgencyColor(taskUrgency(openAll.size))
+    var pickKinds by remember { mutableStateOf(false) }
+    val title = when {
+        kindsShown == setOf(de.schulplaner.data.TaskType.HOMEWORK) -> "Hausaufgaben"
+        kindsShown.size == 1 -> s.kinds.firstOrNull { it.id in kindsShown }?.name ?: "Aufgaben"
+        else -> "Aufgaben"
+    }
+    GlassCard(modifier, padding = androidx.compose.foundation.layout.PaddingValues(14.dp), onLongClick = { pickKinds = true }) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Row(Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).clickable(onClick = onOpen), verticalAlignment = Alignment.CenterVertically) {
                 Icon(Ic.Tasks, "Aufgaben", tint = c.accent, modifier = Modifier.size(22.dp))
-                if (!compact) Text("Aufgaben", style = T.section, color = c.text, modifier = Modifier.padding(start = 10.dp))
+                if (!compact) Text(title, style = T.section, color = c.text, modifier = Modifier.padding(start = 10.dp))
                 Box(Modifier.weight(1f))
-                Text("${s.openTasks.size}", style = T.title.copy(fontSize = T.section.fontSize * 1.6f), color = if (s.openTasks.isEmpty()) c.text else urgent)
+                Text("${openAll.size}", style = T.title.copy(fontSize = T.section.fontSize * 1.6f), color = if (openAll.isEmpty()) c.text else urgent)
             }
             if (onAdd != null) {
                 Box(Modifier.padding(start = 8.dp).size(28.dp).clip(CircleShape).background(c.accentSoft).clickable(onClick = onAdd), contentAlignment = Alignment.Center) {
@@ -658,12 +692,54 @@ private fun TasksTile(
             )
         }
     }
+    if (pickKinds) TaskKindFilterSheet(s.kinds, kindsShown, onDismiss = { pickKinds = false }) { HomePrefs.setTaskKinds(ctx, it) }
+}
+
+/** Lang drücken auf die Aufgaben-Kachel: Welche Arten sie zeigt (nur auf diesem Gerät). */
+@Composable
+private fun TaskKindFilterSheet(kinds: List<TaskKind>, selected: Set<String>, onDismiss: () -> Unit, onChange: (Set<String>) -> Unit) {
+    val c = colors
+    de.schulplaner.ui.components.AppSheet(onDismiss = onDismiss) { close ->
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Aufgaben-Kachel", style = T.title.copy(fontSize = T.section.fontSize * 1.4f), color = c.text)
+                Text("Welche Arten sollen auf der Startseite stehen?", style = T.small, color = c.sub)
+            }
+            de.schulplaner.ui.components.PrimaryButton("Fertig", { close() })
+        }
+        val all = selected.isEmpty()
+        de.schulplaner.ui.components.ChoiceChip("Alle Arten", all, { onChange(emptySet()) })
+        kinds.forEach { k ->
+            val on = !all && k.id in selected
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(if (on) c.accentSoft else c.card)
+                    .clickable {
+                        val base = if (all) emptySet() else selected
+                        val next = if (k.id in base) base - k.id else base + k.id
+                        onChange(next)
+                    }
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Icon(de.schulplaner.ui.components.KindIcons.of(k.icon), null, tint = if (on) c.accent else c.sub, modifier = Modifier.size(20.dp))
+                Text(k.name, style = T.body, color = c.text, modifier = Modifier.weight(1f))
+                if (on) Icon(Ic.Check, null, tint = c.accent, modifier = Modifier.size(20.dp))
+            }
+        }
+    }
 }
 
 /** Countdown bis zu den nächsten Ferien (bzw. "noch X Tage Ferien"). */
 @Composable
-private fun FerienTile(holidays: List<Holiday>, today: LocalDate, modifier: Modifier = Modifier) {
+private fun FerienTile(schedule: de.schulplaner.domain.ScheduleData, now: LocalDateTime, modifier: Modifier = Modifier) {
     val c = colors
+    HomePrefs.load(LocalContext.current)
+    val holidays = schedule.holidays
+    val today = now.toLocalDate()
     val t = today.toEpochDay()
     val ferien = holidays.filter { it.kind == HolidayKind.FERIEN || it.name.contains("ferien", ignoreCase = true) }
     val current = ferien.firstOrNull { t in it.startDate..it.endDate }
@@ -687,9 +763,19 @@ private fun FerienTile(holidays: List<Holiday>, today: LocalDate, modifier: Modi
                     color = c.sub,
                 )
             }
-            Column(horizontalAlignment = Alignment.End) {
-                Text("$days", style = T.title.copy(fontSize = T.section.fontSize * 1.4f), color = c.text)
-                Text(if (current != null) "Tage frei" else if (days == 1L) "Tag" else "Tage", style = T.small, color = c.sub)
+            val mode = HomePrefs.ferienMode
+            if (current != null || mode != HomePrefs.FERIEN_SCHOOL) {
+                Column(horizontalAlignment = Alignment.End) {
+                    Text("$days", style = T.title.copy(fontSize = T.section.fontSize * 1.4f), color = c.text)
+                    Text(if (current != null) "Tage frei" else if (days == 1L) "Tag" else "Tage", style = T.small, color = c.sub)
+                }
+            }
+            if (current == null && mode != HomePrefs.FERIEN_DAYS) {
+                val school = schoolDaysUntil(schedule, now, h.startDate)
+                Column(horizontalAlignment = Alignment.End) {
+                    Text("$school", style = T.title.copy(fontSize = T.section.fontSize * 1.4f), color = c.accent)
+                    Text(if (school == 1) "Schultag" else "Schultage", style = T.small, color = c.sub)
+                }
             }
         }
     }
@@ -698,11 +784,11 @@ private fun FerienTile(holidays: List<Holiday>, today: LocalDate, modifier: Modi
 @Composable
 private fun ExamTile(s: TodayState, onOpen: (Exam) -> Unit, onEmpty: () -> Unit, modifier: Modifier = Modifier) {
     val c = colors
-    val exam = s.exams.firstOrNull()
+    val exam = s.examsSoon.firstOrNull()
     if (exam == null) {
         GlassCard(modifier, onClick = onEmpty) {
             Icon(Ic.Exam, null, tint = c.accent, modifier = Modifier.size(22.dp))
-            Text("Keine Klausuren in Sicht", style = T.label, color = c.sub, modifier = Modifier.padding(top = 12.dp))
+            Text("Keine Klausur in den nächsten 7 Tagen", style = T.label, color = c.sub, modifier = Modifier.padding(top = 12.dp))
         }
         return
     }
@@ -743,8 +829,8 @@ private fun ExamsListTile(s: TodayState, onOpen: (Exam) -> Unit, modifier: Modif
     val c = colors
     GlassCard(modifier, padding = androidx.compose.foundation.layout.PaddingValues(18.dp)) {
         Text("Klausuren", style = T.section, color = c.text)
-        if (s.exams.isEmpty()) Text("Keine Klausuren in Sicht", style = T.small, color = c.sub, modifier = Modifier.padding(top = 10.dp))
-        s.exams.take(max).forEach { e ->
+        if (s.examsSoon.isEmpty()) Text("Keine Klausur in den nächsten 7 Tagen", style = T.small, color = c.sub, modifier = Modifier.padding(top = 10.dp))
+        s.examsSoon.take(max).forEach { e ->
             val subject = s.subjects[e.subjectId]
             val ts = s.topics.filter { it.examId == e.id }
             val progress = if (ts.isEmpty()) 0f else ts.count { it.done }.toFloat() / ts.size
@@ -846,3 +932,19 @@ private fun IconText(icon: androidx.compose.ui.graphics.vector.ImageVector, text
 @Suppress("unused")
 @Composable
 private fun AddButton(onClick: () -> Unit) = SoftIconButton(Ic.Plus, "Hinzufügen", onClick)
+
+/** Schultage bis [until] (Mo–Fr ohne Ferien/Feiertage). Heute zählt mit, solange der Unterricht noch nicht vorbei ist. */
+private fun schoolDaysUntil(schedule: de.schulplaner.domain.ScheduleData, now: LocalDateTime, until: Long): Int {
+    var n = 0
+    var d = now.toLocalDate()
+    while (d.toEpochDay() < until) {
+        val weekday = d.dayOfWeek.value <= 5
+        if (weekday && Schedule.holidayOn(d, schedule) == null) {
+            val isToday = d == now.toLocalDate()
+            val end = if (isToday) Schedule.lessonsOn(d, schedule).mapNotNull { it.endDateTime }.maxOrNull() else null
+            if (!isToday || end == null || now.isBefore(end)) n++
+        }
+        d = d.plusDays(1)
+    }
+    return n
+}

@@ -293,9 +293,9 @@ class Repository(
 
     // ---------- Klausuren ----------
     fun saveExam(e: Exam) = io {
-        val isNew = dao.exam(e.id) == null
         dao.upsertExam(e.copy(updatedAt = now(), dirty = true))
-        updateLernzettel(e, create = isNew)
+        // Lernzettel nur noch per Knopf in der Klausur; ein bestehender zieht Fach und Datum nach.
+        updateLernzettel(e, create = false)
     }
 
     fun deleteExam(e: Exam) = io {
@@ -334,7 +334,7 @@ class Repository(
         val existing = dao.task(id)
         val due = e.date - 1
         if (existing == null) {
-            if (!create || st[SettingKeys.LZ_ENABLED] == "false") return
+            if (!create) return
             val kind = st[SettingKeys.LZ_KIND] ?: TaskType.EXTRA
             dao.upsertTask(
                 Task(id = id, title = "Lernzettel", subjectId = e.subjectId, type = kind, dueDate = due, createdAt = now(), updatedAt = now(), dirty = true),
@@ -368,6 +368,17 @@ class Repository(
         val keep = topics.map { "lz_${it.id}" }.toSet()
         steps.filter { it.id.startsWith("lz_") && it.id !in keep && !it.deleted }.forEach {
             dao.upsertTopic(it.copy(deleted = true, updatedAt = now(), dirty = true))
+        }
+    }
+
+    /** Knopf in der Klausur: Lernzettel-Aufgabe mit den Themen als Unterpunkten anlegen (bzw. eine gelöschte wiederherstellen). */
+    fun createLernzettel(e: Exam) = io {
+        val existing = dao.task(lernzettelId(e.id))
+        if (existing != null && existing.deleted) {
+            dao.upsertTask(existing.copy(deleted = false, done = false, dueDate = e.date - 1, subjectId = e.subjectId, updatedAt = now(), dirty = true))
+            mirrorTopics(e.id)
+        } else {
+            updateLernzettel(e, create = true)
         }
     }
 

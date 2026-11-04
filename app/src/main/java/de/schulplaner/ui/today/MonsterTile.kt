@@ -94,6 +94,15 @@ fun MonsterTile(modifier: Modifier = Modifier) {
     val monday = de.schulplaner.domain.Schedule.mondayOf(todayDate).toEpochDay()
     val weekDays = (0 until 7).map { monday + it }
     val week = weekDays.filter { it <= today }.sumOf { countOn(it) }
+    // Koffein im ganzen Schuljahr (ab 1. August): 500 ml mit 32 mg/100 ml = 160 mg pro Dose.
+    val yearStart = java.time.LocalDate.of(if (todayDate.monthValue >= 8) todayDate.year else todayDate.year - 1, 8, 1).toEpochDay()
+    var yearCans = 0
+    for ((k, v) in settings) {
+        if (!k.startsWith(SettingKeys.MONSTER_PREFIX)) continue
+        val d = k.removePrefix(SettingKeys.MONSTER_PREFIX).toLongOrNull() ?: continue
+        if (d in yearStart..today) yearCans += v.toIntOrNull() ?: 0
+    }
+    val caffeineMg = yearCans * 160
 
     // Im Dunkelmodus gedämpfte Beerentöne statt knalligem Pink.
     val dark = de.schulplaner.ui.components.colors.isDark
@@ -177,7 +186,7 @@ fun MonsterTile(modifier: Modifier = Modifier) {
             ) { drawLogo(slash.value, glow, flash.value) }
             Column(Modifier.weight(1f)) {
                 AnimatedContent(
-                    targetState = count,
+                    targetState = week,
                     transitionSpec = {
                         val up = targetState > initialState
                         (slideInVertically(spring(dampingRatio = 0.55f, stiffness = 480f)) { if (up) it else -it } + fadeIn() + scaleIn(initialScale = 0.6f)) togetherWith
@@ -201,7 +210,7 @@ fun MonsterTile(modifier: Modifier = Modifier) {
                         },
                     )
                 }
-                Text(if (count == 1) "Dose heute" else "Dosen heute", style = T.smallBold.copy(fontSize = 13.sp), color = Cream.copy(alpha = 0.9f))
+                Text(if (week == 1) "Dose diese Woche" else "Dosen diese Woche", style = T.smallBold.copy(fontSize = 13.sp), color = Cream.copy(alpha = 0.9f))
                 // Kleine Wochenleiste Mo–So.
                 Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.Bottom) {
                     val max = weekDays.maxOf { countOn(it) }.coerceAtLeast(3)
@@ -229,9 +238,26 @@ fun MonsterTile(modifier: Modifier = Modifier) {
                             )
                         }
                     }
-                    Text("  $week diese Woche", style = T.smallBold, color = Cream, modifier = Modifier.padding(bottom = 14.dp))
                 }
             }
+        }
+        // Koffein-Zähler unten rechts (ganzes Schuljahr).
+        Column(
+            Modifier
+                .align(Alignment.BottomEnd)
+                .padding(end = 16.dp, bottom = 12.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .background(Color.White.copy(alpha = 0.16f))
+                .padding(horizontal = 10.dp, vertical = 6.dp),
+            horizontalAlignment = Alignment.End,
+        ) {
+            val amount = if (caffeineMg >= 1000) {
+                String.format(java.util.Locale.GERMANY, "%.1f g", caffeineMg / 1000.0)
+            } else {
+                "$caffeineMg mg"
+            }
+            Text(amount, style = T.section.copy(fontSize = 17.sp), color = Color.White)
+            Text("Koffein im Schuljahr", style = T.small.copy(fontSize = 10.sp), color = Cream.copy(alpha = 0.85f))
         }
         editDay?.let { d ->
             var value by remember(d) { androidx.compose.runtime.mutableIntStateOf(countOn(d)) }

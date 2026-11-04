@@ -75,6 +75,7 @@ fun ExamDetailScreen(id: String) {
     val schedule by repo.scheduleData.collectAsStateWithLifecycle()
     val sessions by repo.sessions.collectAsStateWithLifecycle()
     val settingsMap by repo.settings.collectAsStateWithLifecycle()
+    val allTasks by repo.tasks.collectAsStateWithLifecycle()
     var pickPrep by remember { mutableStateOf(false) }
     val today = rememberNow().toLocalDate()
 
@@ -176,6 +177,33 @@ fun ExamDetailScreen(id: String) {
                 placeholder = "Neues Thema",
                 framed = false,
             )
+        }
+
+        // Lernzettel-Aufgabe per Knopf (übernimmt die Themen als Unterpunkte und bleibt aktuell).
+        if (!readOnly) {
+            val lz = allTasks.firstOrNull { it.id == repo.lernzettelId(exam.id) }
+            GlassCard(padding = PaddingValues(16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Icon(Ic.Note, null, tint = c.accent, modifier = Modifier.size(22.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text("Lernzettel", style = T.section, color = c.text)
+                        Text(
+                            when {
+                                lz == null -> "Aufgabe mit den Themen als Unterpunkten, fällig am Tag davor"
+                                lz.done -> "Erledigt"
+                                else -> "Aufgabe ist angelegt – Themen bleiben automatisch aktuell"
+                            },
+                            style = T.small,
+                            color = c.sub,
+                        )
+                    }
+                    if (lz == null) {
+                        PrimaryButton("Erstellen", { repo.createLernzettel(exam) })
+                    } else {
+                        Icon(Ic.Check, null, tint = c.good, modifier = Modifier.size(22.dp))
+                    }
+                }
+            }
         }
 
         GlassCard(padding = PaddingValues(16.dp)) {

@@ -38,6 +38,8 @@ data class Lesson(
     val cancelled: Boolean,
     val note: String,
     val override: LessonOverride?,
+    /** true = Teil einer Doppelstunde, für den es eine eigene Änderung gibt (Doppelstunde wird geteilt). */
+    val part: Boolean = false,
 ) {
     val periodLabel: String = if (firstPeriod == lastPeriod) "$firstPeriod." else "$firstPeriod.–$lastPeriod."
     val isFree: Boolean get() = slot.isFree
@@ -75,11 +77,32 @@ object Schedule {
         return data.slots
             .filter { it.dayOfWeek == dow && slotMatches(it, wt) && (withFree || !it.isFree) }
             .sortedBy { it.period }
-            .map { slot ->
+            .flatMap { slot ->
                 val ov = data.overrides[LessonOverride.idFor(slot.id, epoch)]
                 val subject = data.subjects[slot.subjectId]
                 val last = slot.period + slot.length - 1
-                Lesson(
+                // Gibt es für eine einzelne Stunde der Doppelstunde eine eigene Änderung, wird sie in Einzelstunden geteilt.
+                val parts = (slot.period..last).associateWith { data.overrides[LessonOverride.partId(slot.id, epoch, it)] }
+                if (slot.length > 1 && parts.values.any { it != null }) {
+                    return@flatMap (slot.period..last).map { p ->
+                        val pov = parts[p] ?: ov
+                        Lesson(
+                            slot = slot,
+                            subject = subject,
+                            date = date,
+                            firstPeriod = p,
+                            lastPeriod = p,
+                            start = data.periodByNumber[p]?.let { LocalTime.of(it.startMinute / 60, it.startMinute % 60) },
+                            end = data.periodByNumber[p]?.let { LocalTime.of(it.endMinute / 60, it.endMinute % 60) },
+                            room = pov?.room?.takeIf { it.isNotBlank() } ?: slot.room.ifBlank { subject?.room ?: "" },
+                            cancelled = pov?.cancelled == true,
+                            note = pov?.note ?: "",
+                            override = pov,
+                            part = true,
+                        )
+                    }
+                }
+                listOf(Lesson(
                     slot = slot,
                     subject = subject,
                     date = date,
@@ -91,7 +114,7 @@ object Schedule {
                     cancelled = ov?.cancelled == true,
                     note = ov?.note ?: "",
                     override = ov,
-                )
+                ))
             }
     }
 
