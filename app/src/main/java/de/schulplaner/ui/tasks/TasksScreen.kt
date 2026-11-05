@@ -83,7 +83,9 @@ fun TasksScreen() {
     val subjectMap = subjects.associateBy { it.id }
     val todayEpoch = today.toEpochDay()
     // Erledigte bleiben ausgegraut in "Offen", bis ihr Fälligkeitstag vorbei ist.
-    fun stillVisible(t: Task) = t.done && (t.dueDate ?: (t.doneAt?.let { LocalDate.ofEpochDay(it / 86_400_000L).toEpochDay() } ?: 0L)) >= todayEpoch
+    // Abgehakt = sofort unter "Vergangen" (stört nicht mehr in "Offen").
+    @Suppress("UNUSED_PARAMETER")
+    fun stillVisible(t: Task) = false
     // Gelöschte Art: Filter zurücksetzen.
     if (type != null && kinds.none { it.id == type }) type = null
     val filtered = tasks.filter { t -> (type == null || t.type == type) && (subjectFilter == null || t.subjectId == subjectFilter) }

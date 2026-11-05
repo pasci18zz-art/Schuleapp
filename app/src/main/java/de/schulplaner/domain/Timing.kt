@@ -47,11 +47,9 @@ object Timing {
 
     /** Stunden zählen: Doppelstunden zählen doppelt, Entfall zählt nicht. */
     fun periodCount(lessons: List<Lesson>): Int {
-        var n = 0
-        for (l in lessons) {
-            if (l.isFree) continue
-            for (p in l.firstPeriod..l.lastPeriod) if (!l.cancelledAt(p)) n++
-        }
-        return n
+        // Von der ersten bis zur letzten Stunde des Tages (z. B. 1. bis 11. Stunde = 11), Freistunden zählen mit.
+        val periods = lessons.filter { !it.isFree }.flatMap { l -> (l.firstPeriod..l.lastPeriod).filter { !l.cancelledAt(it) } }
+        if (periods.isEmpty()) return 0
+        return periods.max() - periods.min() + 1
     }
 }

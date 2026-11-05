@@ -158,7 +158,8 @@ fun TodayScreen() {
         .filter { !it.done }
         .sortedWith(compareBy<Task> { it.dueDate ?: Long.MAX_VALUE }.thenBy { it.createdAt })
     // Erledigte bleiben ausgegraut sichtbar, bis ihr Fälligkeitstag vorbei ist.
-    val doneVisible = tasks.filter { it.done && (it.dueDate ?: todayEpoch) >= todayEpoch }
+    // Abgehakte Aufgaben verschwinden sofort von der Startseite.
+    val doneVisible = emptyList<Task>()
         .sortedBy { it.dueDate ?: Long.MAX_VALUE }
     // Vorbei ist eine Klausur, sobald ihre Stunde zu Ende ist.
     val upcomingExams = exams.filter { !de.schulplaner.domain.Timing.examOver(it, now, schedule) }.sortedBy { it.date }
