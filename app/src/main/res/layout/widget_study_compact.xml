@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@android:id/background"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_bg"
+    android:clipToOutline="true"
+    android:paddingStart="14dp"
+    android:paddingEnd="14dp">
+<LinearLayout
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:gravity="center_vertical"
+    android:orientation="horizontal">
+    <ImageView
+    android:id="@+id/study_kind"
+    android:layout_width="44dp"
+    android:layout_height="44dp"
+    android:background="@drawable/widget_circle"
+    android:importantForAccessibility="no"
+    android:padding="11dp"
+    android:src="@drawable/ic_k_pen"
+    android:contentDescription="Art wechseln" />
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical"
+        android:paddingStart="14dp">
+        <Chronometer
+            android:id="@+id/study_timer"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:maxLines="1"
+            android:textColor="#FFFFFFFF"
+            android:textSize="30sp"
+            android:textStyle="bold" />
+        <TextView
+    android:id="@+id/study_info"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:ellipsize="end"
+    android:maxLines="1"
+    android:text="Lernen"
+    android:textColor="#BFFFFFFF"
+    android:textSize="12sp"
+     />
+    </LinearLayout>
+    <ImageView
+    android:id="@+id/study_stop"
+    android:layout_width="40dp"
+    android:layout_height="40dp"
+    android:background="@drawable/widget_circle"
+    android:importantForAccessibility="no"
+    android:padding="12dp"
+    android:src="@drawable/ic_w_stop"
+    android:contentDescription="Beenden" />
+        <FrameLayout
+            android:layout_width="10dp"
+            android:layout_height="1dp" />
+        <ImageView
+    android:id="@+id/study_toggle"
+    android:layout_width="50dp"
+    android:layout_height="50dp"
+    android:background="@drawable/widget_btn_accent"
+    android:importantForAccessibility="no"
+    android:padding="14dp"
+    android:src="@drawable/ic_w_play"
+    android:contentDescription="Start oder Pause" />
+</LinearLayout>
+</FrameLayout>
