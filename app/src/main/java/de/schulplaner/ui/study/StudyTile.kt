@@ -321,7 +321,7 @@ private fun WeekMini(list: List<StudySession>, now: Long, subjects: List<de.schu
 
 /** Auswahl vor dem Start: was du machst (Hausaufgaben, Referat, Lernen) und in welchem Fach. */
 @Composable
-private fun StartSheet(
+internal fun StartSheet(
     initialKind: String,
     initialSubject: String?,
     subjects: List<de.schulplaner.data.Subject>,

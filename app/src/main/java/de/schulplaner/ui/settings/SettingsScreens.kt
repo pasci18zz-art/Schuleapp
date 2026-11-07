@@ -371,6 +371,30 @@ fun SettingsScreen() {
                 } else {
                     Text("Schnelleinstellungen bearbeiten → „HA eintragen“ hineinziehen.", style = T.small, color = c.sub)
                 }
+                // Zweite Kachel: Lernzeit direkt starten (Bereich und Fach wählen), ohne die App zu öffnen.
+                Text(
+                    "Die Kachel „Lernzeit“ startet die Stoppuhr: antippen, Bereich und Fach wählen, fertig. Läuft schon eine, steuerst du sie damit.",
+                    style = T.small,
+                    color = c.sub,
+                    modifier = Modifier.padding(top = 16.dp, bottom = 12.dp),
+                )
+                if (Build.VERSION.SDK_INT >= 33) {
+                    de.schulplaner.ui.components.PrimaryButton("Lernzeit-Kachel hinzufügen", {
+                        val sbm = ctx.getSystemService(StatusBarManager::class.java)
+                        sbm?.requestAddTileService(
+                            ComponentName(ctx, de.schulplaner.quick.QuickStudyTileService::class.java),
+                            ctx.getString(R.string.tile_study_label),
+                            AndroidIcon.createWithResource(ctx, R.drawable.ic_stat_study),
+                            ctx.mainExecutor,
+                        ) { result ->
+                            if (result == StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ALREADY_ADDED) {
+                                Toast.makeText(ctx, "Die Kachel ist schon da", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }, Modifier.fillMaxWidth(), icon = Ic.Plus)
+                } else {
+                    Text("Schnelleinstellungen bearbeiten → „Lernzeit“ hineinziehen.", style = T.small, color = c.sub)
+                }
             }
 
         }
