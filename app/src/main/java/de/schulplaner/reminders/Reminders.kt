@@ -79,15 +79,29 @@ class ReminderWorker(context: Context, params: WorkerParameters) : CoroutineWork
         val tasks = repo.tasks.value.filter { !it.done && it.dueDate == tomorrow }
         val exams = repo.exams.value.filter { it.date == tomorrow }
 
-        if (tasks.isNotEmpty() || exams.isNotEmpty()) {
-            val lines = exams.map { "Klausur: ${subjects[it.subjectId]?.name ?: ""} ${it.title}".trim() } +
+        // Termine für morgen und Elternbriefe, die noch nicht fertig sind (jeden Abend, bis sie abgehakt sind).
+        val events = repo.events.value.filter { it.date == tomorrow }
+        val letters = repo.letters.value.filter { !it.done }
+
+        if (tasks.isNotEmpty() || exams.isNotEmpty() || events.isNotEmpty() || letters.isNotEmpty()) {
+            val lines = letters.map { "Elternbrief noch nicht fertig" } +
+                events.map { e ->
+                    "Termin morgen: " + listOfNotNull(
+                        e.title,
+                        e.timeText.ifBlank { null },
+                        e.periods?.let { if (it.first == it.last) "${it.first}. Std" else "${it.first}.–${it.last}. Std" },
+                        e.room.ifBlank { null },
+                    ).joinToString(" · ")
+                } +
+                exams.map { "Klausur: ${subjects[it.subjectId]?.name ?: ""} ${it.title}".trim() } +
                 tasks.map { t -> listOfNotNull(subjects[t.subjectId]?.name, t.title).joinToString(": ") }
-            val title = when {
-                exams.isNotEmpty() && tasks.isEmpty() -> "Morgen: Klausur"
-                tasks.size == 1 -> "Noch 1 Aufgabe für morgen"
-                else -> "Noch ${tasks.size} Aufgaben für morgen"
+            val parts = buildList {
+                if (letters.isNotEmpty()) add(if (letters.size == 1) "Elternbrief offen" else "${letters.size} Elternbriefe offen")
+                if (events.isNotEmpty()) add(if (events.size == 1) "Termin morgen" else "${events.size} Termine morgen")
+                if (exams.isNotEmpty()) add("Klausur morgen")
+                if (tasks.isNotEmpty()) add(if (tasks.size == 1) "1 Aufgabe für morgen" else "${tasks.size} Aufgaben für morgen")
             }
-            notify(ctx, title, lines)
+            notify(ctx, parts.joinToString(" · "), lines)
         }
         Reminders.scheduleFromPrefs(ctx, replace = true)
         return Result.success()

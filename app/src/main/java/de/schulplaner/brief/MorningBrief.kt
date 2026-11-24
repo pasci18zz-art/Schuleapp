@@ -48,7 +48,7 @@ class BriefData(
 
 /** Besonderheiten des Tages (Entfall, Raumwechsel, Ferien bald …). */
 class Special(val kind: Kind, val text: String) {
-    enum class Kind { CANCELLED, ROOM, NOTE, HOLIDAY, LERNZETTEL, EXAM_TODAY, PINNED }
+    enum class Kind { CANCELLED, ROOM, NOTE, HOLIDAY, LERNZETTEL, EXAM_TODAY, PINNED, EVENT }
 }
 
 object MorningBrief {
@@ -74,6 +74,14 @@ object MorningBrief {
         val names = data.subjects
         snap.exams.filter { it.date == today }.forEach { e ->
             specials += Special(Special.Kind.EXAM_TODAY, "Heute Klausur: ${names[e.subjectId]?.name ?: e.title}")
+        }
+        Schedule.eventsOn(date, data).forEach { e ->
+            val info = listOfNotNull(
+                e.timeText.ifBlank { null },
+                e.periods?.let { if (it.first == it.last) "${it.first}. Std" else "${it.first}.–${it.last}. Std" },
+                e.room.ifBlank { null },
+            ).joinToString(" · ")
+            specials += Special(Special.Kind.EVENT, "Termin: ${e.title}" + if (info.isNotBlank()) " ($info)" else "")
         }
         lessons.forEach { l ->
             val name = l.subject?.name ?: "?"

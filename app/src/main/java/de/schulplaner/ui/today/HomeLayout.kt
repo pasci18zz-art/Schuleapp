@@ -86,6 +86,7 @@ enum class HomeTile(
 ) {
     DAILY("daily", "Tagesaufgaben", "Was du heute schaffen willst – angepinnte Aufgaben und Unterpunkte", 1, 2, 3, true),
     FERIEN("ferien", "Ferien-Countdown", "Wie lange es noch bis zu den nächsten Ferien dauert", 1, 2, 3, true),
+    LETTER("letter", "Elternbrief", "Knopf „Elternbrief da“ – du wirst abends erinnert, bis er fertig ist", 1, 2, 1, true),
     NOW("now", "Jetzt", "Die aktuelle oder nächste Stunde", 1, 2, 2, true),
     TASKS("tasks", "Aufgaben", "Offene Aufgaben mit Fälligkeit", 1, 1, 1, true),
     EXAMS("exams", "Klausuren", "Die nächsten Klausuren und dein Lernfortschritt", 1, 1, 1, true),
@@ -100,6 +101,7 @@ enum class HomeTile(
         get() = when (this) {
             DAILY -> Ic.Pushpin
             FERIEN -> Ic.Palm
+            LETTER -> Ic.Note
             NOW -> Ic.Clock
             TASKS -> Ic.Tasks
             EXAMS -> Sym.Pen
@@ -146,7 +148,7 @@ object HomeLayoutStore {
 
     private val tabletOrder = listOf(
         HomeTile.DAILY, HomeTile.FERIEN, HomeTile.NOW, HomeTile.EXAMS, HomeTile.TASKS,
-        HomeTile.LESSONS, HomeTile.STUDY, HomeTile.MONSTER, HomeTile.GRADES, HomeTile.APPS,
+        HomeTile.LESSONS, HomeTile.STUDY, HomeTile.MONSTER, HomeTile.GRADES, HomeTile.LETTER, HomeTile.APPS,
     )
 
     fun defaults(cols: Int): List<TileConf> =

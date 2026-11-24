@@ -40,6 +40,8 @@ class Repository(
     val exams = dao.exams().state()
     val topics = dao.topics().state()
     val notes = dao.notes().state()
+    val events = dao.events().state()
+    val letters = dao.letters().state()
     val attachments = dao.attachments().state()
 
     val sessions = dao.sessions().state()
@@ -60,6 +62,7 @@ class Repository(
         ov: List<LessonOverride>,
         h: List<Holiday>,
         st: Map<String, String>,
+        ev: List<Event> = emptyList(),
     ) = ScheduleData(
         subjects = s.associateBy { it.id },
         slots = sl.filter { slot -> slot.isFree || s.any { it.id == slot.subjectId } },
@@ -68,6 +71,7 @@ class Repository(
         holidays = h,
         abEnabled = st[SettingKeys.AB_ENABLED] == "true",
         abReference = st[SettingKeys.AB_REFERENCE]?.toLongOrNull(),
+        events = ev,
     )
 
     val scheduleData: StateFlow<ScheduleData> = combine(
@@ -75,8 +79,9 @@ class Repository(
         overrides,
         holidays,
         settings,
-    ) { (s, sl, p), ov, h, st ->
-        buildSchedule(s, sl, p, ov, h, st)
+        events,
+    ) { (s, sl, p), ov, h, st, ev ->
+        buildSchedule(s, sl, p, ov, h, st, ev)
     }.stateIn(scope, SharingStarted.Eagerly, ScheduleData())
 
     /** Alles, was Widgets brauchen – direkt aus der Datenbank (auch wenn die App gerade erst startet). */
@@ -96,7 +101,7 @@ class Repository(
         val st = dao.settings().first().associate { it.id to it.value }
         val schedule = buildSchedule(
             dao.subjects().first(), dao.slots().first(), dao.periods().first(),
-            dao.overrides().first(), dao.holidays().first(), st,
+            dao.overrides().first(), dao.holidays().first(), st, dao.events().first(),
         )
         return Snapshot(
             schedule, dao.tasks().first(), parseKinds(st), dao.sessions().first(), st,
@@ -124,6 +129,10 @@ class Repository(
         dao.tasks().first().filter { it.done && !it.deleted && (it.doneAt ?: it.updatedAt) < limit }.forEach { t ->
             dao.upsertTask(t.copy(deleted = true, updatedAt = now(), dirty = true))
             deleteAttachmentsOf(t.id)
+        }
+        // Erledigte Elternbriefe räumen sich ebenfalls nach 7 Tagen auf.
+        dao.letters().first().filter { it.done && (it.doneAt ?: it.updatedAt) < limit }.forEach { l ->
+            dao.upsertLetter(l.copy(deleted = true, updatedAt = now(), dirty = true))
         }
     }
 
@@ -438,6 +447,16 @@ class Repository(
     }
 
     // ---------- Notizen ----------
+    // ---------- Termine und Elternbriefe ----------
+    fun saveEvent(e: Event) = io { dao.upsertEvent(e.copy(updatedAt = now(), dirty = true)) }
+    fun deleteEvent(e: Event) = io { dao.upsertEvent(e.copy(deleted = true, updatedAt = now(), dirty = true)) }
+    fun restoreEvent(e: Event) = io { dao.upsertEvent(e.copy(deleted = false, updatedAt = now(), dirty = true)) }
+
+    fun saveLetter(l: Letter) = io { dao.upsertLetter(l.copy(updatedAt = now(), dirty = true)) }
+    fun deleteLetter(l: Letter) = io { dao.upsertLetter(l.copy(deleted = true, updatedAt = now(), dirty = true)) }
+    fun setLetterDone(l: Letter, done: Boolean) =
+        saveLetter(l.copy(done = done, doneAt = if (done) now() else null))
+
     fun saveNote(n: SubjectNote) = io { dao.upsertNote(n.copy(updatedAt = now(), dirty = true)) }
     fun deleteNote(n: SubjectNote) = io { dao.upsertNote(n.copy(deleted = true, updatedAt = now(), dirty = true)) }
 

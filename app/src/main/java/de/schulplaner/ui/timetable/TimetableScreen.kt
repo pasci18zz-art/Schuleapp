@@ -41,6 +41,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.platform.LocalContext
@@ -52,6 +53,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import de.schulplaner.app
+import de.schulplaner.data.Event
 import de.schulplaner.data.Exam
 import de.schulplaner.data.HolidayKind
 import de.schulplaner.data.LessonSlot
@@ -117,6 +119,7 @@ fun TimetableScreen() {
     var editSlot by remember { mutableStateOf<Pair<LessonSlot, Boolean>?>(null) }
     var newTask by remember { mutableStateOf<Task?>(null) }
     var viewTask by remember { mutableStateOf<Task?>(null) }
+    var editEvent by remember { mutableStateOf<Pair<Event, Boolean>?>(null) }
     val readOnly = de.schulplaner.ui.components.LocalReadOnly.current
 
     val weekPager = rememberPagerState(initialPage = CENTER) { PAGES }
@@ -148,6 +151,7 @@ fun TimetableScreen() {
                 ScreenHeader(title = monthNames[month.monthValue - 1], overline = "${month.year}") {
                     GlassIconButton(Ic.ChevronLeft, "Vorheriger Monat", { scope.launch { monthPager.animateScrollToPage(monthPager.currentPage - 1) } })
                     GlassIconButton(Ic.ChevronRight, "Nächster Monat", { scope.launch { monthPager.animateScrollToPage(monthPager.currentPage + 1) } })
+                    if (!readOnly) GlassIconButton(Ic.CalendarPlain, "Termin hinzufügen", { editEvent = Event(date = selectedDay) to true })
                 }
             } else {
                 ScreenHeader(
@@ -157,6 +161,7 @@ fun TimetableScreen() {
                 ) {
                     GlassIconButton(Ic.ChevronLeft, "Vorherige Woche", { scope.launch { weekPager.animateScrollToPage(weekPager.currentPage - 1) } })
                     GlassIconButton(Ic.ChevronRight, "Nächste Woche", { scope.launch { weekPager.animateScrollToPage(weekPager.currentPage + 1) } })
+                    if (!readOnly) GlassIconButton(Ic.CalendarPlain, "Termin hinzufügen", { editEvent = Event(date = maxOf(today.toEpochDay(), monday.toEpochDay()).coerceAtMost(monday.plusDays(4).toEpochDay())) to true })
                     if (!readOnly) GlassIconButton(if (editMode) Ic.Check else Ic.Pencil, if (editMode) "Fertig" else "Stundenplan bearbeiten", { editMode = !editMode }, filled = editMode)
                 }
             }
@@ -196,6 +201,7 @@ fun TimetableScreen() {
                             }
                         },
                         onTask = { viewTask = it },
+                        onEvent = { e -> if (!readOnly) editEvent = e to false },
                         onEmpty = { day, period ->
                             editSlot = LessonSlot(
                                 dayOfWeek = day, period = period, length = 2, weekType = WeekType.ALL,
@@ -245,6 +251,7 @@ fun TimetableScreen() {
         )
     }
     editSlot?.let { (slot, isNew) -> SlotEditSheet(slot, isNew, onDismiss = { editSlot = null }) }
+    editEvent?.let { (e, isNew) -> EventEditSheet(e, isNew, onDismiss = { editEvent = null }) }
     newTask?.let { t -> TaskEditSheet(t, isNew = true, onDismiss = { newTask = null }) }
     viewTask?.let { t -> TaskViewSheet(t, onDismiss = { viewTask = null }) }
 }
@@ -306,6 +313,7 @@ private fun WeekGrid(
     examFor: (Lesson) -> Boolean,
     onLesson: (Lesson, Int?) -> Unit,
     onTask: (Task) -> Unit,
+    onEvent: (Event) -> Unit,
     onEmpty: (Int, Int) -> Unit,
 ) {
     val c = colors
@@ -334,13 +342,21 @@ private fun WeekGrid(
             for (i in 0 until 5) {
                 val date = monday.plusDays(i.toLong())
                 val isToday = date.toEpochDay() == todayEpoch
-                val lessons = if (editMode) Schedule.plannedLessons(date, schedule, withFree = true) else Schedule.lessonsOn(date, schedule, withFree = true)
+                val lessons = if (editMode) Schedule.plannedLessons(date, schedule, withFree = true, applyEvents = false) else Schedule.lessonsOn(date, schedule, withFree = true)
+                val dayEvents = if (editMode) emptyList() else Schedule.eventsOn(date, schedule)
                 val holiday = Schedule.holidayOn(date, schedule)
                 Column(Modifier.weight(1f).clip(RoundedCornerShape(14.dp)).background(if (isToday) c.accentSoft else Color.Transparent)) {
                     Column(Modifier.fillMaxWidth().height(HeaderH), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                         Text(Fmt.dayShort(date), style = T.smallBold, color = c.sub)
                         Box(Modifier.size(22.dp).clip(CircleShape).background(if (isToday) c.accent else Color.Transparent), contentAlignment = Alignment.Center) {
                             Text("${date.dayOfMonth}", style = T.smallBold, color = if (isToday) c.accentInk else c.text)
+                        }
+                        // Termine ohne Stunden: kleine farbige Punkte (antippen öffnet den ersten).
+                        val timeless = dayEvents.filter { it.firstPeriod == null }
+                        if (timeless.isNotEmpty()) {
+                            Row(Modifier.padding(top = 2.dp).clickable { onEvent(timeless.first()) }, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                                timeless.take(3).forEach { Box(Modifier.size(5.dp).clip(CircleShape).background(Color(it.color))) }
+                            }
                         }
                     }
                     Box(Modifier.fillMaxWidth().height(bodyH)) {
@@ -368,6 +384,8 @@ private fun WeekGrid(
                                     }
                                 }
                             }
+                            // Termine mit Stunden ersetzen dort den Unterricht.
+                            dayEvents.filter { it.firstPeriod != null }.forEach { e -> EventCell(e, wide) { onEvent(e) } }
                             lessons.forEach { l ->
                                 if (l.isFree) {
                                     FreeCell(l, editMode) { onLesson(l, null) }
@@ -400,7 +418,7 @@ private fun LessonCell(l: Lesson, editMode: Boolean, wide: Boolean, past: Boolea
             .then(if (l.cancelled) Modifier.stripes(tinted, 6.dp) else Modifier.background(tinted))
             // Fällt nur eine Stunde der Doppelstunde aus: nur dieser Teil gestrichelt, kein zweiter Fachname.
             .then(
-                if (!l.cancelled && l.parts.values.any { it.cancelled }) {
+                if (l.partlyOut) {
                     Modifier.drawWithContent {
                         // Unter dem Text zeichnen, damit Fach/HA lesbar bleiben.
                         val h = size.height / len
@@ -485,6 +503,37 @@ private fun LessonCell(l: Lesson, editMode: Boolean, wide: Boolean, past: Boolea
                     maxLines = (linesLeft / shown.size).coerceAtLeast(1),
                     modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(4.dp)).clickable { onTask(t) },
                 )
+            }
+        }
+    }
+}
+
+/** Termin im Raster: in seiner Farbe, über den betroffenen Stunden, mit Zeit, Raum und Titel. */
+@Composable
+private fun EventCell(e: Event, wide: Boolean, onClick: () -> Unit) {
+    val c = colors
+    val first = e.firstPeriod ?: return
+    val last = maxOf(first, e.lastPeriod ?: first)
+    val len = last - first + 1
+    val color = Color(e.color)
+    val shape = RoundedCornerShape(12.dp)
+    Column(
+        Modifier
+            .offset(y = (RowH + Gap) * (first - 1))
+            .fillMaxWidth()
+            .height(RowH * len + Gap * (len - 1))
+            .clip(shape)
+            .background(Brush.verticalGradient(listOf(color, color.copy(alpha = 0.78f))))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 5.dp, vertical = 5.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        Text(e.title, style = T.label.copy(fontSize = T.label.fontSize * 0.95f), color = Color.White, maxLines = if (len >= 2) 3 else 2, overflow = TextOverflow.Ellipsis)
+        if (e.timeText.isNotBlank()) Text(e.timeText, style = T.smallBold.copy(fontSize = T.small.fontSize * 0.82f), color = Color.White.copy(alpha = 0.92f), maxLines = 1, overflow = TextOverflow.Clip)
+        if (e.room.isNotBlank()) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                Icon(Ic.Pin, null, tint = Color.White.copy(alpha = 0.92f), modifier = Modifier.size(10.dp))
+                Text(e.room, style = T.smallBold.copy(fontSize = T.small.fontSize * 0.82f), color = Color.White.copy(alpha = 0.92f), maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
     }
@@ -605,15 +654,21 @@ private fun MonthGrid(
                                 // (Fach, Text, rot umrahmt, erledigt) – Erledigtes wird durchgestrichen.
                                 val items = dayExams.map { e -> listOf(schedule.subjects[e.subjectId], "${e.type} ${schedule.subjects[e.subjectId]?.label ?: ""}".trim(), !de.schulplaner.domain.Timing.examOver(e, now, schedule), false) } +
                                     dayTasks.map { t -> listOf(t.subjectId?.let { schedule.subjects[it] }, t.title, t.type in referatTypes && !de.schulplaner.domain.Timing.taskOver(t, now, schedule), t.done) }
-                                items.take(3).forEach { item ->
+                                // Termine zuerst, dann Klausuren/Aufgaben.
+                                val dayEvents = schedule.events.filter { it.date == epoch }
+                                dayEvents.take(2).forEach { EventDayPill(it) }
+                                items.take(3 - dayEvents.size.coerceAtMost(2)).forEach { item ->
                                     EventPill(item[0] as Subject?, item[1] as String, item[2] as Boolean, item[3] as Boolean)
                                 }
-                                if (items.size > 3) Text("+${items.size - 3}", style = T.smallBold.copy(fontSize = T.small.fontSize * 0.8f), color = c.sub)
+                                if (items.size > 3 - dayEvents.size.coerceAtMost(2)) Text("+${items.size - (3 - dayEvents.size.coerceAtMost(2))}", style = T.smallBold.copy(fontSize = T.small.fontSize * 0.8f), color = c.sub)
                             } else {
                                 val bars = dayExams.map { Triple(schedule.subjects[it.subjectId]?.color, !de.schulplaner.domain.Timing.examOver(it, now, schedule), false) } +
                                     dayTasks.map { t -> Triple(t.subjectId?.let { schedule.subjects[it] }?.color, t.type in referatTypes && !de.schulplaner.domain.Timing.taskOver(t, now, schedule), t.done) }
                                 if (bars.isEmpty() && holiday != null && inMonth) {
                                     Icon(HolidayLook.icon(holiday), null, tint = HolidayLook.color(holiday).copy(alpha = 0.8f), modifier = Modifier.size(13.dp))
+                                }
+                                schedule.events.filter { it.date == epoch }.take(2).forEach { e ->
+                                    Box(Modifier.fillMaxWidth().padding(horizontal = 2.dp).height(6.dp).clip(RoundedCornerShape(3.dp)).background(Color(e.color)))
                                 }
                                 bars.take(3).forEach { (argb, isRed, isDone) ->
                                     Box(
@@ -632,6 +687,22 @@ private fun MonthGrid(
                 }
             }
         }
+    }
+}
+
+/** Termin in der Monatsansicht: Pille in der Terminfarbe. */
+@Composable
+private fun EventDayPill(e: Event) {
+    val color = Color(e.color)
+    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(5.dp)).background(color)) {
+        Text(
+            e.title,
+            style = T.smallBold.copy(fontSize = T.small.fontSize * 0.82f),
+            color = Color.White,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
+        )
     }
 }
 
@@ -685,6 +756,27 @@ private fun DayPanel(
             Row(Modifier.padding(start = 10.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Icon(HolidayLook.icon(holiday), null, tint = HolidayLook.color(holiday), modifier = Modifier.size(18.dp))
                 Text(holiday.name, style = T.label, color = if (holiday.kind == HolidayKind.FEIERTAG) c.exam else c.sub)
+            }
+        }
+        Schedule.eventsOn(day, schedule).forEach { ev ->
+            val col = Color(ev.color)
+            Row(
+                Modifier.fillMaxWidth().padding(vertical = 3.dp).clip(RoundedCornerShape(14.dp)).background(col.copy(alpha = 0.16f))
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Box(Modifier.size(10.dp).clip(CircleShape).background(col))
+                Column(Modifier.weight(1f)) {
+                    Text(ev.title, style = T.body, color = c.text, maxLines = 2)
+                    val info = listOfNotNull(
+                        ev.timeText.ifBlank { null },
+                        ev.periods?.let { if (it.first == it.last) "${it.first}. Std" else "${it.first}.–${it.last}. Std" },
+                        ev.room.ifBlank { null },
+                    ).joinToString(" · ")
+                    if (info.isNotBlank()) Text(info, style = T.small, color = c.sub)
+                    if (ev.note.isNotBlank()) Text(ev.note, style = T.small, color = c.sub, maxLines = 2)
+                }
             }
         }
         dayExams.forEach { e ->

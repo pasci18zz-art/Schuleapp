@@ -110,6 +110,38 @@ interface SchulDao {
     @Upsert
     suspend fun upsertNote(item: SubjectNote)
 
+    // Termine
+    @Query("SELECT * FROM events WHERE deleted = 0 ORDER BY date, firstPeriod")
+    fun events(): Flow<List<Event>>
+
+    @Upsert
+    suspend fun upsertEvent(item: Event)
+
+    @Query("SELECT * FROM events WHERE dirty = 1")
+    suspend fun syncDirtyEvent(): List<Event>
+
+    @Query("SELECT * FROM events WHERE id = :id")
+    suspend fun syncGetEvent(id: String): Event?
+
+    @Query("UPDATE events SET dirty = 0 WHERE id = :id AND updatedAt = :updatedAt")
+    suspend fun syncCleanEvent(id: String, updatedAt: Long)
+
+    // Elternbriefe
+    @Query("SELECT * FROM letters WHERE deleted = 0 ORDER BY createdAt")
+    fun letters(): Flow<List<Letter>>
+
+    @Upsert
+    suspend fun upsertLetter(item: Letter)
+
+    @Query("SELECT * FROM letters WHERE dirty = 1")
+    suspend fun syncDirtyLetter(): List<Letter>
+
+    @Query("SELECT * FROM letters WHERE id = :id")
+    suspend fun syncGetLetter(id: String): Letter?
+
+    @Query("UPDATE letters SET dirty = 0 WHERE id = :id AND updatedAt = :updatedAt")
+    suspend fun syncCleanLetter(id: String, updatedAt: Long)
+
     // Anhänge
     @Query("SELECT * FROM attachments WHERE deleted = 0 ORDER BY createdAt")
     fun attachments(): Flow<List<Attachment>>

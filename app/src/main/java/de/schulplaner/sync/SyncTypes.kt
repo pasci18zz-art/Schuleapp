@@ -85,6 +85,16 @@ fun syncTypes(dao: SchulDao): List<SyncType<*>> = listOf(
         { it.id }, { it.updatedAt }, { it.deleted }, { it.copy(dirty = false) },
     ),
     SyncType(
+        "event", Event.serializer(),
+        { dao.syncDirtyEvent() }, { dao.syncGetEvent(it) }, { dao.upsertEvent(it) }, { i, u -> dao.syncCleanEvent(i, u) },
+        { it.id }, { it.updatedAt }, { it.deleted }, { it.copy(dirty = false) },
+    ),
+    SyncType(
+        "letter", Letter.serializer(),
+        { dao.syncDirtyLetter() }, { dao.syncGetLetter(it) }, { dao.upsertLetter(it) }, { i, u -> dao.syncCleanLetter(i, u) },
+        { it.id }, { it.updatedAt }, { it.deleted }, { it.copy(dirty = false) },
+    ),
+    SyncType(
         "attachment", Attachment.serializer(),
         { dao.syncDirtyAttachment() }, { dao.syncGetAttachment(it) }, { dao.upsertAttachment(it) }, { i, u -> dao.syncCleanAttachment(i, u) },
         { it.id }, { it.updatedAt }, { it.deleted }, { it.copy(dirty = false) },

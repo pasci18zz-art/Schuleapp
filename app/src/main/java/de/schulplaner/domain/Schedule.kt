@@ -1,5 +1,6 @@
 package de.schulplaner.domain
 
+import de.schulplaner.data.Event
 import de.schulplaner.data.Holiday
 import de.schulplaner.data.LessonOverride
 import de.schulplaner.data.LessonSlot
@@ -20,6 +21,7 @@ data class ScheduleData(
     val holidays: List<Holiday> = emptyList(),
     val abEnabled: Boolean = false,
     val abReference: Long? = null,
+    val events: List<Event> = emptyList(),
 ) {
     val periodByNumber: Map<Int, PeriodTime> = periods.associateBy { it.number }
     val maxPeriod: Int = maxOf(periods.maxOfOrNull { it.number } ?: 8, slots.maxOfOrNull { it.period + it.length - 1 } ?: 0)
@@ -40,9 +42,14 @@ data class Lesson(
     val override: LessonOverride?,
     /** Eigene Änderungen einzelner Stunden einer Doppelstunde (Stunde -> Änderung). Die Doppelstunde bleibt eine Stunde. */
     val parts: Map<Int, LessonOverride> = emptyMap(),
+    /** Stunden, die ein Termin ersetzt (bei Doppelstunden kann nur eine betroffen sein). */
+    val replaced: Set<Int> = emptySet(),
 ) {
-    /** Fällt diese einzelne Stunde aus (ganze Doppelstunde oder nur sie)? */
-    fun cancelledAt(period: Int): Boolean = cancelled || parts[period]?.cancelled == true
+    /** Fällt diese einzelne Stunde aus (ganze Doppelstunde, nur sie oder durch einen Termin ersetzt)? */
+    fun cancelledAt(period: Int): Boolean = cancelled || parts[period]?.cancelled == true || period in replaced
+
+    /** Ist wenigstens eine Stunde dieses Blocks ausgefallen oder ersetzt (nicht die ganze)? */
+    val partlyOut: Boolean get() = !cancelled && (firstPeriod..lastPeriod).any { cancelledAt(it) }
 
     /** Gibt es bei einer Einzelstunde einen Raum oder Hinweis? */
     val partRoomChanged: Boolean get() = parts.values.any { it.room.isNotBlank() }
@@ -76,11 +83,17 @@ object Schedule {
         slot.weekType == WeekType.ALL || weekType == null || slot.weekType == weekType
 
     /** Stunden laut Plan für ein Datum, ohne Ferien-Prüfung. Freistunden nur mit [withFree]. */
-    fun plannedLessons(date: LocalDate, data: ScheduleData, withFree: Boolean = false): List<Lesson> {
+    fun plannedLessons(date: LocalDate, data: ScheduleData, withFree: Boolean = false, applyEvents: Boolean = true): List<Lesson> {
         val dow = date.dayOfWeek.value
         if (dow > 5) return emptyList()
         val wt = weekTypeOf(date, data)
         val epoch = date.toEpochDay()
+        // Stunden, die ein Termin an diesem Tag ersetzt.
+        val taken: Set<Int> = if (applyEvents) {
+            data.events.filter { it.date == epoch }.flatMap { it.periods?.toList() ?: emptyList() }.toSet()
+        } else {
+            emptySet()
+        }
         return data.slots
             .filter { it.dayOfWeek == dow && slotMatches(it, wt) && (withFree || !it.isFree) }
             .sortedBy { it.period }
@@ -95,6 +108,9 @@ object Schedule {
                 }
                 // Fallen alle Einzelstunden aus, gilt die ganze Doppelstunde als Entfall.
                 val allPartsCancelled = slot.length > 1 && (slot.period..last).all { parts[it]?.cancelled == true }
+                val replaced = (slot.period..last).filter { it in taken }.toSet()
+                // Ersetzt ein Termin den ganzen Block, steht an seiner Stelle der Termin statt des Unterrichts.
+                if (replaced.size == slot.length) return@flatMap emptyList<Lesson>()
                 listOf(Lesson(
                     slot = slot,
                     subject = subject,
@@ -108,9 +124,14 @@ object Schedule {
                     note = ov?.note ?: "",
                     override = ov,
                     parts = parts,
+                    replaced = replaced,
                 ))
             }
     }
+
+    /** Termine an einem Tag, nach Stunde sortiert (ohne Stunde zuerst). */
+    fun eventsOn(date: LocalDate, data: ScheduleData): List<Event> =
+        data.events.filter { it.date == date.toEpochDay() }.sortedWith(compareBy({ it.firstPeriod ?: 0 }, { it.title }))
 
     /** Stunden an einem Datum; leer am Wochenende und in den Ferien. */
     fun lessonsOn(date: LocalDate, data: ScheduleData, withFree: Boolean = false): List<Lesson> =

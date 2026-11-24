@@ -329,6 +329,44 @@ data class SubjectNote(
     @Transient val dirty: Boolean = true,
 )
 
+/**
+ * Termin im Stundenplan (z. B. Ausflug, Prüfung, Arzt). Mit Stunden ersetzt er den Unterricht an dem Tag in diesen Stunden,
+ * ohne Stunden steht er nur als Termin da. [timeText] ist frei ("14:30–16:00").
+ */
+@Entity(tableName = "events")
+@Serializable
+data class Event(
+    @PrimaryKey val id: String = newId(),
+    val title: String = "",
+    val date: Long = 0,
+    val firstPeriod: Int? = null,
+    val lastPeriod: Int? = null,
+    val timeText: String = "",
+    val room: String = "",
+    val note: String = "",
+    val color: Long = 0xFF5B7FDB,
+    val updatedAt: Long = 0,
+    val deleted: Boolean = false,
+    @Transient val dirty: Boolean = true,
+) {
+    /** Betroffene Stunden (leer = ersetzt keinen Unterricht). */
+    val periods: IntRange? get() = firstPeriod?.let { it..maxOf(it, lastPeriod ?: it) }
+}
+
+/** Elternbrief: Knopf gedrückt = abends erinnern, bis er als fertig markiert ist. */
+@Entity(tableName = "letters")
+@Serializable
+data class Letter(
+    @PrimaryKey val id: String = newId(),
+    val title: String = "Elternbrief",
+    val createdAt: Long = 0,
+    val done: Boolean = false,
+    val doneAt: Long? = null,
+    val updatedAt: Long = 0,
+    val deleted: Boolean = false,
+    @Transient val dirty: Boolean = true,
+)
+
 object OwnerType {
     const val EXAM = "exam"
     const val GRADE = "grade"

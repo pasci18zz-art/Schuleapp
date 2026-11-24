@@ -275,6 +275,7 @@ fun TodayScreen() {
                     available = { t ->
                         when (t) {
                             HomeTile.MONSTER -> !readOnly
+                            HomeTile.LETTER -> !readOnly
                             HomeTile.DAILY -> !readOnly || daily.isNotEmpty()
                             else -> true
                         }
@@ -292,6 +293,7 @@ fun TodayScreen() {
                             modifier = m,
                         )
                         HomeTile.FERIEN -> FerienTile(schedule, now, m)
+                        HomeTile.LETTER -> LetterTile(m)
                         HomeTile.NOW -> NowTile(state, m)
                         HomeTile.TASKS -> TasksTile(
                             state,
@@ -573,8 +575,40 @@ private fun LessonsTile(s: TodayState, schedule: de.schulplaner.domain.ScheduleD
             val lessons = if (day == s.day) s.lessons else Schedule.lessonsOn(day, schedule)
             val isToday = day == todayDate
             Column {
-                if (lessons.isEmpty()) {
+                val dayEvents = Schedule.eventsOn(day, schedule)
+                if (lessons.isEmpty() && dayEvents.isEmpty()) {
                     Text("Kein Unterricht", style = T.small, color = c.sub, modifier = Modifier.padding(start = 8.dp, top = 4.dp, bottom = 8.dp))
+                }
+                // Termine ersetzen den Unterricht in ihren Stunden und stehen deshalb über der Liste.
+                dayEvents.forEach { ev ->
+                    val col = Color(ev.color)
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 2.dp)
+                            .clip(RoundedCornerShape(18.dp))
+                            .background(col.copy(alpha = 0.18f))
+                            .padding(horizontal = 10.dp, vertical = 9.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        val pr = ev.periods
+                        Text(
+                            pr?.let { if (it.first == it.last) "${it.first}." else "${it.first}.–${it.last}." } ?: "Termin",
+                            style = T.smallBold,
+                            color = c.sub,
+                            maxLines = 1,
+                            softWrap = false,
+                            modifier = Modifier.width(50.dp),
+                        )
+                        Box(Modifier.width(5.dp).height(34.dp).clip(RoundedCornerShape(3.dp)).background(col))
+                        Column(Modifier.weight(1f)) {
+                            Text(ev.title, style = T.body, color = c.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            val info = listOfNotNull(ev.timeText.ifBlank { null }, ev.room.ifBlank { null }?.let { "R $it" }).joinToString(" · ")
+                            if (info.isNotBlank()) Text(info, style = T.small, color = c.sub, maxLines = 1)
+                            if (ev.note.isNotBlank()) Text(ev.note, style = T.small, color = c.sub, maxLines = 2)
+                        }
+                    }
                 }
                 lessons.forEach { l ->
                     val past = isToday && l.endDateTime?.let { !s.now.isBefore(it) } == true

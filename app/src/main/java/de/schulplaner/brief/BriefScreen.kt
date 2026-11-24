@@ -257,6 +257,7 @@ fun BriefScreen() {
                         Special.Kind.LERNZETTEL -> Ic.Book to c.warn
                         Special.Kind.EXAM_TODAY -> Sym.Pen to c.exam
                         Special.Kind.PINNED -> Ic.Pushpin to c.accent
+                        Special.Kind.EVENT -> Ic.CalendarPlain to c.accent
                     }
                     Row(Modifier.padding(vertical = 5.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         Box(Modifier.size(32.dp).clip(CircleShape).background(tint.copy(alpha = 0.15f)), contentAlignment = Alignment.Center) {

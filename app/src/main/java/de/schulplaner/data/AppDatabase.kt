@@ -12,9 +12,9 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         Subject::class, Term::class, GradeCategory::class, Grade::class, SubjectTerm::class,
         LessonSlot::class, PeriodTime::class, LessonOverride::class, Holiday::class,
         Task::class, Exam::class, ExamTopic::class, SubjectNote::class, Attachment::class,
-        Setting::class, StudySession::class,
+        Setting::class, StudySession::class, Event::class, Letter::class,
     ],
-    version = 6,
+    version = 7,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -23,7 +23,7 @@ abstract class AppDatabase : RoomDatabase() {
     companion object {
         fun create(context: Context): AppDatabase =
             Room.databaseBuilder(context, AppDatabase::class.java, "schulplaner.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
                 .build()
 
         /** Version 2: Notizbuch-Link pro Fach, Art der freien Tage. Bestehende Daten bleiben erhalten. */
@@ -46,6 +46,23 @@ abstract class AppDatabase : RoomDatabase() {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE subjects ADD COLUMN plannedExams INTEGER NOT NULL DEFAULT 2")
                 db.execSQL("ALTER TABLE subjects ADD COLUMN plannedOral INTEGER NOT NULL DEFAULT 3")
+            }
+        }
+
+        /** Version 7: Termine im Stundenplan und Elternbriefe. */
+        val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `events` (`id` TEXT NOT NULL, `title` TEXT NOT NULL, `date` INTEGER NOT NULL, " +
+                        "`firstPeriod` INTEGER, `lastPeriod` INTEGER, `timeText` TEXT NOT NULL, `room` TEXT NOT NULL, `note` TEXT NOT NULL, " +
+                        "`color` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, `deleted` INTEGER NOT NULL, `dirty` INTEGER NOT NULL, " +
+                        "PRIMARY KEY(`id`))",
+                )
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `letters` (`id` TEXT NOT NULL, `title` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, " +
+                        "`done` INTEGER NOT NULL, `doneAt` INTEGER, `updatedAt` INTEGER NOT NULL, `deleted` INTEGER NOT NULL, " +
+                        "`dirty` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+                )
             }
         }
 
