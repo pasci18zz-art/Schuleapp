@@ -220,7 +220,7 @@ fun TasksScreen() {
     }
 
     edit?.let { (task, isNew) ->
-        if (readOnly) TaskViewSheet(task, onDismiss = { edit = null }) else TaskEditSheet(task, isNew, onDismiss = { edit = null })
+        if (readOnly) TaskViewSheet(task, onDismiss = { edit = null }) else TaskEditSheet(task, isNew, onDismiss = { edit = null }, allowLetter = isNew)
     }
 }
 

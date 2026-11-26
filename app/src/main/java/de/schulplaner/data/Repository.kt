@@ -638,8 +638,19 @@ class Repository(
 
     fun reloadHessenHolidays() = io { seedHessenHolidays(force = true) }
 
+    /** Frischer Stand direkt aus der Datenbank (für die Eltern-Benachrichtigung im Hintergrund). */
+    suspend fun alertSnapshot(): AlertSnapshot =
+        AlertSnapshot(dao.letters().first(), dao.grades().first(), dao.subjects().first(), dao.categories().first())
+
     /** Wartet, bis die Daten einmal aus der Datenbank geladen wurden. */
     suspend fun awaitLoaded() {
         dao.settings().first()
     }
 }
+
+data class AlertSnapshot(
+    val letters: List<Letter>,
+    val grades: List<Grade>,
+    val subjects: List<Subject>,
+    val categories: List<GradeCategory>,
+)

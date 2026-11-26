@@ -265,6 +265,9 @@ fun TodayScreen() {
             // Bleibt fest ganz oben (nicht verschiebbar) und macht sich klein, sobald das Türchen von heute offen ist.
             if (!readOnly && !editing && adventVisible(today)) AdventCard(today, Modifier.appear(1))
 
+            // Offener Elternbrief: roter Hinweis ganz oben zum Abhaken.
+            if (!editing) LetterBanner(readOnly, Modifier.appear(1))
+
             Box(Modifier.appear(1)) {
                 HomeGrid(
                     cols = cols,
@@ -275,7 +278,6 @@ fun TodayScreen() {
                     available = { t ->
                         when (t) {
                             HomeTile.MONSTER -> !readOnly
-                            HomeTile.LETTER -> !readOnly
                             HomeTile.DAILY -> !readOnly || daily.isNotEmpty()
                             else -> true
                         }
@@ -293,7 +295,6 @@ fun TodayScreen() {
                             modifier = m,
                         )
                         HomeTile.FERIEN -> FerienTile(schedule, now, m)
-                        HomeTile.LETTER -> LetterTile(m)
                         HomeTile.NOW -> NowTile(state, m)
                         HomeTile.TASKS -> TasksTile(
                             state,

@@ -80,6 +80,22 @@ class SchulplanerApp : Application() {
                     }
                 }
         }
+        // Eltern-Geräte (Ansichtsmodus): alle ~15 Min auf neue Elternbriefe und Noten prüfen.
+        appScope.launch {
+            prefs.readOnly.collectLatest { ro ->
+                if (ro) {
+                    de.schulplaner.reminders.ParentAlerts.schedule(this@SchulplanerApp)
+                    repo.awaitLoaded()
+                    // Auch wenn die App offen ist und der Sync Neues bringt.
+                    combine(repo.letters, repo.grades) { _, _ -> Unit }.collectLatest {
+                        delay(1500)
+                        runCatching { de.schulplaner.reminders.ParentAlerts.check(this@SchulplanerApp) }
+                    }
+                } else {
+                    de.schulplaner.reminders.ParentAlerts.cancel(this@SchulplanerApp)
+                }
+            }
+        }
         // Widgets nach Änderungen neu zeichnen (gebündelt).
         appScope.launch(Dispatchers.IO) {
             combine(repo.tasks, repo.scheduleData, repo.sessions, repo.settings) { _, _, _, _ -> Unit }

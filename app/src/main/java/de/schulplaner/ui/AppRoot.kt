@@ -31,6 +31,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
@@ -247,6 +248,7 @@ fun AppRoot(startRoute: String? = null) {
                 de.schulplaner.ui.today.MoodOverlay(moodHost.origin) { moodHost.close() }
             }
             ConfettiOverlay(confetti)
+            ChangelogDialog()
         }
         BackHandler(enabled = route == Routes.MAIN && pager.currentPage != Tabs.TODAY) { navigator.tab(Tabs.TODAY) }
     }
@@ -300,6 +302,9 @@ private fun BottomNav(navigator: AppNavigator, route: String, modifier: Modifier
     val position = if (onMain) pager.currentPage + pager.currentPageOffsetFraction else animated
     val shape = RoundedCornerShape(28.dp)
     val step = ItemW + ItemGap
+    // Roter Punkt bei "Heute": offener Elternbrief (wie früher in der Grundschule).
+    val letters by LocalContext.current.app.repo.letters.collectAsStateWithLifecycle()
+    val letterOpen = letters.any { !it.done }
 
     Box(
         modifier
@@ -336,6 +341,18 @@ private fun BottomNav(navigator: AppNavigator, route: String, modifier: Modifier
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(tab.icon, null, tint = lerp(c.sub, c.accentInk, f), modifier = Modifier.size(21.dp).graphicsLayer { scaleX = 1f + 0.1f * f; scaleY = 1f + 0.1f * f })
+                    if (i == Tabs.TODAY && letterOpen) {
+                        Box(
+                            Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(top = 7.dp, end = 9.dp)
+                                .size(10.dp)
+                                .border(1.5.dp, c.nav, CircleShape)
+                                .padding(1.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFFE53935)),
+                        )
+                    }
                 }
             }
         }
@@ -369,7 +386,7 @@ private fun NotificationPermission() {
     LaunchedEffect(Unit) {
         if (android.os.Build.VERSION.SDK_INT < 33) return@LaunchedEffect
         val granted = ContextCompat.checkSelfPermission(ctx, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
-        if (!granted && !prefs.notificationsAsked.first() && prefs.reminderOn.first()) {
+        if (!granted && !prefs.notificationsAsked.first() && (prefs.reminderOn.first() || prefs.readOnly.value)) {
             prefs.setNotificationsAsked()
             launcher.launch(Manifest.permission.POST_NOTIFICATIONS)
         }

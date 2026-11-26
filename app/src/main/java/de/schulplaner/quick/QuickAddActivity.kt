@@ -68,7 +68,7 @@ class QuickAddActivity : ComponentActivity() {
                         .background(if (blur) Color(0x47000000) else Color(0xB80E1015)),
                 )
                 task?.let { t ->
-                    TaskEditSheet(t, isNew = true, onDismiss = { finish() })
+                    TaskEditSheet(t, isNew = true, onDismiss = { finish() }, allowLetter = true)
                 }
             }
         }

@@ -91,8 +91,8 @@ import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.YearMonth
 
-private val RowH = 64.dp
-private val Gap = 4.dp
+internal val RowH = 64.dp
+internal val Gap = 4.dp
 private val HeaderH = 42.dp
 private val TimeW = 32.dp
 private val KwW = 26.dp
@@ -120,6 +120,10 @@ fun TimetableScreen() {
     var newTask by remember { mutableStateOf<Task?>(null) }
     var viewTask by remember { mutableStateOf<Task?>(null) }
     var editEvent by remember { mutableStateOf<Pair<Event, Boolean>?>(null) }
+    // "Stunden ersetzen": Stunden antippen (auch über mehrere Tage), dann durch einen Termin ersetzen.
+    var replaceMode by rememberSaveable { mutableStateOf(false) }
+    var picked by remember { mutableStateOf(setOf<Pair<Long, Int>>()) }
+    var replaceSheet by remember { mutableStateOf(false) }
     val readOnly = de.schulplaner.ui.components.LocalReadOnly.current
 
     val weekPager = rememberPagerState(initialPage = CENTER) { PAGES }
@@ -162,13 +166,23 @@ fun TimetableScreen() {
                     GlassIconButton(Ic.ChevronLeft, "Vorherige Woche", { scope.launch { weekPager.animateScrollToPage(weekPager.currentPage - 1) } })
                     GlassIconButton(Ic.ChevronRight, "Nächste Woche", { scope.launch { weekPager.animateScrollToPage(weekPager.currentPage + 1) } })
                     if (!readOnly) GlassIconButton(Ic.CalendarPlain, "Termin hinzufügen", { editEvent = Event(date = maxOf(today.toEpochDay(), monday.toEpochDay()).coerceAtMost(monday.plusDays(4).toEpochDay())) to true })
-                    if (!readOnly) GlassIconButton(if (editMode) Ic.Check else Ic.Pencil, if (editMode) "Fertig" else "Stundenplan bearbeiten", { editMode = !editMode }, filled = editMode)
+                    if (!readOnly) GlassIconButton(if (editMode) Ic.Check else Ic.Pencil, if (editMode) "Fertig" else "Stundenplan bearbeiten", {
+                        editMode = !editMode
+                        if (editMode) {
+                            replaceMode = false
+                            picked = emptySet()
+                        }
+                    }, filled = editMode)
                 }
             }
 
             Segmented(listOf(false to "Woche", true to "Monat"), monthMode, {
                 monthMode = it
-                if (it) editMode = false
+                if (it) {
+                    editMode = false
+                    replaceMode = false
+                    picked = emptySet()
+                }
             }, Modifier.then(if (wide) Modifier.width(320.dp) else Modifier))
 
             if (!monthMode) {
@@ -190,6 +204,9 @@ fun TimetableScreen() {
                         todayEpoch = today.toEpochDay(),
                         now = now,
                         editMode = editMode,
+                        picking = replaceMode,
+                        picked = picked,
+                        onPick = { key -> picked = if (key in picked) picked - key else picked + key },
                         maxPeriod = rows,
                         wide = wide,
                         schedule = schedule,
@@ -211,6 +228,12 @@ fun TimetableScreen() {
                     )
                 }
                 Legend()
+                if (!readOnly && !editMode && !replaceMode && schedule.slots.isNotEmpty()) {
+                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        de.schulplaner.ui.components.SecondaryButton("Stunden ersetzen", { replaceMode = true }, icon = Ic.Swap)
+                    }
+                }
+                if (replaceMode) Box(Modifier.height(80.dp))
             } else {
                 val cellH = if (wide) 112.dp else 60.dp
                 val monthH = 20.dp + 26.dp + cellH * 6 + 3.dp * 5
@@ -233,6 +256,28 @@ fun TimetableScreen() {
                 }
             }
         }
+    }
+
+    if (replaceMode && !monthMode) {
+        ReplaceBar(
+            count = picked.size,
+            onCancel = {
+                replaceMode = false
+                picked = emptySet()
+            },
+            onReplace = { replaceSheet = true },
+        )
+    }
+    if (replaceSheet) {
+        ReplaceSheet(
+            picked = picked,
+            onDismiss = { replaceSheet = false },
+            onDone = {
+                replaceSheet = false
+                replaceMode = false
+                picked = emptySet()
+            },
+        )
     }
 
     openLesson?.let { (l, period) ->
@@ -306,6 +351,9 @@ private fun WeekGrid(
     todayEpoch: Long,
     now: java.time.LocalDateTime,
     editMode: Boolean,
+    picking: Boolean,
+    picked: Set<Pair<Long, Int>>,
+    onPick: (Pair<Long, Int>) -> Unit,
     maxPeriod: Int,
     wide: Boolean,
     schedule: ScheduleData,
@@ -391,6 +439,13 @@ private fun WeekGrid(
                                     FreeCell(l, editMode) { onLesson(l, null) }
                                 } else {
                                     LessonCell(l, editMode, wide, false, if (editMode) emptyList() else haFor(l), !editMode && examFor(l), { p -> onLesson(l, p) }, onTask)
+                                }
+                            }
+                            // Auswahl zum Ersetzen: jede Stunde einzeln antippbar (liegt über allem).
+                            if (picking) {
+                                for (p in 1..maxPeriod) {
+                                    val key = date.toEpochDay() to p
+                                    PickCell(p, key in picked) { onPick(key) }
                                 }
                             }
                         }

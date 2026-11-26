@@ -50,6 +50,7 @@ import de.schulplaner.ui.components.SoftIconButton
 import de.schulplaner.ui.components.StepsEditor
 import de.schulplaner.ui.components.SubjectPicker
 import de.schulplaner.ui.components.colors
+import de.schulplaner.ui.components.MiniSegmented
 import de.schulplaner.ui.theme.T
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -76,7 +77,13 @@ private enum class DueMode { NEXT, SECOND, CUSTOM }
  * wechselt man das Fach, wandert das Datum mit. Unterpunkte sind optional und zeigen den Fortschritt.
  */
 @Composable
-fun TaskEditSheet(initial: Task, isNew: Boolean, onDismiss: () -> Unit) {
+fun TaskEditSheet(
+    initial: Task,
+    isNew: Boolean,
+    onDismiss: () -> Unit,
+    /** Umschalter "Hausaufgabe | Elternbrief" oben im Sheet (Plus-Knopf und Schnell-Kachel). */
+    allowLetter: Boolean = false,
+) {
     val c = colors
     val repo = LocalContext.current.app.repo
     val subjects by repo.subjects.collectAsStateWithLifecycle()
@@ -118,13 +125,36 @@ fun TaskEditSheet(initial: Task, isNew: Boolean, onDismiss: () -> Unit) {
 
     val undo = LocalUndo.current
     val initialSteps = remember { steps }
+    var letterMode by remember { mutableStateOf(false) }
+    var letterTitle by remember { mutableStateOf("") }
     AppSheet(
         onDismiss = {
             if (isNew && !saved[0]) repo.discardAttachments(task.id)
             onDismiss()
         },
-        confirmDiscard = !saved[0] && (task != initial || steps != initialSteps || newStep.isNotBlank()),
+        confirmDiscard = !saved[0] && !letterMode && (task != initial || steps != initialSteps || newStep.isNotBlank()),
     ) { close ->
+        if (allowLetter && isNew) {
+            MiniSegmented(listOf(false to "Aufgabe", true to "Elternbrief"), letterMode, { letterMode = it }, Modifier.fillMaxWidth())
+        }
+        if (letterMode) {
+            val saveLetter = {
+                saved[0] = true
+                val l = de.schulplaner.data.Letter(title = letterTitle.trim().ifBlank { "Elternbrief" }, createdAt = System.currentTimeMillis())
+                repo.saveLetter(l)
+                undo.show("Elternbrief eingetragen") { repo.deleteLetter(l) }
+                close()
+            }
+            SheetHeader(title = "Elternbrief", onSave = saveLetter, saveLabel = "Eintragen")
+            InlineTextField(letterTitle, { letterTitle = it }, "Worum geht's? (optional)", Modifier.fillMaxWidth().padding(horizontal = 4.dp), big = true)
+            Text(
+                "Erscheint als roter Punkt bei „Heute“, bis du ihn abhakst. Deine Eltern (Ansichtsmodus) werden benachrichtigt, und abends kommt eine Erinnerung.",
+                style = T.small,
+                color = c.sub,
+                modifier = Modifier.padding(horizontal = 4.dp),
+            )
+            return@AppSheet
+        }
         SheetHeader(
             title = if (isNew) "Neue Aufgabe" else "Aufgabe",
             onSave = if (task.title.isNotBlank()) {
