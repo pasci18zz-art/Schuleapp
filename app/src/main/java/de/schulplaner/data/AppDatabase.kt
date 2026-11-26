@@ -1,0 +1,88 @@
+package de.schulplaner.data
+
+import android.content.Context
+import androidx.room.Database
+import androidx.room.Room
+import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
+
+@Database(
+    entities = [
+        Subject::class, Term::class, GradeCategory::class, Grade::class, SubjectTerm::class,
+        LessonSlot::class, PeriodTime::class, LessonOverride::class, Holiday::class,
+        Task::class, Exam::class, ExamTopic::class, SubjectNote::class, Attachment::class,
+        Setting::class, StudySession::class, Event::class, Letter::class,
+    ],
+    version = 7,
+    exportSchema = true,
+)
+abstract class AppDatabase : RoomDatabase() {
+    abstract fun dao(): SchulDao
+
+    companion object {
+        fun create(context: Context): AppDatabase =
+            Room.databaseBuilder(context, AppDatabase::class.java, "schulplaner.db")
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
+                .build()
+
+        /** Version 2: Notizbuch-Link pro Fach, Art der freien Tage. Bestehende Daten bleiben erhalten. */
+        val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE subjects ADD COLUMN notesLink TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE holidays ADD COLUMN kind TEXT NOT NULL DEFAULT 'FREI'")
+            }
+        }
+
+        /** Version 3: Symbol pro Fach. */
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE subjects ADD COLUMN icon TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
+        /** Version 5: geplante Klausuren/mündliche Noten pro Fach. */
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE subjects ADD COLUMN plannedExams INTEGER NOT NULL DEFAULT 2")
+                db.execSQL("ALTER TABLE subjects ADD COLUMN plannedOral INTEGER NOT NULL DEFAULT 3")
+            }
+        }
+
+        /** Version 7: Termine im Stundenplan und Elternbriefe. */
+        val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `events` (`id` TEXT NOT NULL, `title` TEXT NOT NULL, `date` INTEGER NOT NULL, " +
+                        "`firstPeriod` INTEGER, `lastPeriod` INTEGER, `timeText` TEXT NOT NULL, `room` TEXT NOT NULL, `note` TEXT NOT NULL, " +
+                        "`color` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, `deleted` INTEGER NOT NULL, `dirty` INTEGER NOT NULL, " +
+                        "PRIMARY KEY(`id`))",
+                )
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `letters` (`id` TEXT NOT NULL, `title` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, " +
+                        "`done` INTEGER NOT NULL, `doneAt` INTEGER, `updatedAt` INTEGER NOT NULL, `deleted` INTEGER NOT NULL, " +
+                        "`dirty` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+                )
+            }
+        }
+
+        /** Version 6: Aufgaben bis zu einer bestimmten Stunde. */
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE tasks ADD COLUMN duePeriod INTEGER")
+            }
+        }
+
+        /** Version 4: Lernsessions (Stoppuhr). */
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `study_sessions` (`id` TEXT NOT NULL, `kind` TEXT NOT NULL, `subjectId` TEXT, " +
+                        "`startedAt` INTEGER NOT NULL, `endedAt` INTEGER, `elapsedMs` INTEGER NOT NULL, `runningSince` INTEGER, " +
+                        "`finished` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, `deleted` INTEGER NOT NULL, `dirty` INTEGER NOT NULL, " +
+                        "PRIMARY KEY(`id`))",
+                )
+            }
+        }
+    }
+}
