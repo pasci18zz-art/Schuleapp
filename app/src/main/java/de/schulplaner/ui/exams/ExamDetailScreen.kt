@@ -86,6 +86,7 @@ fun ExamDetailScreen(id: String) {
     var newTopic by remember { mutableStateOf("") }
     var notes by remember(exam?.id) { mutableStateOf(exam?.topicsText ?: "") }
     var deleted by remember { mutableStateOf(false) }
+    var questionTab by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(exam?.topicsText) {
         if (exam != null && notes.isBlank()) notes = exam.topicsText
@@ -164,8 +165,16 @@ fun ExamDetailScreen(id: String) {
         }
 
         GlassCard(padding = PaddingValues(start = 6.dp, end = 6.dp, top = 14.dp, bottom = 8.dp)) {
-            Text("Lernplan", style = T.section, color = c.text, modifier = Modifier.padding(start = 12.dp, bottom = 4.dp))
-            de.schulplaner.ui.components.StepsEditor(
+            // Reiter: Lernplan (Themen) und Fragen (gleiche Fragen wie im Lernzettel).
+            de.schulplaner.ui.components.MiniSegmented(
+                listOf(false to "Lernplan", true to questionsLabel(openQuestionCount(exam.id))),
+                questionTab,
+                { questionTab = it },
+                Modifier.padding(horizontal = 8.dp).padding(bottom = 6.dp).fillMaxWidth(),
+            )
+            if (questionTab) {
+                QuestionsEditor(exam.id)
+            } else de.schulplaner.ui.components.StepsEditor(
                 steps = topics,
                 newText = newTopic,
                 onNewText = { newTopic = it },

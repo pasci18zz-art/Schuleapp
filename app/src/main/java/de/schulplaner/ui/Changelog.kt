@@ -52,6 +52,10 @@ object Changelog {
                 "Neuigkeiten wie diese erscheinen jetzt einmal nach jedem Update",
             ),
         ),
+        ChangeEntry(
+            4, "Fragen zur Klausur",
+            listOf("Neuer Reiter „Fragen“ in der Klausur und im Lernzettel – dieselbe Liste, abhaken, wenn geklärt"),
+        ),
     )
 
     /** Stand vor Einführung der Neuigkeiten (Build 41): Wer von dort aktualisiert, sieht alles danach. */

@@ -126,6 +126,7 @@ fun TaskEditSheet(
     val undo = LocalUndo.current
     val initialSteps = remember { steps }
     var letterMode by remember { mutableStateOf(false) }
+    var questionTab by remember { mutableStateOf(false) }
     var letterTitle by remember { mutableStateOf("") }
     AppSheet(
         onDismiss = {
@@ -257,7 +258,18 @@ fun TaskEditSheet(
             FormTextRow("Notizen", task.description, { task = task.copy(description = it) }, placeholder = "optional", singleLine = false, divider = false)
         }
 
-        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        val lzExam = if (isNew) null else de.schulplaner.ui.exams.Questions.examOfTask(task.id)
+        if (lzExam != null) {
+            de.schulplaner.ui.components.MiniSegmented(
+                listOf(false to "Unterpunkte", true to de.schulplaner.ui.exams.questionsLabel(de.schulplaner.ui.exams.openQuestionCount(lzExam))),
+                questionTab,
+                { questionTab = it },
+                Modifier.fillMaxWidth(),
+            )
+        }
+        if (lzExam != null && questionTab) {
+            de.schulplaner.ui.exams.QuestionsEditor(lzExam, framed = true)
+        } else Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 FormLabel("Unterpunkte")
                 if (steps.isNotEmpty()) {

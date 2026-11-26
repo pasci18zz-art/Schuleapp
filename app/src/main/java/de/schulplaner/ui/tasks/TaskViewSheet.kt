@@ -74,7 +74,20 @@ fun TaskViewSheet(task: Task, onDismiss: () -> Unit) {
         if (task.description.isNotBlank()) {
             Text(task.description, style = T.bodyRegular, color = c.text, modifier = Modifier.padding(top = 4.dp))
         }
-        if (steps.isNotEmpty()) {
+        // Lernzettel: Reiter "Unterpunkte | Fragen" (Fragen sind dieselben wie in der Klausur).
+        val lzExam = de.schulplaner.ui.exams.Questions.examOfTask(task.id)
+        var questionTab by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(false) }
+        if (lzExam != null) {
+            de.schulplaner.ui.components.MiniSegmented(
+                listOf(false to "Unterpunkte", true to de.schulplaner.ui.exams.questionsLabel(de.schulplaner.ui.exams.openQuestionCount(lzExam))),
+                questionTab,
+                { questionTab = it },
+                Modifier.fillMaxWidth(),
+            )
+        }
+        if (lzExam != null && questionTab) {
+            de.schulplaner.ui.exams.QuestionsEditor(lzExam, framed = true)
+        } else if (steps.isNotEmpty()) {
             val p = steps.count { it.done } * 100 / steps.size
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
